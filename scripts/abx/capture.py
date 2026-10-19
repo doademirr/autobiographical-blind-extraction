@@ -12,6 +12,7 @@ import http.server
 import itertools
 import json
 import queue
+import sys
 import threading
 import urllib.error
 import urllib.request
@@ -122,6 +123,10 @@ class _Server(http.server.ThreadingHTTPServer):
     daemon_threads = False
     block_on_close = True
 
+    def handle_error(self, request, client_address):
+        if not isinstance(sys.exc_info()[1], ConnectionError):  # a CLI hanging up is routine, not an error
+            super().handle_error(request, client_address)
+
 
 class Capture:
     """`with Capture("codex", tool_item=…) as cap:` point the CLI at `cap.base_url`; then read `cap.evidence`."""
@@ -146,10 +151,7 @@ class Capture:
                 self.send_header("content-type", ctype)
                 self.send_header("content-length", str(len(body)))
                 self.end_headers()
-                try:
-                    self.wfile.write(body)
-                except (BrokenPipeError, ConnectionResetError):
-                    pass    # the CLI hung up first (it drops metadata fetches it no longer needs)
+                self.wfile.write(body)
 
             def do_GET(self):
                 path = self.path.split("?")[0]
