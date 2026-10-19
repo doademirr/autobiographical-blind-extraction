@@ -42,9 +42,17 @@ class CodebookValidatorTest(unittest.TestCase):
                                                    {"c001", "c002"}), [])
 
     def test_compound_names_and_unplaced_candidates_fail(self):
-        problems = extract.validate_codebook(self.book([("Thrift and wit", ["c001"])]), {"c001", "c002"})
-        self.assertTrue(any("not atomic" in p for p in problems))
-        self.assertTrue(any("c002" in p for p in problems))
+        for name in ("Thrift / wit", "Thrift & wit", "Thrift; wit", "Thrift, then wit", "Thrift vs wit"):
+            with self.subTest(name=name):
+                problems = extract.validate_codebook(self.book([(name, ["c001"])]), {"c001", "c002"})
+                self.assertTrue(any("not atomic" in p for p in problems))
+                self.assertTrue(any("c002" in p for p in problems))
+
+    def test_one_trait_with_two_objects_is_atomic(self):
+        for name in ("Seeks and accepts advice from strangers", "Satirical, lampooning bent",
+                     "Longing for escape or the sea"):
+            with self.subTest(name=name):
+                self.assertEqual(extract.validate_codebook(self.book([(name, ["c001"])]), {"c001"}), [])
 
     def test_split_needs_two_traces_and_excluded_none(self):
         ok = self.book([("Thrift", ["c001"]), ("Wit", ["c001"])],

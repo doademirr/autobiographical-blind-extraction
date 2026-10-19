@@ -28,7 +28,9 @@ __all__ = ["STAGE",
     "validate_codebook",
 ]
 
-COMPOUND_NAME = re.compile(r"/|&|\+|,|;|\band\b|\bor\b|\bvs\.?\b|\bthen\b|\bfollowed by\b", re.I)
+# Markers that always join two claims. "and", "or" and commas are left to the author's instruction: in a live run
+# they mostly joined two objects or near-synonyms of one trait, and a lexical gate on them failed good codebooks.
+COMPOUND_NAME = re.compile(r"[/&+;]|\bvs\.?\b|\bthen\b|\bfollowed by\b", re.I)
 MAX_CONSTRUCTS = 80
 REQUALIFICATION_AUDIT = "run/requalification-audit.json"
 
