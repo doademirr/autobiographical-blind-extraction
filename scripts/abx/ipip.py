@@ -1,0 +1,69 @@
+"""IPIP-NEO-120 scoring (SPEC § Data Model, IPIP) and the band rule shared with observer scores."""
+
+import csv
+import io
+from pathlib import Path
+
+from . import store
+from .errors import UsageError
+
+INSTRUMENT = Path(__file__).resolve().parents[2] / "instruments" / "ipip-neo-120.json"
+
+FACET_MIN_ITEMS = 3
+DOMAIN_MIN_FACETS = 4
+IPIP_LOW, IPIP_HIGH = 7 / 3, 11 / 3
+OBSERVER_LOW, OBSERVER_HIGH = 3, 5
+
+
+def load_instrument() -> dict:
+    return store.read_json(INSTRUMENT)
+
+
+def parse_responses(csv_text: str, instrument: dict) -> dict[str, int | None]:
+    """`item_id,response` rows; a blank response is missing. Every item must appear once."""
+    ids = {i["id"] for i in instrument["items"]}
+    rows = list(csv.DictReader(io.StringIO(csv_text)))
+    if not rows or set(rows[0]) != {"item_id", "response"}:
+        raise UsageError("ipip-120.csv: header must be item_id,response")
+    out: dict[str, int | None] = {}
+    for row in rows:
+        item, raw = row["item_id"].strip(), (row["response"] or "").strip()
+        if item not in ids or item in out:
+            raise UsageError(f"ipip-120.csv: unknown or repeated item {item!r}")
+        if raw and raw not in {"1", "2", "3", "4", "5"}:
+            raise UsageError(f"ipip-120.csv: response for {item} must be 1-5 or blank")
+        out[item] = int(raw) if raw else None
+    if set(out) != ids:
+        raise UsageError(f"ipip-120.csv: {len(ids - set(out))} items missing")
+    return out
+
+
+def _mean(values: list[float]) -> float:
+    return sum(values) / len(values)
+
+
+def score(responses: dict[str, int | None], instrument: dict) -> dict:
+    """Facet means (negative keys reversed) and domain means, each missing below its minimum."""
+    by_facet: dict[str, list[int]] = {f: [] for f in instrument["facets"]}
+    for item in instrument["items"]:
+        r = responses.get(item["id"])
+        if r is not None:
+            by_facet[item["facet"]].append(r if item["key"] == 1 else 6 - r)
+    facets = {f: (_mean(v) if len(v) >= FACET_MIN_ITEMS else None) for f, v in by_facet.items()}
+    domains = {}
+    for d in instrument["domains"]:
+        present = [s for f, s in facets.items() if f.startswith(d) and s is not None]
+        domains[d] = _mean(present) if len(present) >= DOMAIN_MIN_FACETS else None
+    return {"facets": facets, "domains": domains}
+
+
+def ipip_band(value: float | None) -> str | None:
+    if value is None:
+        return None
+    return "low" if value <= IPIP_LOW else "high" if value >= IPIP_HIGH else "mid"
+
+
+def observer_band(value: float | None) -> str | None:
+    if value is None:
+        return None
+    return "low" if value <= OBSERVER_LOW else "high" if value >= OBSERVER_HIGH else "mid"

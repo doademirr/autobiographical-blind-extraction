@@ -1,0 +1,898 @@
+{
+ "instrument": "IPIP-NEO-120",
+ "reference": "Johnson, J. A. (2014). Measuring thirty facets of the Five Factor Model with a 120-item public domain inventory: Development of the IPIP-NEO-120. Journal of Research in Personality, 51, 78-89.",
+ "license": "Public domain. IPIP items may be used for any purpose without permission or fee (https://ipip.ori.org/).",
+ "provenance": "Item text, facet and key from the IPIP site's IPIP-NEO item key (https://ipip.ori.org/30FacetNEO-PI-RItems.htm); administration order from two open-source implementations that agree item for item. Checked 2026-10-19.",
+ "scale": {
+  "min": 1,
+  "max": 5,
+  "anchors": [
+   "Very inaccurate",
+   "Moderately inaccurate",
+   "Neither accurate nor inaccurate",
+   "Moderately accurate",
+   "Very accurate"
+  ]
+ },
+ "domains": {
+  "N": "Neuroticism",
+  "E": "Extraversion",
+  "O": "Openness to Experience",
+  "A": "Agreeableness",
+  "C": "Conscientiousness"
+ },
+ "facets": {
+  "N1": "Anxiety",
+  "N2": "Anger",
+  "N3": "Depression",
+  "N4": "Self-Consciousness",
+  "N5": "Immoderation",
+  "N6": "Vulnerability",
+  "E1": "Friendliness",
+  "E2": "Gregariousness",
+  "E3": "Assertiveness",
+  "E4": "Activity Level",
+  "E5": "Excitement-Seeking",
+  "E6": "Cheerfulness",
+  "O1": "Imagination",
+  "O2": "Artistic Interests",
+  "O3": "Emotionality",
+  "O4": "Adventurousness",
+  "O5": "Intellect",
+  "O6": "Liberalism",
+  "A1": "Trust",
+  "A2": "Morality",
+  "A3": "Altruism",
+  "A4": "Cooperation",
+  "A5": "Modesty",
+  "A6": "Sympathy",
+  "C1": "Self-Efficacy",
+  "C2": "Orderliness",
+  "C3": "Dutifulness",
+  "C4": "Achievement-Striving",
+  "C5": "Self-Discipline",
+  "C6": "Cautiousness"
+ },
+ "items": [
+  {
+   "id": "i001",
+   "number": 1,
+   "text": "Worry about things.",
+   "facet": "N1",
+   "key": 1
+  },
+  {
+   "id": "i002",
+   "number": 2,
+   "text": "Make friends easily.",
+   "facet": "E1",
+   "key": 1
+  },
+  {
+   "id": "i003",
+   "number": 3,
+   "text": "Have a vivid imagination.",
+   "facet": "O1",
+   "key": 1
+  },
+  {
+   "id": "i004",
+   "number": 4,
+   "text": "Trust others.",
+   "facet": "A1",
+   "key": 1
+  },
+  {
+   "id": "i005",
+   "number": 5,
+   "text": "Complete tasks successfully.",
+   "facet": "C1",
+   "key": 1
+  },
+  {
+   "id": "i006",
+   "number": 6,
+   "text": "Get angry easily.",
+   "facet": "N2",
+   "key": 1
+  },
+  {
+   "id": "i007",
+   "number": 7,
+   "text": "Love large parties.",
+   "facet": "E2",
+   "key": 1
+  },
+  {
+   "id": "i008",
+   "number": 8,
+   "text": "Believe in the importance of art.",
+   "facet": "O2",
+   "key": 1
+  },
+  {
+   "id": "i009",
+   "number": 9,
+   "text": "Use others for my own ends.",
+   "facet": "A2",
+   "key": -1
+  },
+  {
+   "id": "i010",
+   "number": 10,
+   "text": "Like to tidy up.",
+   "facet": "C2",
+   "key": 1
+  },
+  {
+   "id": "i011",
+   "number": 11,
+   "text": "Often feel blue.",
+   "facet": "N3",
+   "key": 1
+  },
+  {
+   "id": "i012",
+   "number": 12,
+   "text": "Take charge.",
+   "facet": "E3",
+   "key": 1
+  },
+  {
+   "id": "i013",
+   "number": 13,
+   "text": "Experience my emotions intensely.",
+   "facet": "O3",
+   "key": 1
+  },
+  {
+   "id": "i014",
+   "number": 14,
+   "text": "Love to help others.",
+   "facet": "A3",
+   "key": 1
+  },
+  {
+   "id": "i015",
+   "number": 15,
+   "text": "Keep my promises.",
+   "facet": "C3",
+   "key": 1
+  },
+  {
+   "id": "i016",
+   "number": 16,
+   "text": "Find it difficult to approach others.",
+   "facet": "N4",
+   "key": 1
+  },
+  {
+   "id": "i017",
+   "number": 17,
+   "text": "Am always busy.",
+   "facet": "E4",
+   "key": 1
+  },
+  {
+   "id": "i018",
+   "number": 18,
+   "text": "Prefer variety to routine.",
+   "facet": "O4",
+   "key": 1
+  },
+  {
+   "id": "i019",
+   "number": 19,
+   "text": "Love a good fight.",
+   "facet": "A4",
+   "key": -1
+  },
+  {
+   "id": "i020",
+   "number": 20,
+   "text": "Work hard.",
+   "facet": "C4",
+   "key": 1
+  },
+  {
+   "id": "i021",
+   "number": 21,
+   "text": "Go on binges.",
+   "facet": "N5",
+   "key": 1
+  },
+  {
+   "id": "i022",
+   "number": 22,
+   "text": "Love excitement.",
+   "facet": "E5",
+   "key": 1
+  },
+  {
+   "id": "i023",
+   "number": 23,
+   "text": "Love to read challenging material.",
+   "facet": "O5",
+   "key": 1
+  },
+  {
+   "id": "i024",
+   "number": 24,
+   "text": "Believe that I am better than others.",
+   "facet": "A5",
+   "key": -1
+  },
+  {
+   "id": "i025",
+   "number": 25,
+   "text": "Am always prepared.",
+   "facet": "C5",
+   "key": 1
+  },
+  {
+   "id": "i026",
+   "number": 26,
+   "text": "Panic easily.",
+   "facet": "N6",
+   "key": 1
+  },
+  {
+   "id": "i027",
+   "number": 27,
+   "text": "Radiate joy.",
+   "facet": "E6",
+   "key": 1
+  },
+  {
+   "id": "i028",
+   "number": 28,
+   "text": "Tend to vote for liberal political candidates.",
+   "facet": "O6",
+   "key": 1
+  },
+  {
+   "id": "i029",
+   "number": 29,
+   "text": "Sympathize with the homeless.",
+   "facet": "A6",
+   "key": 1
+  },
+  {
+   "id": "i030",
+   "number": 30,
+   "text": "Jump into things without thinking.",
+   "facet": "C6",
+   "key": -1
+  },
+  {
+   "id": "i031",
+   "number": 31,
+   "text": "Fear for the worst.",
+   "facet": "N1",
+   "key": 1
+  },
+  {
+   "id": "i032",
+   "number": 32,
+   "text": "Feel comfortable around people.",
+   "facet": "E1",
+   "key": 1
+  },
+  {
+   "id": "i033",
+   "number": 33,
+   "text": "Enjoy wild flights of fantasy.",
+   "facet": "O1",
+   "key": 1
+  },
+  {
+   "id": "i034",
+   "number": 34,
+   "text": "Believe that others have good intentions.",
+   "facet": "A1",
+   "key": 1
+  },
+  {
+   "id": "i035",
+   "number": 35,
+   "text": "Excel in what I do.",
+   "facet": "C1",
+   "key": 1
+  },
+  {
+   "id": "i036",
+   "number": 36,
+   "text": "Get irritated easily.",
+   "facet": "N2",
+   "key": 1
+  },
+  {
+   "id": "i037",
+   "number": 37,
+   "text": "Talk to a lot of different people at parties.",
+   "facet": "E2",
+   "key": 1
+  },
+  {
+   "id": "i038",
+   "number": 38,
+   "text": "See beauty in things that others might not notice.",
+   "facet": "O2",
+   "key": 1
+  },
+  {
+   "id": "i039",
+   "number": 39,
+   "text": "Cheat to get ahead.",
+   "facet": "A2",
+   "key": -1
+  },
+  {
+   "id": "i040",
+   "number": 40,
+   "text": "Often forget to put things back in their proper place.",
+   "facet": "C2",
+   "key": -1
+  },
+  {
+   "id": "i041",
+   "number": 41,
+   "text": "Dislike myself.",
+   "facet": "N3",
+   "key": 1
+  },
+  {
+   "id": "i042",
+   "number": 42,
+   "text": "Try to lead others.",
+   "facet": "E3",
+   "key": 1
+  },
+  {
+   "id": "i043",
+   "number": 43,
+   "text": "Feel others' emotions.",
+   "facet": "O3",
+   "key": 1
+  },
+  {
+   "id": "i044",
+   "number": 44,
+   "text": "Am concerned about others.",
+   "facet": "A3",
+   "key": 1
+  },
+  {
+   "id": "i045",
+   "number": 45,
+   "text": "Tell the truth.",
+   "facet": "C3",
+   "key": 1
+  },
+  {
+   "id": "i046",
+   "number": 46,
+   "text": "Am afraid to draw attention to myself.",
+   "facet": "N4",
+   "key": 1
+  },
+  {
+   "id": "i047",
+   "number": 47,
+   "text": "Am always on the go.",
+   "facet": "E4",
+   "key": 1
+  },
+  {
+   "id": "i048",
+   "number": 48,
+   "text": "Prefer to stick with things that I know.",
+   "facet": "O4",
+   "key": -1
+  },
+  {
+   "id": "i049",
+   "number": 49,
+   "text": "Yell at people.",
+   "facet": "A4",
+   "key": -1
+  },
+  {
+   "id": "i050",
+   "number": 50,
+   "text": "Do more than what's expected of me.",
+   "facet": "C4",
+   "key": 1
+  },
+  {
+   "id": "i051",
+   "number": 51,
+   "text": "Rarely overindulge.",
+   "facet": "N5",
+   "key": -1
+  },
+  {
+   "id": "i052",
+   "number": 52,
+   "text": "Seek adventure.",
+   "facet": "E5",
+   "key": 1
+  },
+  {
+   "id": "i053",
+   "number": 53,
+   "text": "Avoid philosophical discussions.",
+   "facet": "O5",
+   "key": -1
+  },
+  {
+   "id": "i054",
+   "number": 54,
+   "text": "Think highly of myself.",
+   "facet": "A5",
+   "key": -1
+  },
+  {
+   "id": "i055",
+   "number": 55,
+   "text": "Carry out my plans.",
+   "facet": "C5",
+   "key": 1
+  },
+  {
+   "id": "i056",
+   "number": 56,
+   "text": "Become overwhelmed by events.",
+   "facet": "N6",
+   "key": 1
+  },
+  {
+   "id": "i057",
+   "number": 57,
+   "text": "Have a lot of fun.",
+   "facet": "E6",
+   "key": 1
+  },
+  {
+   "id": "i058",
+   "number": 58,
+   "text": "Believe that there is no absolute right and wrong.",
+   "facet": "O6",
+   "key": 1
+  },
+  {
+   "id": "i059",
+   "number": 59,
+   "text": "Feel sympathy for those who are worse off than myself.",
+   "facet": "A6",
+   "key": 1
+  },
+  {
+   "id": "i060",
+   "number": 60,
+   "text": "Make rash decisions.",
+   "facet": "C6",
+   "key": -1
+  },
+  {
+   "id": "i061",
+   "number": 61,
+   "text": "Am afraid of many things.",
+   "facet": "N1",
+   "key": 1
+  },
+  {
+   "id": "i062",
+   "number": 62,
+   "text": "Avoid contacts with others.",
+   "facet": "E1",
+   "key": -1
+  },
+  {
+   "id": "i063",
+   "number": 63,
+   "text": "Love to daydream.",
+   "facet": "O1",
+   "key": 1
+  },
+  {
+   "id": "i064",
+   "number": 64,
+   "text": "Trust what people say.",
+   "facet": "A1",
+   "key": 1
+  },
+  {
+   "id": "i065",
+   "number": 65,
+   "text": "Handle tasks smoothly.",
+   "facet": "C1",
+   "key": 1
+  },
+  {
+   "id": "i066",
+   "number": 66,
+   "text": "Lose my temper.",
+   "facet": "N2",
+   "key": 1
+  },
+  {
+   "id": "i067",
+   "number": 67,
+   "text": "Prefer to be alone.",
+   "facet": "E2",
+   "key": -1
+  },
+  {
+   "id": "i068",
+   "number": 68,
+   "text": "Do not like poetry.",
+   "facet": "O2",
+   "key": -1
+  },
+  {
+   "id": "i069",
+   "number": 69,
+   "text": "Take advantage of others.",
+   "facet": "A2",
+   "key": -1
+  },
+  {
+   "id": "i070",
+   "number": 70,
+   "text": "Leave a mess in my room.",
+   "facet": "C2",
+   "key": -1
+  },
+  {
+   "id": "i071",
+   "number": 71,
+   "text": "Am often down in the dumps.",
+   "facet": "N3",
+   "key": 1
+  },
+  {
+   "id": "i072",
+   "number": 72,
+   "text": "Take control of things.",
+   "facet": "E3",
+   "key": 1
+  },
+  {
+   "id": "i073",
+   "number": 73,
+   "text": "Rarely notice my emotional reactions.",
+   "facet": "O3",
+   "key": -1
+  },
+  {
+   "id": "i074",
+   "number": 74,
+   "text": "Am indifferent to the feelings of others.",
+   "facet": "A3",
+   "key": -1
+  },
+  {
+   "id": "i075",
+   "number": 75,
+   "text": "Break rules.",
+   "facet": "C3",
+   "key": -1
+  },
+  {
+   "id": "i076",
+   "number": 76,
+   "text": "Only feel comfortable with friends.",
+   "facet": "N4",
+   "key": 1
+  },
+  {
+   "id": "i077",
+   "number": 77,
+   "text": "Do a lot in my spare time.",
+   "facet": "E4",
+   "key": 1
+  },
+  {
+   "id": "i078",
+   "number": 78,
+   "text": "Dislike changes.",
+   "facet": "O4",
+   "key": -1
+  },
+  {
+   "id": "i079",
+   "number": 79,
+   "text": "Insult people.",
+   "facet": "A4",
+   "key": -1
+  },
+  {
+   "id": "i080",
+   "number": 80,
+   "text": "Do just enough work to get by.",
+   "facet": "C4",
+   "key": -1
+  },
+  {
+   "id": "i081",
+   "number": 81,
+   "text": "Easily resist temptations.",
+   "facet": "N5",
+   "key": -1
+  },
+  {
+   "id": "i082",
+   "number": 82,
+   "text": "Enjoy being reckless.",
+   "facet": "E5",
+   "key": 1
+  },
+  {
+   "id": "i083",
+   "number": 83,
+   "text": "Have difficulty understanding abstract ideas.",
+   "facet": "O5",
+   "key": -1
+  },
+  {
+   "id": "i084",
+   "number": 84,
+   "text": "Have a high opinion of myself.",
+   "facet": "A5",
+   "key": -1
+  },
+  {
+   "id": "i085",
+   "number": 85,
+   "text": "Waste my time.",
+   "facet": "C5",
+   "key": -1
+  },
+  {
+   "id": "i086",
+   "number": 86,
+   "text": "Feel that I'm unable to deal with things.",
+   "facet": "N6",
+   "key": 1
+  },
+  {
+   "id": "i087",
+   "number": 87,
+   "text": "Love life.",
+   "facet": "E6",
+   "key": 1
+  },
+  {
+   "id": "i088",
+   "number": 88,
+   "text": "Tend to vote for conservative political candidates.",
+   "facet": "O6",
+   "key": -1
+  },
+  {
+   "id": "i089",
+   "number": 89,
+   "text": "Am not interested in other people's problems.",
+   "facet": "A6",
+   "key": -1
+  },
+  {
+   "id": "i090",
+   "number": 90,
+   "text": "Rush into things.",
+   "facet": "C6",
+   "key": -1
+  },
+  {
+   "id": "i091",
+   "number": 91,
+   "text": "Get stressed out easily.",
+   "facet": "N1",
+   "key": 1
+  },
+  {
+   "id": "i092",
+   "number": 92,
+   "text": "Keep others at a distance.",
+   "facet": "E1",
+   "key": -1
+  },
+  {
+   "id": "i093",
+   "number": 93,
+   "text": "Like to get lost in thought.",
+   "facet": "O1",
+   "key": 1
+  },
+  {
+   "id": "i094",
+   "number": 94,
+   "text": "Distrust people.",
+   "facet": "A1",
+   "key": -1
+  },
+  {
+   "id": "i095",
+   "number": 95,
+   "text": "Know how to get things done.",
+   "facet": "C1",
+   "key": 1
+  },
+  {
+   "id": "i096",
+   "number": 96,
+   "text": "Am not easily annoyed.",
+   "facet": "N2",
+   "key": -1
+  },
+  {
+   "id": "i097",
+   "number": 97,
+   "text": "Avoid crowds.",
+   "facet": "E2",
+   "key": -1
+  },
+  {
+   "id": "i098",
+   "number": 98,
+   "text": "Do not enjoy going to art museums.",
+   "facet": "O2",
+   "key": -1
+  },
+  {
+   "id": "i099",
+   "number": 99,
+   "text": "Obstruct others' plans.",
+   "facet": "A2",
+   "key": -1
+  },
+  {
+   "id": "i100",
+   "number": 100,
+   "text": "Leave my belongings around.",
+   "facet": "C2",
+   "key": -1
+  },
+  {
+   "id": "i101",
+   "number": 101,
+   "text": "Feel comfortable with myself.",
+   "facet": "N3",
+   "key": -1
+  },
+  {
+   "id": "i102",
+   "number": 102,
+   "text": "Wait for others to lead the way.",
+   "facet": "E3",
+   "key": -1
+  },
+  {
+   "id": "i103",
+   "number": 103,
+   "text": "Don't understand people who get emotional.",
+   "facet": "O3",
+   "key": -1
+  },
+  {
+   "id": "i104",
+   "number": 104,
+   "text": "Take no time for others.",
+   "facet": "A3",
+   "key": -1
+  },
+  {
+   "id": "i105",
+   "number": 105,
+   "text": "Break my promises.",
+   "facet": "C3",
+   "key": -1
+  },
+  {
+   "id": "i106",
+   "number": 106,
+   "text": "Am not bothered by difficult social situations.",
+   "facet": "N4",
+   "key": -1
+  },
+  {
+   "id": "i107",
+   "number": 107,
+   "text": "Like to take it easy.",
+   "facet": "E4",
+   "key": -1
+  },
+  {
+   "id": "i108",
+   "number": 108,
+   "text": "Am attached to conventional ways.",
+   "facet": "O4",
+   "key": -1
+  },
+  {
+   "id": "i109",
+   "number": 109,
+   "text": "Get back at others.",
+   "facet": "A4",
+   "key": -1
+  },
+  {
+   "id": "i110",
+   "number": 110,
+   "text": "Put little time and effort into my work.",
+   "facet": "C4",
+   "key": -1
+  },
+  {
+   "id": "i111",
+   "number": 111,
+   "text": "Am able to control my cravings.",
+   "facet": "N5",
+   "key": -1
+  },
+  {
+   "id": "i112",
+   "number": 112,
+   "text": "Act wild and crazy.",
+   "facet": "E5",
+   "key": 1
+  },
+  {
+   "id": "i113",
+   "number": 113,
+   "text": "Am not interested in theoretical discussions.",
+   "facet": "O5",
+   "key": -1
+  },
+  {
+   "id": "i114",
+   "number": 114,
+   "text": "Boast about my virtues.",
+   "facet": "A5",
+   "key": -1
+  },
+  {
+   "id": "i115",
+   "number": 115,
+   "text": "Have difficulty starting tasks.",
+   "facet": "C5",
+   "key": -1
+  },
+  {
+   "id": "i116",
+   "number": 116,
+   "text": "Remain calm under pressure.",
+   "facet": "N6",
+   "key": -1
+  },
+  {
+   "id": "i117",
+   "number": 117,
+   "text": "Look at the bright side of life.",
+   "facet": "E6",
+   "key": 1
+  },
+  {
+   "id": "i118",
+   "number": 118,
+   "text": "Believe that we should be tough on crime.",
+   "facet": "O6",
+   "key": -1
+  },
+  {
+   "id": "i119",
+   "number": 119,
+   "text": "Try not to think about the needy.",
+   "facet": "A6",
+   "key": -1
+  },
+  {
+   "id": "i120",
+   "number": 120,
+   "text": "Act without thinking.",
+   "facet": "C6",
+   "key": -1
+  }
+ ]
+}
