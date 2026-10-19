@@ -147,15 +147,15 @@ def _codex_transport(cfg: Config, cap: capture.Capture) -> tuple[list[str], dict
     return ["-c", provider, "-c", "model_provider=abxcapture"], {CAPTURE_KEY_ENV: "abx-capture"}
 
 
-def _captured(cfg: Config, lineage: str, cap: capture.Capture, prompt: str, argv, wiring) -> Run:
+def _captured(cfg: Config, lineage: str, cap: capture.Capture, prompt: str, unlocked_argv, wiring) -> Run:
     """One capture run; `wiring(cap)` gives the provider arguments and environment once the server is up.
     A CLI that cannot start becomes a failed run, so it is recorded and fails closed like any other."""
     with cap:
         extra, env = wiring(cap)
         setup_error = None
         try:
-            code, result = invoke.execute(cfg, lineage, prompt, None, unlocked_argv=argv, extra_args=extra,
-                                          env_extra=env)
+            code, result = (invoke.execute(cfg, lineage, prompt, None, extra, env) if unlocked_argv is None else
+                            invoke.execute_unlocked(cfg, lineage, prompt, None, unlocked_argv, extra, env))
         except CallFailed:
             code, result = -1, invoke.Result(status="failed")
         except UsageError as exc:  # a missing login: recorded below like any failed capture, then reported as such
@@ -166,20 +166,20 @@ def _captured(cfg: Config, lineage: str, cap: capture.Capture, prompt: str, argv
     return run
 
 
-def _run_codex(cfg: Config, prompt: str, tool_item: dict | None = None, argv=None, extra=()) -> Run:
+def _run_codex(cfg: Config, prompt: str, tool_item: dict | None = None, unlocked_argv=None, extra=()) -> Run:
     def wiring(cap):
         transport, env = _codex_transport(cfg, cap)
         return [*transport, *extra], env
 
     cap = capture.Capture("codex", tool_item=tool_item, forward=cfg.lineage("codex").capture_forward)
-    return _captured(cfg, "codex", cap, prompt, argv, wiring)
+    return _captured(cfg, "codex", cap, prompt, unlocked_argv, wiring)
 
 
-def _run_claude(cfg: Config, prompt: str, tool_use: tuple[str, dict] | None, argv=None) -> Run:
+def _run_claude(cfg: Config, prompt: str, tool_use: tuple[str, dict] | None, unlocked_argv=None) -> Run:
     def wiring(cap):
         return None, {"ANTHROPIC_API_KEY": "sk-ant-abx-capture", "ANTHROPIC_BASE_URL": cap.base_url}
 
-    return _captured(cfg, "claude", capture.Capture("claude", tool_use=tool_use), prompt, argv, wiring)
+    return _captured(cfg, "claude", capture.Capture("claude", tool_use=tool_use), prompt, unlocked_argv, wiring)
 
 
 def _scripted(item: dict, call_id: str) -> dict:
@@ -241,7 +241,7 @@ def qualify_codex(cfg: Config, canary: Canary, prompt: str, record: Recorder | N
     for name, js, extra, token in (("file", file_js, [], canary.token),
                                    ("mcp", mcp_js, ["-c", mcp_server], canary.mcp_token)):
         item = _scripted({"type": "custom_tool_call", "name": "exec", "input": js}, f"call_pc_{name}")
-        run = _run_codex(cfg, prompt, item, argv=invoke.codex_argv(lin, locked=False), extra=extra)
+        run = _run_codex(cfg, prompt, item, unlocked_argv=invoke.codex_argv(lin, locked=False), extra=extra)
         seen = token in capture.tool_text(run.evidence.requests, f"call_pc_{name}")
         _check("codex", f"control-{name}", run, [] if seen else [f"{name} {NO_CANARY}"], record)
         controls[name] = "canary returned"
@@ -264,7 +264,7 @@ def qualify_claude(cfg: Config, canary: Canary, prompt: str, record: Recorder | 
             ("mcp", ("mcp__abxcanary__read_canary", {}),
              invoke.claude_argv(lin, "", ("--mcp-config", mcp_config, "--allowedTools", "mcp__abxcanary__read_canary")),
              canary.mcp_token)):
-        run = _run_claude(cfg, prompt, tool, argv=argv)
+        run = _run_claude(cfg, prompt, tool, unlocked_argv=argv)
         seen = token in capture.tool_text(run.evidence.requests, CLAUDE_CALL_ID)
         _check("claude", f"control-{name}", run, [] if seen else [f"{name} {NO_CANARY}"], record)
         controls[name] = "canary returned"

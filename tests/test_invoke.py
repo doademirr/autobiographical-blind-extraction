@@ -56,6 +56,13 @@ class CallTest(unittest.TestCase):
                     incident = store.read_json(self.ws.path(f"run/incidents/{req.identity}.json"))
                     self.assertEqual(incident["kind"], "tool_event")
 
+    def test_a_config_frozen_before_profile_file_defaults_it(self):
+        legacy = json.loads(json.dumps(self.fw.cfg))
+        del legacy["lineages"]["claude"]["profile_file"]
+        lin = config.parse(legacy).lineage("claude")
+        self.assertEqual(lin.profile_file, config.CLAUDE_PROFILE_DEFAULT)
+        self.assertEqual(lin.raw_json, store.canonical(legacy["lineages"]["claude"]))
+
     def test_locked_claude_home_carries_the_login_without_identity(self):
         source = Path(self.cfg.lineage("claude").profile_file)
         profile = json.loads(source.read_text())

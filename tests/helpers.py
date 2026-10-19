@@ -5,6 +5,7 @@ import os
 import shutil
 import tempfile
 from pathlib import Path
+from typing import NamedTuple
 from unittest import mock
 
 from abx import config, init, invoke, store
@@ -19,32 +20,38 @@ FAKE_ENV = ["ABX_FAKE_LOG", "ABX_FAKE_VERSION", "ABX_FAKE_TOOL_EVENT", "ABX_FAKE
             "ABX_FAKE_ERROR_NOTICE", "ABX_FAKE_READ_INSTRUCTIONS", "ABX_FAKE_STDERR", "ABX_FAKE_PROFILE_FETCH"]
 
 
-# A cached Claude account profile in the shape Claude Code 2.1.303 keeps: identity plus the fields whose presence
-# stops it fetching the profile again. Synthetic.
-CLAUDE_PROFILE = {"oauthAccount": {"emailAddress": "someone@example.com", "fullName": "Some One",
-                                    "displayName": "Some", "organizationName": "Some org",
-                                    "billingType": "stripe_subscription", "accountCreatedAt": "2026-01-01",
-                                    "subscriptionCreatedAt": "2026-01-01", "ccOnboardingFlags": {}}}
+class Logins(NamedTuple):
+    codex_auth: Path
+    claude_profile: Path
 
 
-def write_logins(root: Path) -> tuple[Path, Path]:
+def claude_profile() -> dict:
+    """A cached Claude account profile in the shape Claude Code 2.1.303 keeps: identity plus the fields whose
+    presence stops it fetching the profile again. Synthetic, and a fresh object each time."""
+    return {"oauthAccount": {"emailAddress": "someone@example.com", "fullName": "Some One", "displayName": "Some",
+                             "organizationName": "Some org", "billingType": "stripe_subscription",
+                             "accountCreatedAt": "2026-01-01", "subscriptionCreatedAt": "2026-01-01",
+                             "ccOnboardingFlags": {}}}
+
+
+def write_logins(root: Path) -> Logins:
     """A Codex auth file and a Claude account profile under `root`."""
-    auth, profile = root / "auth.json", root / "claude.json"
-    auth.write_text("{}")
-    profile.write_text(json.dumps(CLAUDE_PROFILE))
-    return auth, profile
+    logins = Logins(root / "auth.json", root / "claude.json")
+    logins.codex_auth.write_text("{}")
+    logins.claude_profile.write_text(json.dumps(claude_profile()))
+    return logins
 
 
-def fake_config(auth_file: Path, profile_file: Path) -> dict:
+def fake_config(logins: Logins) -> dict:
     return {
         "lineages": {
             "claude": {"cli": str(FAKES / "claude"), "model": "fake-claude-1",
                        "input_budget_tokens": 200000, "reserve_output_tokens": 8000,
-                       "locked_read_result": init.CLAUDE_LOCKED_READ, "profile_file": str(profile_file)},
+                       "locked_read_result": init.CLAUDE_LOCKED_READ, "profile_file": str(logins.claude_profile)},
             "codex": {"cli": str(FAKES / "codex"), "model": "fake-codex-1",
                       "input_budget_tokens": 200000, "reserve_output_tokens": 8000,
                       "sandbox_exec": str(FAKES / "sandbox-exec"), "sandbox_allow": [str(FAKES)],
-                      "auth_file": str(auth_file), "disable": list(init.CODEX_DISABLE),
+                      "auth_file": str(logins.codex_auth), "disable": list(init.CODEX_DISABLE),
                       "config": list(init.CODEX_CONFIG),
                       "retained_tools": init.CODEX_RETAINED, "capture_forward": False},
         },
@@ -69,7 +76,7 @@ class FakeWorkspace:
         for name in ("schemas", "prompts"):
             shutil.copytree(REPO / name, self.ws.path(f"prereg/{name}"))
         self.log = root / "fakelog"
-        self.cfg = fake_config(*write_logins(root))
+        self.cfg = fake_config(write_logins(root))
         self.config = config.parse(self.cfg)
         self._env = mock.patch.dict(os.environ, {"ABX_FAKE_LOG": str(self.log)})
         self._env.start()

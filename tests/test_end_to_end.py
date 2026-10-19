@@ -35,9 +35,9 @@ class EndToEndTest(unittest.TestCase):
         cls.run_stage("init", "--text", str(FIXTURE / "autobiography.txt"), "--canary", "ABXPROFILECANARY")
         cfg_path = cls.ws_path / "config.json"
         cfg = json.loads(cfg_path.read_text())
-        auth, profile = write_logins(cls.tmp)
-        cfg["lineages"]["claude"]["profile_file"] = str(profile)
-        cfg["lineages"]["codex"].update(sandbox_exec=str(FAKES / "sandbox-exec"), auth_file=str(auth),
+        logins = write_logins(cls.tmp)
+        cfg["lineages"]["claude"]["profile_file"] = str(logins.claude_profile)
+        cfg["lineages"]["codex"].update(sandbox_exec=str(FAKES / "sandbox-exec"), auth_file=str(logins.codex_auth),
                                         capture_forward=False)
         cfg["env_passthrough"] = FAKE_ENV
         cfg_path.write_text(json.dumps(cfg, indent=1))

@@ -22,6 +22,9 @@ class RetainedTool(NamedTuple):
     result: str
 
 
+CLAUDE_PROFILE_DEFAULT = "~/.claude.json"
+
+
 @dataclass(frozen=True)
 class Lineage:
     name: str
@@ -89,8 +92,9 @@ def _lineage(name: str, obj: dict) -> Lineage:
               "input_budget_tokens": _get(obj, "input_budget_tokens", int, where),
               "reserve_output_tokens": _get(obj, "reserve_output_tokens", int, where)}
     if name == "claude":
-        return Lineage(**common, locked_read_result=_get(obj, "locked_read_result", str, where),
-                       profile_file=_get(obj, "profile_file", str, where))
+        # Workspaces made before `profile_file` existed are frozen without it; they used Claude Code's default.
+        profile = _get(obj, "profile_file", str, where) if "profile_file" in obj else CLAUDE_PROFILE_DEFAULT
+        return Lineage(**common, locked_read_result=_get(obj, "locked_read_result", str, where), profile_file=profile)
     retained = _get(obj, "retained_tools", dict, where)
     for tool, spec in retained.items():
         well_formed = (isinstance(spec, dict) and isinstance(spec.get("call"), dict)

@@ -7,6 +7,7 @@ import stat
 from pathlib import Path
 
 from . import ipip, lifecycle, store
+from .config import CLAUDE_PROFILE_DEFAULT
 from .errors import UsageError
 
 __all__ = [
@@ -86,7 +87,7 @@ def default_config(canaries: list[str]) -> dict:
         "lineages": {
             "claude": {"cli": claude, "model": "claude-opus-5-5",
                        "input_budget_tokens": 180000, "reserve_output_tokens": 32000,
-                       "locked_read_result": CLAUDE_LOCKED_READ, "profile_file": "~/.claude.json"},
+                       "locked_read_result": CLAUDE_LOCKED_READ, "profile_file": CLAUDE_PROFILE_DEFAULT},
             "codex": {"cli": codex_bin, "model": "gpt-6.1-sol",
                       "input_budget_tokens": 400000, "reserve_output_tokens": 32000,
                       "sandbox_exec": "/usr/bin/sandbox-exec", "sandbox_allow": [codex_root],

@@ -2,7 +2,7 @@
 
 Blind, pre-registered personality extraction from your own diary or autobiography, rated by two model families (Claude and Codex) and compared with what you predicted about yourself.
 
-> **Status:** v0.1, walking skeleton. Runs end to end live on macOS. 156 tests, including real-binary isolation checks that call no model. Not yet run on a real person's record.
+> **Status:** v0.1, walking skeleton. Runs end to end live on macOS. The test suite includes real-binary isolation checks that call no model. Not yet run on a real person's record.
 
 ```console
 $ python3 scripts/run.py extract ~/abx/franklin

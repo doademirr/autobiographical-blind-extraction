@@ -8,6 +8,7 @@ header values are never stored. Handler threads report to one recorder; after th
 stops, `Capture.evidence` is the immutable record.
 """
 
+import http.client
 import http.server
 import itertools
 import json
@@ -140,24 +141,30 @@ class Capture:
         cap, rec = self, self._recorder
 
         class Handler(http.server.BaseHTTPRequestHandler):
-            """A connection dropped once a request is recorded is routine (the CLI hangs up on fetches it no longer
-            needs) and is ignored; one dropped after the request line but before recording is evidence."""
+            """Every request that gets past its request line leaves evidence. One no handler records becomes
+            `unhandled` (HEAD, PUT, ...) or, if it ended in any exception, `incomplete`. A connection dropped after
+            the request is recorded is routine (the CLI hangs up on fetches it no longer needs) and is ignored."""
 
             protocol_version = "HTTP/1.1"
             recorded = False
 
             def handle_one_request(self):
                 self.command, self.recorded = None, False
-                super().handle_one_request()
-                if self.command and not self.recorded:  # a method or path no handler records (HEAD, PUT, ...)
-                    rec.traffic(Traffic(self.command, (self.path or "").split("?")[0], "unhandled"))
+                outcome = "unhandled"
+                try:
+                    super().handle_one_request()
+                except BaseException:
+                    outcome = "incomplete"
+                    raise
+                finally:
+                    if self.command and not self.recorded:
+                        rec.traffic(Traffic(self.command, (self.path or "").split("?")[0], outcome))
 
             def handle(self):
                 try:
                     super().handle()
                 except ConnectionError:
-                    if self.command and not self.recorded:
-                        rec.traffic(Traffic(self.command, (self.path or "").split("?")[0], "incomplete"))
+                    pass
 
             def _note(self, item: Traffic):
                 rec.traffic(item)
@@ -185,9 +192,14 @@ class Capture:
                     with urllib.request.urlopen(urllib.request.Request(upstream, headers=headers), timeout=30) as r:
                         code, body, ctype = r.status, r.read(), r.headers.get("content-type", "application/json")
                 except urllib.error.HTTPError as exc:
-                    code, body, ctype = exc.code, exc.read(), "application/json"
-                    exc.close()
-                except OSError:
+                    code, ctype = exc.code, "application/json"
+                    try:
+                        body = exc.read()
+                    except (OSError, http.client.HTTPException):
+                        code, body = 502, b""
+                    finally:
+                        exc.close()
+                except (OSError, http.client.HTTPException):  # unreachable, or a truncated upstream response
                     code, body, ctype = 502, b"", "application/json"
                 self._note(Traffic("GET", path, "forwarded", code))
                 self._send(code, body, ctype)

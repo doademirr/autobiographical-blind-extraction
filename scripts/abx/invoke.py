@@ -42,6 +42,7 @@ __all__ = [
     "decode_events",
     "estimate_tokens",
     "execute",
+    "execute_unlocked",
     "live_fingerprint",
     "outcome",
     "parse_claude",
@@ -418,20 +419,28 @@ def _parsed(lineage: str, code: int | None, out: list[str], err: list[str]) -> t
     return code, result
 
 
-def execute(cfg: Config, lineage: str, prompt_text: str, schema: str | None,
-            unlocked_argv: list[str] | None = None, extra_args: list[str] | None = None,
-            env_extra: dict[str, str] | None = None,
-            cwd_files: dict[str, str] | None = None) -> tuple[int | None, Result]:
-    """One isolated CLI process; returns its exit code (None on timeout) and parsed stream.
+def execute(cfg: Config, lineage: str, prompt_text: str, schema: str | None, extra_args: list[str] | None = None,
+            env_extra: dict[str, str] | None = None) -> tuple[int | None, Result]:
+    """One locked CLI process on the pinned argv in an empty directory; returns its exit code (None on timeout)
+    and parsed stream. Capture runs pass provider overrides: `extra_args`, inserted before Codex's trailing stdin
+    marker, and `env_extra`. A locked Claude profile rewritten during the run is reported as an
+    `identity_restored` event, so every caller's audit and records see it."""
+    return _execute(cfg, lineage, prompt_text, schema, None, extra_args, env_extra, None)
 
-    Every call runs the pinned, locked argv in an empty directory. Only qualification's positive controls pass
-    `unlocked_argv`. Every capture run (locked or not) passes provider overrides: `extra_args`, inserted before
-    Codex's trailing stdin marker, and `env_extra`. Only the probe's own control passes `cwd_files`.
-    A locked Claude profile rewritten during the run is reported as an `identity_restored` event, so every
-    caller's audit and records see it.
-    """
+
+def execute_unlocked(cfg: Config, lineage: str, prompt_text: str, schema: str | None, argv: list[str],
+                     extra_args: list[str] | None = None, env_extra: dict[str, str] | None = None,
+                     cwd_files: dict[str, str] | None = None) -> tuple[int | None, Result]:
+    """A positive control only: `argv` as an ordinary user runs the CLI, without the locked Claude HOME, and
+    optionally with instruction files planted in its directory."""
+    return _execute(cfg, lineage, prompt_text, schema, list(argv), extra_args, env_extra, cwd_files)
+
+
+def _execute(cfg: Config, lineage: str, prompt_text: str, schema: str | None, unlocked_argv: list[str] | None,
+             extra_args: list[str] | None, env_extra: dict[str, str] | None,
+             cwd_files: dict[str, str] | None) -> tuple[int | None, Result]:
     lin = cfg.lineage(lineage)
-    argv = list(unlocked_argv) if unlocked_argv is not None else _pinned_argv(lin)
+    argv = unlocked_argv if unlocked_argv is not None else _pinned_argv(lin)
     if extra_args:
         argv = [*argv[:-1], *extra_args, argv[-1]] if argv[-1] == "-" else [*argv, *extra_args]
     tmp = Path(os.path.realpath(tempfile.mkdtemp(prefix="abx-")))
@@ -650,9 +659,12 @@ def probe(ws: store.Workspace, cfg: Config, lineage: str, canaries: tuple[str, .
     # person's name: a bare codename reads as no information, and a model may rightly answer NONE.
     note = (f"# About the user\n\nThe user you are working for is {planted}, an accountant in Leeds. On the "
             f"IPIP-NEO-120 they score high on Conscientiousness and low on Extraversion.\n")
-    argv, files = (None, None) if mode == "leak" else (_control_argv(lin), {"CLAUDE.md": note, "AGENTS.md": note})
     try:
-        code, result = execute(cfg, lineage, prompt.text, schema_text, unlocked_argv=argv, cwd_files=files)
+        if mode == "leak":
+            code, result = execute(cfg, lineage, prompt.text, schema_text)
+        else:
+            code, result = execute_unlocked(cfg, lineage, prompt.text, schema_text, _control_argv(lin),
+                                            cwd_files={"CLAUDE.md": note, "AGENTS.md": note})
     except CallFailed:
         code, result = -1, Result(status="failed")
     seen = "\n".join([*result.messages, result.text or ""]).lower()

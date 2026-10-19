@@ -1,12 +1,15 @@
+import http.server
 import json
 import socket
 import struct
 import tempfile
+import threading
 import time
 import unittest
 import urllib.error
 import urllib.request
 from pathlib import Path
+from unittest import mock
 
 from abx import capture, config, invoke, qualify
 
@@ -56,6 +59,43 @@ class CaptureServerTest(unittest.TestCase):
                          [("POST", "incomplete"), ("PUT", "unhandled")])
         self.assertEqual(cap.evidence.requests, ())
 
+    def test_a_truncated_upstream_read_is_a_failed_forward(self):
+        class Truncating(http.server.BaseHTTPRequestHandler):
+            def do_GET(self):
+                self.send_response(200)
+                self.send_header("content-length", "100")
+                self.end_headers()
+                self.wfile.write(b'{"models"')
+                self.close_connection = True
+
+            def log_message(self, *args):
+                pass
+
+        upstream = http.server.HTTPServer(("127.0.0.1", 0), Truncating)
+        threading.Thread(target=upstream.serve_forever, daemon=True).start()
+        try:
+            base = f"http://127.0.0.1:{upstream.server_address[1]}/"
+            with mock.patch.dict(capture.CODEX_UPSTREAM, {"/codex-up/": base}), \
+                    capture.Capture("codex", forward=True) as cap:
+                with self.assertRaises(urllib.error.HTTPError) as cm:
+                    urllib.request.urlopen(f"{cap.base_url}/codex-up/models", timeout=10)
+                cm.exception.close()
+        finally:
+            upstream.shutdown()
+            upstream.server_close()
+        self.assertEqual([(t.outcome, t.status) for t in cap.evidence.traffic], [("forwarded", 502)])
+        self.assertEqual(qualify._transport_problems(cap.evidence), ["discovery_read_failed"])
+
+    def test_a_request_whose_handler_fails_is_recorded_incomplete(self):
+        with mock.patch.object(capture.urllib.request, "urlopen", side_effect=ValueError("boom")), \
+                mock.patch.object(capture._Server, "handle_error"), capture.Capture("codex", forward=True) as cap:
+            s = socket.create_connection(("127.0.0.1", cap.port))
+            s.sendall(b"GET /codex-up/models HTTP/1.1\r\nHost: x\r\n\r\n")
+            s.recv(1024)
+            s.close()
+        self.assertEqual([(t.method, t.path, t.outcome) for t in cap.evidence.traffic],
+                         [("GET", "/codex-up/models", "incomplete")])
+
     def test_a_token_count_request_is_recorded_and_fails_a_claude_capture(self):
         with capture.Capture("claude") as cap:
             _post(f"{cap.base_url}/v1/messages/count_tokens", {"messages": [{"role": "user", "content": "x"}]})
@@ -64,7 +104,7 @@ class CaptureServerTest(unittest.TestCase):
         events = [invoke.Event("system", "init"), invoke.Event("result", "success")]
         run = qualify.Run(cap.evidence, 0, invoke.Result(status="success", events=events))
         with tempfile.TemporaryDirectory() as tmp, qualify.Canary() as canary:
-            cfg = config.parse(fake_config(*write_logins(Path(tmp))))
+            cfg = config.parse(fake_config(write_logins(Path(tmp))))
             self.assertIn("the CLI sent a request other than inference",
                           qualify._locked_problems("claude", cfg, run, canary, None))
 

@@ -22,8 +22,14 @@ for line in [*body, ""]:
         paragraphs.append(current)
         current = []
 
-out, chapters, after_number = [], [], False
+out, chapters, after_number, in_plate = [], [], False, False
 for para in paragraphs:
+    # The editor's facsimile of two almanac pages, with its transcriber's note: from the caption to the note's "]".
+    if para[0].startswith("Two pages from _Poor Richard's Almanac_"):
+        in_plate = True
+    if in_plate:
+        in_plate = not para[-1].rstrip().endswith("]")
+        continue
     if len(para) == 1 and ROMAN.match(para[0].strip()):
         chapters.append((para[0].strip(), len(out) + 1))
         after_number = True
