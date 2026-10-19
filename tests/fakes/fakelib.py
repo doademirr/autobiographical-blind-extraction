@@ -19,6 +19,7 @@ import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
+import fakecapture
 import roles
 
 TOOL_EVENTS = {
@@ -67,6 +68,13 @@ def main(lineage: str) -> int:
         print(os.environ.get("ABX_FAKE_VERSION", f"{lineage}-fake 1.0.0"))
         return 0
     prompt = sys.stdin.read()
+    model = _arg(argv, "--model") or _arg(argv, "-m") or "fake-model"
+    endpoint = os.environ.get("ANTHROPIC_BASE_URL") if lineage == "claude" else fakecapture.codex_endpoint(argv)
+    if endpoint:
+        run = fakecapture.claude if lineage == "claude" else fakecapture.codex
+        for ev in run(argv, prompt, model, endpoint):
+            print(json.dumps(ev))
+        return 0
     log = Path(os.environ["ABX_FAKE_LOG"]) if os.environ.get("ABX_FAKE_LOG") else None
     calls, occurrence = _state(log, lineage, prompt)
     if log is not None:
@@ -75,7 +83,6 @@ def main(lineage: str) -> int:
             f.write(json.dumps({"lineage": lineage, "argv": argv, "prompt": prompt}) + "\n")
     fail_after = os.environ.get("ABX_FAKE_FAIL_AFTER")
     failing = bool(os.environ.get("ABX_FAKE_FAIL")) or (fail_after is not None and calls >= int(fail_after))
-    model = _arg(argv, "--model") or _arg(argv, "-m") or "fake-model"
     if "ABX_FAKE_RAW" in os.environ:
         text = os.environ["ABX_FAKE_RAW"]
     else:

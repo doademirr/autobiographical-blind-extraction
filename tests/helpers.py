@@ -6,25 +6,30 @@ import tempfile
 from pathlib import Path
 from unittest import mock
 
-from abx import invoke, store
+from abx import init, invoke, store
 
 from . import REPO
 
 FAKES = REPO / "tests" / "fakes"
 FAKE_ENV = ["ABX_FAKE_LOG", "ABX_FAKE_VERSION", "ABX_FAKE_TOOL_EVENT", "ABX_FAKE_FAIL", "ABX_FAKE_LEAK",
-            "ABX_FAKE_FAIL_AFTER", "ABX_FAKE_RAW"]
+            "ABX_FAKE_FAIL_AFTER", "ABX_FAKE_RAW", "ABX_FAKE_CAPTURE_EXTRA_TOOL", "ABX_FAKE_CAPTURE_RESULT"]
 
 
 def fake_config(auth_file: Path) -> dict:
     return {
         "lineages": {
             "claude": {"cli": str(FAKES / "claude"), "model": "fake-claude-1",
-                       "input_budget_tokens": 200000, "reserve_output_tokens": 8000},
+                       "input_budget_tokens": 200000, "reserve_output_tokens": 8000,
+                       "locked_read_result": init.CLAUDE_LOCKED_READ},
             "codex": {"cli": str(FAKES / "codex"), "model": "fake-codex-1",
                       "input_budget_tokens": 200000, "reserve_output_tokens": 8000,
                       "sandbox_exec": str(FAKES / "sandbox-exec"), "sandbox_allow": [str(FAKES)],
-                      "auth_file": str(auth_file), "disable": ["shell_tool"], "config": []},
+                      "auth_file": str(auth_file), "disable": init.CODEX_DISABLE, "config": init.CODEX_CONFIG,
+                      "retained_tools": init.CODEX_RETAINED, "capture_forward": False},
         },
+        "runs": 3,
+        "roles": {"zoner": "claude", "codebook_author": "claude", "crosswalk_coders": ["claude", "codex"]},
+        "canaries": ["ABXPROFILECANARY"],
         "env_passthrough": FAKE_ENV,
         "timeout_s": 60,
     }

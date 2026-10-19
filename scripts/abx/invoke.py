@@ -199,17 +199,23 @@ def run_cli(argv: list[str], prompt: str, cwd: Path, env: dict[str, str], timeou
     return p.returncode, p.stdout.splitlines()
 
 
-def execute(cfg: dict, lineage: str, prompt_text: str, schema: str | None,
-            unlocked_argv: list[str] | None = None, env_extra: dict[str, str] | None = None) -> tuple[int, Outcome]:
-    """One isolated CLI process. `unlocked_argv` replaces the pinned argv (qualification only)."""
+def execute(cfg: dict, lineage: str, prompt_text: str, schema: str | None, argv: list[str] | None = None,
+            extra_args: list[str] | None = None, env_extra: dict[str, str] | None = None) -> tuple[int, Outcome]:
+    """One isolated CLI process.
+
+    Qualification alone passes `argv` (an unlocked variant) or `extra_args` (provider overrides,
+    inserted before Codex's trailing stdin marker); model calls always use the pinned argv.
+    """
     lcfg = cfg["lineages"][lineage]
+    argv = list(argv or argv_template(lcfg, lineage))
+    if extra_args:
+        argv = [*argv[:-1], *extra_args, argv[-1]] if argv[-1] == "-" else [*argv, *extra_args]
     tmp = Path(os.path.realpath(tempfile.mkdtemp(prefix="abx-")))
     try:
         cwd = tmp / "cwd"
         cwd.mkdir()
         env = _env(cfg, env_extra or {})
         if lineage == "claude":
-            argv = unlocked_argv or argv_template(lcfg, lineage)
             code, lines = run_cli(argv, prompt_text, cwd, env, cfg["timeout_s"])
             return code, parse_claude(lines)
         home = tmp / "home"
@@ -217,7 +223,6 @@ def execute(cfg: dict, lineage: str, prompt_text: str, schema: str | None,
         shutil.copy(os.path.expanduser(lcfg["auth_file"]), home / "auth.json")
         (tmp / "profile.sb").write_text(sandbox_profile([*lcfg["sandbox_allow"], str(tmp)]))
         (tmp / "schema.json").write_text(schema or "{}")
-        argv = unlocked_argv or argv_template(lcfg, lineage)
         argv = [{"<profile>": str(tmp / "profile.sb"), "<cwd>": str(cwd),
                  "<schema>": str(tmp / "schema.json")}.get(a, a) for a in argv]
         code, lines = run_cli(argv, prompt_text, cwd, {**env, "CODEX_HOME": str(home)}, cfg["timeout_s"])
