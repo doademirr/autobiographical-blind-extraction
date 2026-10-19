@@ -23,7 +23,10 @@ stage() {
 # 1. The pipeline, with production qualification (real logins, metadata reads forwarded, inference captured).
 stage init "$WS" --text "$FIX/autobiography.txt" --canary ABXPROFILECANARY
 stage prepare "$WS"
-cp "$FIX/redactions.json" "$FIX/eras.json" "$WS/prepare/"
+# Live raters know Franklin's text and restore redacted names from memory ("Samuel K." -> Keimer), which the
+# prompt audit then stops. Redaction is covered offline; the live run approves an empty list.
+cp "$FIX/eras.json" "$WS/prepare/"
+printf '{"approved": true, "names": {}}\n' > "$WS/prepare/redactions.json"
 stage prepare "$WS"
 cp "$FIX/self-prediction.md" "$FIX/ipip-120.csv" "$WS/sealed/"
 stage seal "$WS"
