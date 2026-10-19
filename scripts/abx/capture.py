@@ -12,7 +12,6 @@ import http.server
 import itertools
 import json
 import queue
-import sys
 import threading
 import urllib.error
 import urllib.request
@@ -32,7 +31,7 @@ _USAGE_RESPONSES = {"input_tokens": 1, "output_tokens": 1, "total_tokens": 2,
 class Traffic(NamedTuple):
     method: str
     path: str
-    outcome: str            # "captured" | "forwarded" | "refused" | "ws-refused" | "unreadable"
+    outcome: str            # "captured" | "forwarded" | "refused" | "ws-refused" | "unreadable" | "incomplete"
     status: int | None = None
 
 
@@ -123,10 +122,6 @@ class _Server(http.server.ThreadingHTTPServer):
     daemon_threads = False
     block_on_close = True
 
-    def handle_error(self, request, client_address):
-        if not isinstance(sys.exc_info()[1], ConnectionError):  # a CLI hanging up is routine, not an error
-            super().handle_error(request, client_address)
-
 
 class Capture:
     """`with Capture("codex", tool_item=…) as cap:` point the CLI at `cap.base_url`; then read `cap.evidence`."""
@@ -144,7 +139,26 @@ class Capture:
         cap, rec = self, self._recorder
 
         class Handler(http.server.BaseHTTPRequestHandler):
+            """A connection dropped once a request is recorded is routine (the CLI hangs up on fetches it no longer
+            needs) and is ignored; one dropped after the request line but before recording is evidence."""
+
             protocol_version = "HTTP/1.1"
+            recorded = False
+
+            def handle_one_request(self):
+                self.command, self.recorded = None, False
+                super().handle_one_request()
+
+            def handle(self):
+                try:
+                    super().handle()
+                except ConnectionError:
+                    if self.command and not self.recorded:
+                        rec.traffic(Traffic(self.command, (self.path or "").split("?")[0], "incomplete"))
+
+            def _note(self, item: Traffic):
+                rec.traffic(item)
+                self.recorded = True
 
             def _send(self, code, body=b"", ctype="application/json"):
                 self.send_response(code)
@@ -156,12 +170,12 @@ class Capture:
             def do_GET(self):
                 path = self.path.split("?")[0]
                 if self.headers.get("Upgrade"):
-                    rec.traffic(Traffic("GET", path, "ws-refused"))
+                    self._note(Traffic("GET", path, "ws-refused"))
                     return self._send(404)
                 upstream = next((base + self.path[len(pre):] for pre, base in CODEX_UPSTREAM.items()
                                  if self.path.startswith(pre)), None)
                 if not (cap.forward and upstream):
-                    rec.traffic(Traffic("GET", path, "refused"))
+                    self._note(Traffic("GET", path, "refused"))
                     return self._send(404)
                 headers = {k: v for k, v in self.headers.items() if k.lower() not in _DROP_HEADERS}
                 try:
@@ -172,7 +186,7 @@ class Capture:
                     exc.close()
                 except OSError:
                     code, body, ctype = 502, b"", "application/json"
-                rec.traffic(Traffic("GET", path, "forwarded", code))
+                self._note(Traffic("GET", path, "forwarded", code))
                 self._send(code, body, ctype)
 
             def do_POST(self):
@@ -182,16 +196,18 @@ class Capture:
                     try:
                         req = json.loads(body)
                     except ValueError:
-                        rec.traffic(Traffic("POST", path, "unreadable"))
+                        self._note(Traffic("POST", path, "unreadable"))
                         return self._send(400)
                     n = rec.request(req if isinstance(req, dict) else {"_unexpected": req}, path)
+                    self.recorded = True
                     stream = (responses_stream(n, cap.tool_item) if cap.lineage == "codex"
                               else messages_stream(n, req.get("model", "") if isinstance(req, dict) else "",
                                                    cap.tool_use))
                     return self._send(200, stream, "text/event-stream")
                 if path.endswith("count_tokens"):
+                    self.recorded = True
                     return self._send(200, b'{"input_tokens": 1}')
-                rec.traffic(Traffic("POST", path, "refused"))
+                self._note(Traffic("POST", path, "refused"))
                 self._send(404)
 
             def log_message(self, *args):

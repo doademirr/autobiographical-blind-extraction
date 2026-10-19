@@ -1,4 +1,7 @@
 import json
+import socket
+import struct
+import time
 import unittest
 import urllib.error
 import urllib.request
@@ -16,7 +19,24 @@ def _events(sse: str) -> list[dict]:
     return [json.loads(line[6:]) for line in sse.splitlines() if line.startswith("data: ")]
 
 
+def _reset(port: int, payload: bytes) -> None:
+    """Send `payload`, then abort the connection with a reset, as a CLI that hangs up does."""
+    s = socket.create_connection(("127.0.0.1", port))
+    s.sendall(payload)
+    time.sleep(0.2)
+    s.setsockopt(socket.SOL_SOCKET, socket.SO_LINGER, struct.pack("ii", 1, 0))
+    s.close()
+    time.sleep(0.2)
+
+
 class CaptureServerTest(unittest.TestCase):
+    def test_a_request_dropped_before_capture_is_evidence_and_an_idle_reset_is_not(self):
+        with capture.Capture("claude") as cap:
+            _reset(cap.port, b"POST /v1/messages HTTP/1.1\r\nHost: x\r\nContent-Length: 1000\r\n\r\n{")
+            _reset(cap.port, b"")
+        self.assertEqual([(t.method, t.path, t.outcome) for t in cap.evidence.traffic],
+                         [("POST", "/v1/messages", "incomplete")])
+
     def test_codex_scripted_call_then_message_and_result_lookup(self):
         item = {"type": "function_call", "id": "fc", "call_id": "call_w", "name": "wait", "arguments": "{}"}
         cap = capture.Capture("codex", tool_item=item)

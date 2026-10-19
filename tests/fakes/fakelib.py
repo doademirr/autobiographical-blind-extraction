@@ -92,7 +92,8 @@ def main(lineage: str) -> int:
     if log is not None:
         log.mkdir(parents=True, exist_ok=True)
         with (log / "prompts.jsonl").open("a") as f:
-            f.write(json.dumps({"lineage": lineage, "argv": argv, "prompt": prompt}) + "\n")
+            f.write(json.dumps({"lineage": lineage, "argv": argv, "prompt": prompt,
+                                "config_dir": os.environ.get("CLAUDE_CONFIG_DIR")}) + "\n")
     fail_after = os.environ.get("ABX_FAKE_FAIL_AFTER")
     failing = bool(os.environ.get("ABX_FAKE_FAIL")) or (fail_after is not None and calls >= int(fail_after))
     if os.environ.get("ABX_FAKE_READ_INSTRUCTIONS") and "--setting-sources" not in argv and "--disable" not in argv:

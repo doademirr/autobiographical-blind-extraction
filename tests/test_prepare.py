@@ -333,6 +333,17 @@ class QualifyFailureTest(unittest.TestCase):
             args, _ = qualify._codex_transport(cfg, cap)
         self.assertIn("enable_request_compression", args[args.index("--disable") + 1:][:1])
 
+    def test_claude_capture_rejects_traffic_other_than_whole_inference(self):
+        T = capture.Traffic
+        events = [invoke.Event("system", "init"), invoke.Event("result", "success")]
+        for extra in (T("POST", "/v1/messages", "unreadable"), T("POST", "/v1/messages", "incomplete"),
+                      T("GET", "/v1/models", "refused")):
+            with self.subTest(extra=extra), qualify.Canary() as canary:
+                run = qualify.Run(capture.Evidence.of(({"model": "m", "messages": []},),
+                                                      [extra, T("POST", "/v1/messages", "captured")]),
+                                  0, invoke.Result(status="success", events=events))
+                self.assertTrue(qualify._locked_problems("claude", self.fw.config, run, canary, None))
+
     def test_every_locked_capture_checks_transport_and_cli_success(self):
         ok = self.OK_TRAFFIC
         self.assertEqual(self._locked(ok), [])

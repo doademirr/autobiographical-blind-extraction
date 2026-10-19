@@ -142,7 +142,7 @@ def _pool(c: Context) -> dict[str, dict]:
 # --- codebook ----------------------------------------------------------------------------------------------------
 
 def validate_codebook(out: dict, refs: set[str]) -> list[str]:
-    """Atomic names, unique ids, at most 80, and every candidate placed exactly once."""
+    """No always-compound marker in a name, unique ids, at most 80, and every candidate placed exactly once."""
     problems = []
     cons = out["constructs"]
     ids = [c["id"] for c in cons]

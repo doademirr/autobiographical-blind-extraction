@@ -30,7 +30,7 @@ From the [Franklin demo report](examples/franklin/report.md):
 
 Ask a model what your writing says about you and you get a confident read with nothing behind it. The model knows who's asking, it sees your other files, it does its own arithmetic and nobody can check any of it. This tool runs the same question as a small study instead.
 
-- **Blind.** Raters are clean-room CLI processes that see one era of redacted text and nothing else: no account identity, no instruction files, no tools. Isolation is proven per run from what the CLI actually sends, before any of your text leaves the machine.
+- **Blind.** Raters are clean-room CLI processes with no tools, no instruction files and no account identity. Each role sees only what its allowlist names (a rater, one era of your redacted text). Before any of your text leaves the machine, each CLI is qualified against a local capture of what it sends, and every run is checked again by a leak probe.
 - **Two lineages.** Claude and Codex rate independently, so agreement means two different model families saw the same thing.
 - **Pre-registered.** The method, the text the raters see and the codebook are hash-frozen before the results exist. A frozen file that changes stops the run.
 - **Scripts do the maths.** Krippendorff's α, the gates and every figure in the report are computed by script and recompute from the run files. No model does arithmetic the report states.
@@ -62,7 +62,7 @@ Clone the repo somewhere local (not a synced folder). The skill drives `scripts/
 Pick a workspace folder outside any git repo or synced folder (Dropbox, iCloud, Google Drive). Then, stage by stage:
 
 ```bash
-python3 scripts/run.py init    ~/abx/me --text memoir.md --canary <nickname> <test-result>
+python3 scripts/run.py init    ~/abx/me --text memoir.md --canary 'Bunny' 'INTJ'
 python3 scripts/run.py prepare ~/abx/me   # writes review files, then stops
 python3 scripts/run.py prepare ~/abx/me   # after you approve them: qualifies both CLIs, zones the text
 python3 scripts/run.py seal    ~/abx/me   # after you fill in sealed/
@@ -84,10 +84,11 @@ Canaries are words only your own profile or instruction files would contain (a n
 |---|---|
 | 0 | stage done |
 | 1 | a reliability gate fired; the run is valid and the report says which arm isn't reportable |
-| 2 | usage or preflight failure, before any model call |
+| 2 | usage or preflight failure (a missing login, a bad config, a probe that could not run) |
 | 3 | isolation or leak failure; stop, don't work around it |
-| 4 | a frozen or sealed file changed; a new run needs a new workspace |
+| 4 | a frozen or sealed file changed, or a CLI changed since qualification; a new run needs a new workspace |
 | 5 | a model call failed; rerun the stage and completed calls are reused |
+| 70 | an unexpected harness error (a bug; please report it) |
 
 The report lands in `report/report.md`: agreement per arm, the construct table, how your predictions matched, and the observer estimate against your IPIP-NEO-120 by domain.
 
@@ -95,7 +96,7 @@ The report lands in `report/report.md`: agreement per arm, the construct table, 
 
 - **Cost.** Every model-calling stage prints its call estimate first. The Franklin demo (two eras, about 12.5k words) took 51 calls and 36 minutes. Calls scale with eras × raters × replicates.
 - **Resuming.** A failed call (exit 5) can be rerun; finished calls are reused only when every input still matches.
-- **What isolation means here.** Before your text is sent, each CLI is pointed at a local fake provider and the harness reads the request it actually sends: the tool list, the system text and any canary. Scripted tool calls prove the tools a CLI won't remove are inert, and positive controls prove the checks can see a real file or MCP read. Codex then runs every call inside a macOS read sandbox. Claude runs with a temp home holding only the login, because Claude Code otherwise tells the model the logged-in account's email.
+- **What isolation means here.** Before your text is sent, each CLI is pointed at a local fake provider and the harness reads the request it actually sends: the tool list, the system text and any canary. Scripted tool calls prove the tools a CLI won't remove are inert, and positive controls prove the checks can see a real file or MCP read. Codex's capture runs on your real login; Claude's runs on a dummy API key, so it can't see what Claude Code adds only for logged-in accounts. The one such addition known is the account email, so every Claude call runs with a temp home holding the login and an account profile with the identity blanked, any identity written back fails the call, and the leak probe checks end to end. Codex runs every call inside a macOS read sandbox.
 - **Strict evidence bar.** A construct counts as present in an era only with two occurrences in separate, non-adjacent passages. On short records most verdicts end up insufficient, and the inductive arm says not reportable rather than guess.
 - **Famous texts aren't blind.** Models know published autobiographies. On Franklin they restored redacted names from memory (the prompt audit stopped the run, which is why the demo approves an empty redaction list). The demo tests the pipeline, not the method's validity.
 

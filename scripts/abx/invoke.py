@@ -50,7 +50,6 @@ __all__ = [
     "qualified",
     "record_path",
     "sandbox_profile",
-    "succeeded",
 ]
 
 SYSTEM_READ_ROOTS = (
@@ -108,7 +107,8 @@ class Result:
 # CLI-supplied string reaches an incident, a record's audit or an error message.
 _CLAUDE_KNOWN_BLOCKS = frozenset({"tool_use", "server_tool_use", "web_search_tool_result", "mcp_tool_use",
                                   "mcp_tool_result", "image", "document"})
-_CLAUDE_KNOWN_EVENTS = frozenset({"user", "stream_event", "system", "rate_limit_event", "unparseable"})
+_CLAUDE_KNOWN_EVENTS = frozenset({"user", "stream_event", "system", "rate_limit_event", "identity_restored",
+                                  "unparseable"})
 # Status events a real Claude stream carries on a tool-free call (`type:subtype`): the thinking-token
 # progress counter and the account's usage-window status. Any other system subtype is still a tool event.
 CLAUDE_TELEMETRY = frozenset({"system:thinking_tokens", "rate_limit_event:"})
@@ -178,10 +178,6 @@ def outcome(lineage: str, code: int | None, events: list[Event], allowed: frozen
     return "success"
 
 
-def succeeded(lineage: str, events: list[Event], code: int | None = 0) -> bool:
-    return outcome(lineage, code, events) == "success"
-
-
 def decode_events(stored) -> list[Event] | None:
     """Events as a record stores them, with exact field types; None for anything malformed, never coerced."""
     def strings(v):
@@ -238,8 +234,9 @@ def parse_claude(lines: list[str]) -> Result:
             out.text = ev["result"] if ok else None
             out.detail = "" if ok else "result_failed"
         else:
-            kind = f"{etype}:{sub if isinstance(sub, str) else ''}"
-            detail = kind.partition(":")[2] if kind in CLAUDE_TELEMETRY else "other" if sub else ""
+            # Telemetry matches only an exact string subtype, or none at all; any other subtype value is "other".
+            kind = f"{etype}:{sub}" if isinstance(sub, str) and sub else (f"{etype}:" if "subtype" not in ev else None)
+            detail = kind.partition(":")[2] if kind in CLAUDE_TELEMETRY else ("other" if "subtype" in ev else "")
             out.events.append(Event(etype if etype in _CLAUDE_KNOWN_EVENTS else "other", detail))
     return out
 
@@ -348,38 +345,48 @@ def _env(cfg: Config, extra: dict[str, str]) -> dict[str, str]:
     return {**{k: os.environ[k] for k in keys if k in os.environ}, **extra}
 
 
-# Claude Code puts the logged-in account's email into the model's context (from `oauthAccount` in
-# ~/.claude.json), whatever `--setting-sources` says. Locked Claude runs therefore get a HOME holding only the
-# login: the keychain, and the profile with these fields blank and marked fresh, so it is not fetched again.
-# The startup bootstrap fetch would also merge the email back in; essential-traffic mode skips it.
+# Claude Code puts the logged-in account's email into the model's context (from `oauthAccount` in its profile
+# file), whatever `--setting-sources` says. Locked Claude runs therefore get a HOME holding only the login: the
+# keychain, and the profile with these fields blank and marked fresh, so it is not fetched again. Essential-traffic
+# mode skips the startup bootstrap that would merge the email back, and env overrides that relocate the profile or
+# supply an identity are dropped. This suppresses the identity by construction; the post-call check below detects a
+# profile written back, not what the CLI held in memory, and the leak probe is the end-to-end check.
 CLAUDE_IDENTITY = ("emailAddress", "fullName", "displayName", "organizationName")
+CLAUDE_CACHE_FIELDS = ("billingType", "accountCreatedAt", "subscriptionCreatedAt", "ccOnboardingFlags")
 CLAUDE_LOCKED_ENV = MappingProxyType({"CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC": "1"})
+CLAUDE_PROFILE_ENV = frozenset({"CLAUDE_CONFIG_DIR", "CLAUDE_CODE_USER_EMAIL", "CLAUDE_CODE_ACCOUNT_UUID",
+                                "CLAUDE_CODE_ORGANIZATION_UUID", "ANTHROPIC_UNIX_SOCKET"})
 
 
-def _claude_home(tmp: Path) -> Path:
+def _claude_home(tmp: Path, lin: Lineage) -> Path:
+    """The locked HOME. A profile Claude Code would fetch again (unreadable, or missing the cache fields) is a
+    preflight failure, before any process starts."""
+    source = os.path.expanduser(lin.profile_file)
+    try:
+        account = json.loads(Path(source).read_text()).get("oauthAccount")
+    except (OSError, ValueError, AttributeError):
+        account = None
+    if not (isinstance(account, dict) and all(account.get(k) is not None for k in CLAUDE_CACHE_FIELDS)):
+        raise UsageError(f"Claude Code's cached account profile at {lin.profile_file} is missing or incomplete; "
+                         "log in and run `claude` once, then retry")
     home = tmp / "home"
     (home / "Library").mkdir(parents=True)
     keychains = Path(os.path.expanduser("~/Library/Keychains"))
     if keychains.is_dir():
         (home / "Library" / "Keychains").symlink_to(keychains)
-    try:
-        account = json.loads(Path(os.path.expanduser("~/.claude.json")).read_text()).get("oauthAccount")
-    except (OSError, ValueError, AttributeError):
-        account = None
-    profile = ({**account, **dict.fromkeys(CLAUDE_IDENTITY, ""), "profileFetchedAt": int(time.time() * 1000)}
-               if isinstance(account, dict) else None)
-    store.write_json(home / ".claude.json", {"oauthAccount": profile} if profile else {})
+    store.write_json(home / ".claude.json", {"oauthAccount": {
+        **account, **dict.fromkeys(CLAUDE_IDENTITY, ""), "profileFetchedAt": int(time.time() * 1000)}})
     return home
 
 
 def _identity_restored(home: Path) -> bool:
-    """True if the CLI wrote an identity back during the run: the profile was fetched, so the email may have
-    reached the model. An unreadable profile fails closed."""
+    """True unless the profile is still there with every identity field blank. Anything else (an identity written
+    back, a removed or malformed profile) means the CLI rewrote it during the run, and fails closed."""
     try:
         account = json.loads((home / ".claude.json").read_text()).get("oauthAccount")
     except (OSError, ValueError, AttributeError):
         return True
-    return isinstance(account, dict) and any(account.get(k) for k in CLAUDE_IDENTITY)
+    return not isinstance(account, dict) or any(account.get(k) for k in CLAUDE_IDENTITY)
 
 
 def _text(value) -> str:
@@ -406,18 +413,19 @@ def _parsed(lineage: str, code: int | None, out: list[str], err: list[str]) -> t
     return code, result
 
 
-def execute(cfg: Config, lineage: str, prompt_text: str, schema: str | None, argv: list[str] | None = None,
-            extra_args: list[str] | None = None, env_extra: dict[str, str] | None = None,
+def execute(cfg: Config, lineage: str, prompt_text: str, schema: str | None,
+            unlocked_argv: list[str] | None = None, extra_args: list[str] | None = None,
+            env_extra: dict[str, str] | None = None,
             cwd_files: dict[str, str] | None = None) -> tuple[int | None, Result]:
     """One isolated CLI process; returns its exit code (None on timeout) and parsed stream.
 
-    Qualification alone passes `argv` (an unlocked variant), `extra_args` (provider overrides,
-    inserted before Codex's trailing stdin marker) or `cwd_files` (the leak probe's own control);
-    model calls always use the pinned argv in an empty directory.
+    Every call runs the pinned, locked argv in an empty directory. Only qualification's positive controls pass
+    `unlocked_argv`, and only they and the probe pass `extra_args` (provider overrides, inserted before Codex's
+    trailing stdin marker), `env_extra` or `cwd_files`. A locked Claude profile rewritten during the run is
+    reported as an `identity_restored` event, so every caller's audit and records see it.
     """
     lin = cfg.lineage(lineage)
-    locked = argv is None
-    argv = list(argv or _pinned_argv(lin))
+    argv = list(unlocked_argv) if unlocked_argv is not None else _pinned_argv(lin)
     if extra_args:
         argv = [*argv[:-1], *extra_args, argv[-1]] if argv[-1] == "-" else [*argv, *extra_args]
     tmp = Path(os.path.realpath(tempfile.mkdtemp(prefix="abx-")))
@@ -427,15 +435,16 @@ def execute(cfg: Config, lineage: str, prompt_text: str, schema: str | None, arg
         for name, body in (cwd_files or {}).items():
             (cwd / name).write_text(body)
         env = _env(cfg, env_extra or {})
-        if lineage == "claude" and not locked:
+        if lineage == "claude" and unlocked_argv is not None:
             return _parsed(lineage, *_run(argv, prompt_text, cwd, env, cfg.timeout_s))
         if lineage == "claude":
-            home = _claude_home(tmp)
-            ran = _run(argv, prompt_text, cwd, {**env, **CLAUDE_LOCKED_ENV, "HOME": str(home)}, cfg.timeout_s)
+            home = _claude_home(tmp, lin)
+            locked_env = {**{k: v for k, v in env.items() if k not in CLAUDE_PROFILE_ENV}, **CLAUDE_LOCKED_ENV,
+                          "HOME": str(home)}
+            code, result = _parsed(lineage, *_run(argv, prompt_text, cwd, locked_env, cfg.timeout_s))
             if _identity_restored(home):
-                raise IsolationError("Claude Code fetched the account profile during a locked call, so the "
-                                     "account email may have reached the model")
-            return _parsed(lineage, *ran)
+                result.events.append(Event("identity_restored"))
+            return code, result
         home = tmp / "home"
         home.mkdir()
         auth = Path(os.path.expanduser(lin.auth_file))
@@ -637,7 +646,7 @@ def probe(ws: store.Workspace, cfg: Config, lineage: str, canaries: tuple[str, .
             f"IPIP-NEO-120 they score high on Conscientiousness and low on Extraversion.\n")
     argv, files = (None, None) if mode == "leak" else (_control_argv(lin), {"CLAUDE.md": note, "AGENTS.md": note})
     try:
-        code, result = execute(cfg, lineage, prompt.text, schema_text, argv=argv, cwd_files=files)
+        code, result = execute(cfg, lineage, prompt.text, schema_text, unlocked_argv=argv, cwd_files=files)
     except CallFailed:
         code, result = -1, Result(status="failed")
     seen = "\n".join([*result.messages, result.text or ""]).lower()

@@ -31,6 +31,7 @@ class Lineage:
     reserve_output_tokens: int
     raw_json: str = field(compare=False, repr=False)  # the lineage's config, canonical; the fingerprint hashes it
     locked_read_result: str = ""                      # claude: the pinned refusal of a scripted Read
+    profile_file: str = ""                            # claude: the cached account profile (~/.claude.json)
     sandbox_exec: str = ""                            # codex only, from here down
     sandbox_allow: tuple[str, ...] = ()
     auth_file: str = ""
@@ -88,7 +89,8 @@ def _lineage(name: str, obj: dict) -> Lineage:
               "input_budget_tokens": _get(obj, "input_budget_tokens", int, where),
               "reserve_output_tokens": _get(obj, "reserve_output_tokens", int, where)}
     if name == "claude":
-        return Lineage(**common, locked_read_result=_get(obj, "locked_read_result", str, where))
+        return Lineage(**common, locked_read_result=_get(obj, "locked_read_result", str, where),
+                       profile_file=_get(obj, "profile_file", str, where))
     retained = _get(obj, "retained_tools", dict, where)
     for tool, spec in retained.items():
         well_formed = (isinstance(spec, dict) and isinstance(spec.get("call"), dict)

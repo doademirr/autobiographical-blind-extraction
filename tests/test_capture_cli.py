@@ -13,6 +13,8 @@ from pathlib import Path
 
 from abx import config, init, qualify
 
+from .helpers import write_logins
+
 PROMPT = (Path(__file__).resolve().parent.parent / "prompts" / "probe.md").read_text()
 CLAUDE = shutil.which("claude")
 CODEX = shutil.which("codex")
@@ -22,7 +24,7 @@ def real_config(auth: Path) -> config.Config:
     codex_bin, codex_root = init.codex_native(CODEX) if CODEX else ("", "")
     lineages = {
         "claude": {"cli": CLAUDE, "model": "claude-opus-5-5", "input_budget_tokens": 1, "reserve_output_tokens": 0,
-                   "locked_read_result": init.CLAUDE_LOCKED_READ},
+                   "locked_read_result": init.CLAUDE_LOCKED_READ, "profile_file": str(auth.parent / "claude.json")},
         "codex": {"cli": codex_bin, "model": "gpt-6.1-sol", "input_budget_tokens": 1, "reserve_output_tokens": 0,
                   "sandbox_exec": "/usr/bin/sandbox-exec", "sandbox_allow": [codex_root], "auth_file": str(auth),
                   "disable": list(init.CODEX_DISABLE), "config": list(init.CODEX_CONFIG),
@@ -36,8 +38,7 @@ def real_config(auth: Path) -> config.Config:
 class RealCliCaptureTest(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
-        auth = Path(self.tmp.name) / "auth.json"
-        auth.write_text("{}")
+        auth, _ = write_logins(Path(self.tmp.name))
         self.cfg = real_config(auth)
 
     def tearDown(self):

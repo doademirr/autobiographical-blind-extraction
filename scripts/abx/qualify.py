@@ -98,6 +98,8 @@ def _locked_problems(lineage: str, cfg: Config, run: Run, canary: Canary,
     requests, problems = run.evidence.requests, []
     if not requests:
         return ["the CLI never reached the capture provider"]
+    if any(t.outcome in {"incomplete", "unreadable"} for t in run.evidence.traffic):
+        problems.append("a request did not arrive whole")
     if lineage == "codex":
         allowed_tools = set(retained(lin))
         try:
@@ -120,6 +122,8 @@ def _locked_problems(lineage: str, cfg: Config, run: Run, canary: Canary,
             problems += ["a request listed tools" for r in requests if capture.claude_tools(r)][:1]
         except (AttributeError, TypeError):
             return ["a request's tool list is unreadable"]
+        if any(t.outcome != "captured" for t in run.evidence.traffic):
+            problems.append("the CLI sent a request other than inference")
         allowed_events = CLAUDE_SCRIPTED if scripted else frozenset()
     if _canaries_in(capture.request_text(requests), cfg, canary):
         problems.append("a canary appears in what the CLI sent")
@@ -150,7 +154,8 @@ def _captured(cfg: Config, lineage: str, cap: capture.Capture, prompt: str, argv
         extra, env = wiring(cap)
         setup_error = None
         try:
-            code, result = invoke.execute(cfg, lineage, prompt, None, argv=argv, extra_args=extra, env_extra=env)
+            code, result = invoke.execute(cfg, lineage, prompt, None, unlocked_argv=argv, extra_args=extra,
+                                          env_extra=env)
         except CallFailed:
             code, result = -1, invoke.Result(status="failed")
         except UsageError as exc:  # a missing login: recorded below like any failed capture, then reported as such

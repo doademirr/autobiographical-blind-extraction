@@ -18,7 +18,7 @@ from pathlib import Path
 from abx import store
 
 from . import REPO, recompute
-from .helpers import FAKE_ENV, FAKES, FIXTURE
+from .helpers import FAKE_ENV, FAKES, FIXTURE, write_logins
 
 RUN = REPO / "scripts" / "run.py"
 
@@ -35,8 +35,8 @@ class EndToEndTest(unittest.TestCase):
         cls.run_stage("init", "--text", str(FIXTURE / "autobiography.txt"), "--canary", "ABXPROFILECANARY")
         cfg_path = cls.ws_path / "config.json"
         cfg = json.loads(cfg_path.read_text())
-        auth = cls.tmp / "auth.json"
-        auth.write_text("{}")
+        auth, profile = write_logins(cls.tmp)
+        cfg["lineages"]["claude"]["profile_file"] = str(profile)
         cfg["lineages"]["codex"].update(sandbox_exec=str(FAKES / "sandbox-exec"), auth_file=str(auth),
                                         capture_forward=False)
         cfg["env_passthrough"] = FAKE_ENV

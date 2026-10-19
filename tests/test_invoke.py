@@ -57,12 +57,8 @@ class CallTest(unittest.TestCase):
                     self.assertEqual(incident["kind"], "tool_event")
 
     def test_locked_claude_home_carries_the_login_without_identity(self):
-        with tempfile.TemporaryDirectory() as real, tempfile.TemporaryDirectory() as tmp, \
-                mock.patch.dict(os.environ, {"HOME": real}):
-            account = {"emailAddress": "a@example.com", "fullName": "A B", "displayName": "A",
-                       "organizationName": "A's org", "billingType": "stripe_subscription", "profileFetchedAt": 1}
-            Path(real, ".claude.json").write_text(json.dumps({"oauthAccount": account, "other": 1}))
-            home = invoke._claude_home(Path(tmp))
+        with tempfile.TemporaryDirectory() as tmp:
+            home = invoke._claude_home(Path(tmp), self.cfg.lineage("claude"))
             seeded = json.loads((home / ".claude.json").read_text())
             self.assertEqual(set(seeded), {"oauthAccount"})
             self.assertEqual({k: seeded["oauthAccount"][k] for k in invoke.CLAUDE_IDENTITY},
@@ -70,11 +66,40 @@ class CallTest(unittest.TestCase):
             self.assertEqual(seeded["oauthAccount"]["billingType"], "stripe_subscription")
             self.assertGreater(seeded["oauthAccount"]["profileFetchedAt"], 1)
             self.assertFalse(invoke._identity_restored(home))
+            for rewritten in ({"oauthAccount": {"emailAddress": "x@example.com"}}, {"oauthAccount": None},
+                              {"oauthAccount": []}, {}):
+                with self.subTest(rewritten=rewritten):
+                    (home / ".claude.json").write_text(json.dumps(rewritten))
+                    self.assertTrue(invoke._identity_restored(home))
 
-    def test_profile_fetched_during_a_locked_claude_call_is_isolation(self):
+    def test_an_incomplete_or_missing_claude_profile_is_a_preflight_failure(self):
+        lin = self.cfg.lineage("claude")
+        source = Path(os.path.expanduser(lin.profile_file))
+        for body in ("not json", json.dumps({}), json.dumps({"oauthAccount": {"emailAddress": "x@example.com"}})):
+            with self.subTest(body=body), tempfile.TemporaryDirectory() as tmp:
+                source.write_text(body)
+                with self.assertRaises(UsageError) as cm:
+                    invoke._claude_home(Path(tmp), lin)
+                self.assertEqual(cm.exception.exit_code, 2)
+        source.unlink()
+        with tempfile.TemporaryDirectory() as tmp, self.assertRaises(UsageError):
+            invoke._claude_home(Path(tmp), lin)
+
+    def test_profile_rewritten_during_a_locked_claude_call_is_an_audited_tool_event(self):
+        req = _req()
         with mock.patch.dict(os.environ, {"ABX_FAKE_PROFILE_FETCH": "1"}), self.assertRaises(IsolationError) as cm:
-            self.call(_req())
+            self.call(req)
         self.assertEqual(cm.exception.exit_code, 3)
+        incident = store.read_json(self.ws.path(f"run/incidents/{req.identity}.json"))
+        self.assertEqual(incident["kind"], "tool_event")
+        self.assertNotIn("example.com", json.dumps(incident))
+
+    def test_profile_location_overrides_never_reach_a_locked_claude_call(self):
+        cfg = _with(self.cfg, env_passthrough=(*self.cfg.env_passthrough, "CLAUDE_CONFIG_DIR"))
+        with mock.patch.dict(os.environ, {"CLAUDE_CONFIG_DIR": "/elsewhere"}):
+            self.call(_req(), cfg)
+        entries = [json.loads(line) for line in (self.fw.log / "prompts.jsonl").read_text().splitlines()]
+        self.assertEqual([e["config_dir"] for e in entries if e["lineage"] == "claude"], [None])
 
     def test_tool_event_outranks_cli_failure_and_timeout(self):
         for env in ({"ABX_FAKE_FAIL": "1"}, {"ABX_FAKE_SLEEP": "5"}):
@@ -369,6 +394,13 @@ class OutputParsingTest(unittest.TestCase):
                 out = invoke.parse_claude([init, json.dumps(extra), result])
                 self.assertEqual(invoke.audit_events("claude", out.events), ["event:system"]
                                  if extra["type"] == "system" else ["event:rate_limit_event"])
+
+    def test_claude_telemetry_with_a_malformed_subtype_is_a_tool_event(self):
+        for extra in ({"type": "rate_limit_event", "subtype": 1}, {"type": "rate_limit_event", "subtype": {}},
+                      {"type": "rate_limit_event", "subtype": ""}, {"type": "system", "subtype": None}):
+            with self.subTest(extra=extra):
+                out = invoke.parse_claude([json.dumps(extra)])
+                self.assertTrue(invoke.audit_events("claude", out.events))
 
     def test_claude_init_registry_must_be_present_and_empty(self):
         for init in ({"tools": ["Read"], "mcp_servers": []}, {"tools": [], "mcp_servers": ["x"]}, {}):

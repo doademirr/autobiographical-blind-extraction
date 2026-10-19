@@ -1,5 +1,6 @@
 """Shared fixtures: a config that points at the fake CLIs, and a scratch workspace."""
 
+import json
 import os
 import shutil
 import tempfile
@@ -18,12 +19,28 @@ FAKE_ENV = ["ABX_FAKE_LOG", "ABX_FAKE_VERSION", "ABX_FAKE_TOOL_EVENT", "ABX_FAKE
             "ABX_FAKE_ERROR_NOTICE", "ABX_FAKE_READ_INSTRUCTIONS", "ABX_FAKE_STDERR", "ABX_FAKE_PROFILE_FETCH"]
 
 
-def fake_config(auth_file: Path) -> dict:
+# A cached Claude account profile in the shape Claude Code 2.1.303 keeps: identity plus the fields whose presence
+# stops it fetching the profile again. Synthetic.
+CLAUDE_PROFILE = {"oauthAccount": {"emailAddress": "someone@example.com", "fullName": "Some One",
+                                    "displayName": "Some", "organizationName": "Some org",
+                                    "billingType": "stripe_subscription", "accountCreatedAt": "2026-01-01",
+                                    "subscriptionCreatedAt": "2026-01-01", "ccOnboardingFlags": {}}}
+
+
+def write_logins(root: Path) -> tuple[Path, Path]:
+    """A Codex auth file and a Claude account profile under `root`."""
+    auth, profile = root / "auth.json", root / "claude.json"
+    auth.write_text("{}")
+    profile.write_text(json.dumps(CLAUDE_PROFILE))
+    return auth, profile
+
+
+def fake_config(auth_file: Path, profile_file: Path) -> dict:
     return {
         "lineages": {
             "claude": {"cli": str(FAKES / "claude"), "model": "fake-claude-1",
                        "input_budget_tokens": 200000, "reserve_output_tokens": 8000,
-                       "locked_read_result": init.CLAUDE_LOCKED_READ},
+                       "locked_read_result": init.CLAUDE_LOCKED_READ, "profile_file": str(profile_file)},
             "codex": {"cli": str(FAKES / "codex"), "model": "fake-codex-1",
                       "input_budget_tokens": 200000, "reserve_output_tokens": 8000,
                       "sandbox_exec": str(FAKES / "sandbox-exec"), "sandbox_allow": [str(FAKES)],
@@ -52,9 +69,7 @@ class FakeWorkspace:
         for name in ("schemas", "prompts"):
             shutil.copytree(REPO / name, self.ws.path(f"prereg/{name}"))
         self.log = root / "fakelog"
-        auth = root / "auth.json"
-        auth.write_text("{}")
-        self.cfg = fake_config(auth)
+        self.cfg = fake_config(*write_logins(root))
         self.config = config.parse(self.cfg)
         self._env = mock.patch.dict(os.environ, {"ABX_FAKE_LOG": str(self.log)})
         self._env.start()
