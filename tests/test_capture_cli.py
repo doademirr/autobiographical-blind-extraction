@@ -25,7 +25,7 @@ def real_config(auth: Path) -> config.Config:
                    "locked_read_result": init.CLAUDE_LOCKED_READ},
         "codex": {"cli": codex_bin, "model": "gpt-6.1-sol", "input_budget_tokens": 1, "reserve_output_tokens": 0,
                   "sandbox_exec": "/usr/bin/sandbox-exec", "sandbox_allow": [codex_root], "auth_file": str(auth),
-                  "disable": init.CODEX_DISABLE, "config": init.CODEX_CONFIG,
+                  "disable": list(init.CODEX_DISABLE), "config": list(init.CODEX_CONFIG),
                   "retained_tools": init.CODEX_RETAINED, "capture_forward": False},
     }
     roles = {"zoner": "claude", "codebook_author": "claude", "crosswalk_coders": ["claude", "codex"]}

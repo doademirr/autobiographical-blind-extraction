@@ -51,6 +51,12 @@ class Evidence:
         return tuple(json.loads(r) for r in self.requests_json)
 
 
+class _Message(NamedTuple):
+    traffic: Traffic
+    sequence: int = 0
+    request: dict | None = None
+
+
 class _Recorder:
     """Handler threads only post messages; the evidence is assembled once, by the owner, after they finish.
 
@@ -63,20 +69,18 @@ class _Recorder:
 
     def request(self, req: dict, path: str) -> int:
         n = next(self._sequence)
-        self._inbox.put(("request", n, req, Traffic("POST", path, "captured")))
+        self._inbox.put(_Message(Traffic("POST", path, "captured"), n, req))
         return n
 
     def traffic(self, item: Traffic) -> None:
-        self._inbox.put(("traffic", 0, None, item))
+        self._inbox.put(_Message(item))
 
     def finish(self) -> Evidence:
-        requests, traffic = [], []
+        messages = []
         while not self._inbox.empty():
-            kind, n, req, item = self._inbox.get()
-            traffic.append(item)
-            if kind == "request":
-                requests.append((n, req))
-        return Evidence.of([req for _, req in sorted(requests, key=lambda r: r[0])], traffic)
+            messages.append(self._inbox.get())
+        requests = sorted((m for m in messages if m.request is not None), key=lambda m: m.sequence)
+        return Evidence.of([m.request for m in requests], [m.traffic for m in messages])
 
 
 def _sse(events: list[dict]) -> bytes:

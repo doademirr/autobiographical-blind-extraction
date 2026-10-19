@@ -138,9 +138,10 @@ def validate_eras(eras: list[dict], segments: list[Segment]) -> None:
         if not isinstance(era["label"], str) or not isinstance(era["date_range"], str) or \
                 not isinstance(era["segment_ids"], list) or not all(isinstance(x, str) for x in era["segment_ids"]):
             raise UsageError("eras.json: label and date_range are text, segment_ids a list of segment ids")
-        if era["id"] in ids:
-            raise UsageError(f"eras.json: duplicate era id {era['id']!r}")
-        ids.add(era["id"])
+        # Era ids name files; on a case-insensitive disk `e1` and `E1` are one file.
+        if era["id"].casefold() in ids:
+            raise UsageError("eras.json: era ids must differ by more than letter case")
+        ids.add(era["id"].casefold())
         if not era["segment_ids"]:
             raise UsageError(f"eras.json: era {era['id']!r} has no segments")
         seen += era["segment_ids"]

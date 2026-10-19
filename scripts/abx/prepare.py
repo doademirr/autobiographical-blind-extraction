@@ -7,7 +7,7 @@ from . import artifacts, config, invoke, ipip, lifecycle, qualify, store, text, 
 from .errors import UsageError
 from .roles import ROLES
 
-__all__ = ["RECEIPT", "STAGE", "estimate", "prepare", "receipt_problems"]
+__all__ = ["RECEIPT", "STAGE", "estimate", "prepare", "receipt_problems", "review_doc"]
 
 RECEIPT = "prepare/receipt.json"
 RECEIPT_INPUTS = ("text/original.txt", "config.json", "prepare/redactions.json", "prepare/eras.json",
@@ -53,12 +53,20 @@ def _review_files(ws: store.Workspace, original: str) -> bool:
             {"id": "e1", "label": "", "date_range": "", "segment_ids": [s.id for s in segs]}]})
         preview = [f"{s.id}: {original[s.start:s.end][:100]}" for s in segs]
         store.write_text_atomic(ws.path("prepare/segments-preview.txt"), "\n".join(preview) + "\n")
-    return store.read_json(red).get("approved") is True and store.read_json(eras).get("approved") is True
+    return review_doc(ws, "redactions.json")["approved"] is True and review_doc(ws, "eras.json")["approved"] is True
+
+
+def review_doc(ws: store.Workspace, name: str) -> dict:
+    """A review file, parsed whole: an object with `approved` and its list or mapping, else a usage error."""
+    doc = store.read_json(ws.path(f"prepare/{name}"))
+    key, kind = ("names", dict) if name == "redactions.json" else ("eras", list)
+    if not isinstance(doc, dict) or not isinstance(doc.get(key), kind) or not isinstance(doc.get("approved"), bool):
+        raise UsageError(f"{name}: expected an object with \"approved\" (true or false) and \"{key}\"")
+    return doc
 
 
 def estimate(ws: store.Workspace) -> lifecycle.Preflight:
-    eras = ws.path("prepare/eras.json")
-    n = len(store.read_json(eras)["eras"]) if eras.exists() else 0
+    n = len(review_doc(ws, "eras.json")["eras"]) if ws.path("prepare/eras.json").exists() else 0
     return lifecycle.Preflight(n + 2, 0, "one zoning call per era plus one leak probe per lineage")
 
 
@@ -85,11 +93,11 @@ def prepare(ws: store.Workspace) -> dict:
     original = ws.path("text/original.txt").read_text(encoding="utf-8")
     if not _review_files(ws, original):
         return {"status": "review", "next": "approve_review_files"}
-    names = store.read_json(ws.path("prepare/redactions.json")).get("names")
-    if not isinstance(names, dict) or not all(isinstance(k, str) and isinstance(v, str) for k, v in names.items()):
+    names = review_doc(ws, "redactions.json")["names"]
+    if not all(isinstance(k, str) and isinstance(v, str) for k, v in names.items()):
         raise UsageError("redactions.json: names must map each name to its replacement text")
-    eras = store.read_json(ws.path("prepare/eras.json")).get("eras")
-    if not isinstance(eras, list) or not all(isinstance(e, dict) for e in eras):
+    eras = review_doc(ws, "eras.json")["eras"]
+    if not all(isinstance(e, dict) for e in eras):
         raise UsageError("eras.json: eras must be a list of era objects")
     redacted, spans = text.redact(original, names)
     segs = text.segment(redacted)

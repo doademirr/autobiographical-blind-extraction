@@ -307,6 +307,18 @@ class OutputParsingTest(unittest.TestCase):
                                               "result": "{}"})])
         self.assertEqual(invoke.outcome("claude", 0, ok.events), "no_registry")
 
+    def test_timestamped_diagnostic_lines_are_scanned(self):
+        out = invoke.parse_codex(["2026-10-19T10:32:44Z WARN about ABXPROFILECANARY",
+                                  json.dumps({"type": "turn.completed"})])
+        self.assertIn("ABXPROFILECANARY", " ".join(out.messages))
+
+    def test_stored_events_are_never_coerced(self):
+        good = {"type": "system", "detail": "init", "tools": [], "mcp_servers": [], "registry_present": True}
+        self.assertEqual(len(invoke.decode_events([good])), 1)
+        for bad in ({**good, "tools": ""}, {**good, "registry_present": "false"}, {**good, "type": 1}):
+            with self.subTest(bad=bad):
+                self.assertIsNone(invoke.decode_events([bad]))
+
     def test_unknown_event_kinds_are_reported_as_codes_not_content(self):
         events = invoke.parse_codex([json.dumps({"type": "item.completed", "item": {"type": "secret-name-xyz"}})])
         self.assertEqual(invoke.audit_events("codex", events.events), ["item:other"])

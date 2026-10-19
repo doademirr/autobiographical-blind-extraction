@@ -38,9 +38,11 @@ __all__ = [
     "check_fingerprint",
     "claude_argv",
     "codex_argv",
+    "decode_events",
     "estimate_tokens",
     "execute",
     "live_fingerprint",
+    "outcome",
     "parse_claude",
     "parse_codex",
     "probe",
@@ -153,14 +155,14 @@ def _terminal_ok(lineage: str, events: list[Event]) -> bool:
     return any(e.type == "turn.completed" for e in events) and not any(e.type == "turn.failed" for e in events)
 
 
-def outcome(lineage: str, code: int | None, events: list[Event]) -> str:
+def outcome(lineage: str, code: int | None, events: list[Event], allowed: frozenset[str] = frozenset()) -> str:
     """The one success predicate for fresh calls, probes, resume and the integrity audit.
 
     `tool_event` (exit 3) outranks everything; then `timeout` and `failed` (the CLI did not finish:
     exit 5 for calls, 2 for probes); then `no_registry` (finished without registry evidence: exit 3);
     else `success`.
     """
-    if audit_events(lineage, events):
+    if audit_events(lineage, events, allowed):
         return "tool_event"
     if code is None:
         return "timeout"
@@ -176,12 +178,20 @@ def succeeded(lineage: str, events: list[Event], code: int | None = 0) -> bool:
 
 
 def decode_events(stored) -> list[Event] | None:
-    """Events as a record stores them; None when they are not a well-formed list."""
-    try:
-        return [Event(str(e["type"]), str(e["detail"]), tuple(map(str, e["tools"])), tuple(map(str, e["mcp_servers"])),
-                      bool(e["registry_present"])) for e in stored]
-    except (KeyError, TypeError, AttributeError):
+    """Events as a record stores them, with exact field types; None for anything malformed, never coerced."""
+    def strings(v):
+        return isinstance(v, list) and all(isinstance(x, str) for x in v)
+
+    if not isinstance(stored, list):
         return None
+    events = []
+    for e in stored:
+        if not (isinstance(e, dict) and isinstance(e.get("type"), str) and isinstance(e.get("detail"), str)
+                and strings(e.get("tools")) and strings(e.get("mcp_servers"))
+                and isinstance(e.get("registry_present"), bool)):
+            return None
+        events.append(Event(e["type"], e["detail"], tuple(e["tools"]), tuple(e["mcp_servers"]), e["registry_present"]))
+    return events
 
 
 def _strings(value) -> tuple[str, ...] | None:
@@ -242,7 +252,10 @@ def parse_codex(lines: list[str]) -> Result:
     out = Result()
     for line in lines:
         stripped = line.strip()
-        if not stripped or CODEX_PLAIN_LINE.match(stripped):
+        if not stripped:
+            continue
+        if CODEX_PLAIN_LINE.match(stripped):
+            out.messages.append(stripped)  # a diagnostic line: not an event, but still scanned for canaries
             continue
         try:
             ev = json.loads(stripped)
@@ -570,7 +583,7 @@ def probe(ws: store.Workspace, cfg: Config, lineage: str, canaries: tuple[str, .
                                         any(c.lower() in seen for c in canaries))
     record = {"mode": mode, "lineage": lineage, "verdict": verdict, "reason": reason,
               "prompt_hash": store.sha256_text(prompt.text), "exit": code, "events": len(result.events),
-              "tool_events": audit_events(lineage, result.events)}
+              "tool_events": tuple(audit_events(lineage, result.events))}
     store.write_json(ws.path(f"run/probes/{mode}-{lineage}.json"), record)
     return ProbeOutcome(verdict, reason, result.model, MappingProxyType(record))
 

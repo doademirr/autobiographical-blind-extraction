@@ -23,15 +23,15 @@ __all__ = [
 SYNCED_MARKERS = ("/Library/CloudStorage/", "/Dropbox/", "/Library/Mobile Documents/", "/Google Drive/",
                   "/OneDrive")
 
-CODEX_DISABLE = [
+CODEX_DISABLE = (
     "shell_tool", "unified_exec", "shell_snapshot", "code_mode_host", "apps", "plugins", "remote_plugin",
     "plugin_sharing", "browser_use", "browser_use_external", "browser_use_full_cdp_access", "in_app_browser",
     "computer_use", "hooks", "multi_agent", "image_generation", "view_image", "sleep_tool", "skill_search",
     "skill_mcp_dependency_install", "tool_suggest", "tool_call_mcp_elicitation", "goals", "memories",
     "enable_request_compression",
-]
-CODEX_CONFIG = ['web_search="disabled"', "agents.enabled=false", "mcp_servers={}", "apps._default.enabled=false",
-                "plugins={}"]
+)
+CODEX_CONFIG = ('web_search="disabled"', "agents.enabled=false", "mcp_servers={}", "apps._default.enabled=false",
+                "plugins={}")
 # Tools codex-cli 0.160.1 lists even under the full disable set, each with a schema-valid scripted call and
 # the exact result that proves it inert (measured 2026-10-19 against a loopback provider).
 CODEX_RETAINED = {

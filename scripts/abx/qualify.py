@@ -19,7 +19,7 @@ from pathlib import Path
 
 from . import artifacts, capture, invoke, prompts, store
 from .config import Config, retained
-from .errors import IsolationError, UsageError
+from .errors import CallFailed, IsolationError, UsageError
 
 __all__ = ["Canary", "Run", "leak_control", "leak_probe", "qualify", "qualify_claude",
            "qualify_codex"]
@@ -77,13 +77,13 @@ def _transport_problems(evidence: capture.Evidence) -> list[str]:
     bad = []
     for t in evidence.traffic:
         if "/ps/" in t.path or "/plugins" in t.path or "/mcp" in t.path:
-            bad.append(f"app/MCP/plugin request {t.method} {t.path}")
+            bad.append("app_mcp_or_plugin_request")
         elif t.outcome == "forwarded" and not (t.status is not None and 200 <= t.status < 300):
-            bad.append(f"discovery read failed {t.path} ({t.status})")
+            bad.append("discovery_read_failed")
         elif t.outcome == "ws-refused" and t.path != INFERENCE_PATH:
-            bad.append(f"unexpected websocket {t.path}")
+            bad.append("unexpected_websocket")
         elif t.outcome in {"refused", "unreadable"} and not (t.method == "POST" and t.path == ANALYTICS_PATH):
-            bad.append(f"unexpected request {t.method} {t.path}")
+            bad.append("unexpected_request")
     return bad
 
 
@@ -105,7 +105,8 @@ def _locked_problems(lineage: str, cfg: Config, run: Run, canary: Canary,
         except (AttributeError, TypeError):
             return ["a request's tool list is unreadable"]
         listed = {t for reg in registries for t in reg}
-        problems += [f"tool {t} is not a retained tool" for t in sorted(listed - allowed_tools)]
+        unretained = len(listed - allowed_tools)
+        problems += [f"{unretained} listed tool(s) are not retained tools"] if unretained else []
         if len(set(registries)) > 1:
             problems.append("the tool list changed between requests")
         if baseline is not None and registries and registries[0] != baseline:
@@ -122,8 +123,9 @@ def _locked_problems(lineage: str, cfg: Config, run: Run, canary: Canary,
         allowed_events = CLAUDE_SCRIPTED if scripted else frozenset()
     if _canaries_in(capture.request_text(requests), cfg, canary):
         problems.append("a canary appears in what the CLI sent")
-    if run.code != 0 or run.result.status != "success":
-        problems.append(f"the CLI did not finish cleanly (exit {run.code}, {run.result.status})")
+    state = invoke.outcome(lineage, run.code, run.result.events, allowed_events)
+    if state != "success":
+        problems.append(f"the capture run did not succeed ({state})")
     problems += [f"event {e}" for e in invoke.audit_events(lineage, run.result.events, allowed_events)]
     if scripted and capture.tool_output(requests, scripted[0]) != scripted[1]:
         problems.append("the scripted call did not return its exact pinned inert result")
@@ -139,21 +141,32 @@ def _codex_transport(cfg: Config, cap: capture.Capture) -> tuple[list[str], dict
     return ["-c", provider, "-c", "model_provider=abxcapture"], {CAPTURE_KEY_ENV: "abx-capture"}
 
 
-def _run_codex(cfg: Config, prompt: str, tool_item: dict | None = None, argv=None, extra=()) -> Run:
-    cap = capture.Capture("codex", tool_item=tool_item, forward=cfg.lineage("codex").capture_forward)
+def _captured(cfg: Config, lineage: str, cap: capture.Capture, prompt: str, argv, wiring) -> Run:
+    """One capture run; `wiring(cap)` gives the provider arguments and environment once the server is up.
+    A CLI that cannot start becomes a failed run, so it is recorded and fails closed like any other."""
     with cap:
-        transport, env = _codex_transport(cfg, cap)
-        code, result = invoke.execute(cfg, "codex", prompt, None, argv=argv,
-                                      extra_args=[*transport, *extra], env_extra=env)
+        extra, env = wiring(cap)
+        try:
+            code, result = invoke.execute(cfg, lineage, prompt, None, argv=argv, extra_args=extra, env_extra=env)
+        except CallFailed:
+            code, result = -1, invoke.Result(status="failed")
     return Run(cap.evidence, code, result)
+
+
+def _run_codex(cfg: Config, prompt: str, tool_item: dict | None = None, argv=None, extra=()) -> Run:
+    def wiring(cap):
+        transport, env = _codex_transport(cfg, cap)
+        return [*transport, *extra], env
+
+    cap = capture.Capture("codex", tool_item=tool_item, forward=cfg.lineage("codex").capture_forward)
+    return _captured(cfg, "codex", cap, prompt, argv, wiring)
 
 
 def _run_claude(cfg: Config, prompt: str, tool_use: tuple[str, dict] | None, argv=None) -> Run:
-    cap = capture.Capture("claude", tool_use=tool_use)
-    with cap:
-        env = {"ANTHROPIC_BASE_URL": cap.base_url, "ANTHROPIC_API_KEY": "sk-ant-abx-capture"}
-        code, result = invoke.execute(cfg, "claude", prompt, None, argv=argv, env_extra=env)
-    return Run(cap.evidence, code, result)
+    def wiring(cap):
+        return None, {"ANTHROPIC_API_KEY": "sk-ant-abx-capture", "ANTHROPIC_BASE_URL": cap.base_url}
+
+    return _captured(cfg, "claude", capture.Capture("claude", tool_use=tool_use), prompt, argv, wiring)
 
 
 def _scripted(item: dict, call_id: str) -> dict:

@@ -115,6 +115,16 @@ class PrepareTest(unittest.TestCase):
         self.assertIsInstance(store.read_json(self.ws.path("prepare/zoning/removed.json")), dict)
         self.assertIsInstance(store.read_json(self.ws.path("prepare/removed-sentences.json")), list)
 
+    def test_era_ids_differing_only_by_case_are_refused_before_any_call(self):
+        prepare.prepare(self.ws)
+        eras = store.read_json(FIXTURE / "eras.json")
+        eras["eras"][1]["id"] = eras["eras"][0]["id"].upper()
+        store.write_json(self.ws.path("prepare/eras.json"), eras)
+        store.write_json(self.ws.path("prepare/redactions.json"), store.read_json(FIXTURE / "redactions.json"))
+        with self.assertRaises(UsageError):
+            prepare.prepare(self.ws)
+        self.assertEqual(self.fw.prompts_logged(), [])
+
     def test_era_ids_are_checked(self):
         prepare.prepare(self.ws)
         eras = store.read_json(FIXTURE / "eras.json")
@@ -192,6 +202,29 @@ class LifecycleTest(unittest.TestCase):
         finally:
             fw.close()
 
+    def test_cli_checks_integrity_before_estimating(self):
+        import contextlib
+        import io
+        import sys
+
+        sys.path.insert(0, str(FIXTURE.parent.parent / "scripts"))
+        import run as cli
+
+        cfg = store.read_json(self.ws.path("config.json"))
+        cfg["runs"] = 1
+        store.write_json(self.ws.path("config.json"), cfg)
+        with contextlib.redirect_stderr(io.StringIO()):
+            self.assertEqual(cli.main(["extract", str(self.ws.root)]), 4)
+
+    def test_capture_cli_that_cannot_start_is_recorded_and_fails_closed(self):
+        from abx.errors import CallFailed
+
+        with mock.patch("abx.invoke.execute", side_effect=CallFailed("cannot start")), \
+                self.assertRaises(IsolationError):
+            qualify.qualify(self.ws, self.fw.config)
+        record = store.read_json(self.ws.path("run/qualification-evidence/claude-baseline.json"))
+        self.assertFalse(record["passed"])
+
     def test_frozen_instrument_copy_is_protected(self):
         from abx import extract
 
@@ -217,7 +250,8 @@ class QualifyFailureTest(unittest.TestCase):
     def test_forbidden_tool_in_registry_fails(self):
         with self.assertRaises(IsolationError) as cm:
             self._qualify({"ABX_FAKE_CAPTURE_EXTRA_TOOL": "exec_command"})
-        self.assertIn("functions.exec_command", str(cm.exception))
+        self.assertIn("not retained", str(cm.exception))
+        self.assertNotIn("exec_command", str(cm.exception))
 
     def test_retained_codex_tool_with_unpinned_result_fails(self):
         for result in ("ok", '{"accepted":true}'):
@@ -253,8 +287,9 @@ class QualifyFailureTest(unittest.TestCase):
         lin = self.fw.config.lineage("codex")
         cfg = config.Config(**{**self.fw.config.__dict__, "lineages": {
             **self.fw.config.lineages, "codex": config.Lineage(**{**lin.__dict__, "capture_forward": forward})}})
+        terminal = [invoke.Event("turn.completed" if status == "success" else "turn.failed")]
         run = qualify.Run(capture.Evidence.of(requests, [T(*t) for t in traffic]), code,
-                          invoke.Result(status=status))
+                          invoke.Result(status=status, events=terminal))
         with qualify.Canary() as canary:
             return qualify._locked_problems("codex", cfg, run, canary, scripted, baseline=baseline)
 
@@ -283,7 +318,7 @@ class QualifyFailureTest(unittest.TestCase):
         clean = req("exec", "wait")
         self.assertEqual(self._locked(self.OK_TRAFFIC, requests=(clean, clean)), [])
         problems = self._locked(self.OK_TRAFFIC, requests=(clean, req("exec", "wait", "exec_command")))
-        self.assertTrue(any("functions.exec_command" in p for p in problems))
+        self.assertTrue(any("not retained" in p for p in problems))
         later = self._locked(self.OK_TRAFFIC, requests=(clean,), baseline=("functions.exec",))
         self.assertTrue(any("baseline" in p for p in later))
 
