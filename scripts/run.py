@@ -83,10 +83,10 @@ def _run_stage(stage: lifecycle.Stage, args: argparse.Namespace) -> int:
     if stage.creates_workspace:
         return SHOW.get(stage.name, _show)(stage.run(args.ws, args))
     ws = store.Workspace(args.ws.resolve())
+    store.verify_manifest(ws)  # integrity first: nothing below may read a frozen file that was edited or removed
     if not ws.path("config.json").exists():
         print(f"{args.ws} is not a workspace (no config.json)", file=sys.stderr)
         return 2
-    store.verify_manifest(ws)  # integrity first: an estimate must never read a frozen file that was edited
     if stage.estimate and ws.path("prepare/eras.json").exists():
         pre = stage.estimate(ws)
         extra = f" (+{pre.conditional_calls} conditional)" if pre.conditional_calls else ""

@@ -115,6 +115,23 @@ class PrepareTest(unittest.TestCase):
         self.assertIsInstance(store.read_json(self.ws.path("prepare/zoning/removed.json")), dict)
         self.assertIsInstance(store.read_json(self.ws.path("prepare/removed-sentences.json")), list)
 
+    def test_review_files_edited_while_prepare_runs_are_caught(self):
+        approve_fixture(self.ws)
+        original_zone = prepare._zone
+
+        def zone_then_edit(*args, **kwargs):
+            out = original_zone(*args, **kwargs)
+            store.write_json(self.ws.path("prepare/redactions.json"), {"approved": False, "names": {}})
+            return out
+
+        with mock.patch.object(prepare, "_zone", zone_then_edit), self.assertRaises(UsageError) as cm:
+            prepare.prepare(self.ws)
+        self.assertIn("changed while", str(cm.exception))
+        names = store.read_json(FIXTURE / "redactions.json")["names"]
+        for line in self.fw.prompts_logged():
+            for name in names:
+                self.assertNotIn(name, json.loads(line)["prompt"])
+
     def test_era_ids_differing_only_by_case_are_refused_before_any_call(self):
         prepare.prepare(self.ws)
         eras = store.read_json(FIXTURE / "eras.json")
@@ -201,6 +218,18 @@ class LifecycleTest(unittest.TestCase):
             self.assertIn("eras.json", str(cm.exception))
         finally:
             fw.close()
+
+    def test_cli_reports_a_removed_frozen_config_as_integrity(self):
+        import contextlib
+        import io
+        import sys
+
+        sys.path.insert(0, str(FIXTURE.parent.parent / "scripts"))
+        import run as cli
+
+        self.ws.path("config.json").unlink()
+        with contextlib.redirect_stderr(io.StringIO()):
+            self.assertEqual(cli.main(["extract", str(self.ws.root)]), 4)
 
     def test_cli_checks_integrity_before_estimating(self):
         import contextlib
@@ -335,6 +364,20 @@ class QualifyFailureTest(unittest.TestCase):
                     {"ABX_FAKE_THINKING": "The profile says ABXPROFILECANARY."}):
             with self.subTest(env=env), self.assertRaises(IsolationError):
                 self._qualify(env)
+
+    def test_canary_on_stderr_is_a_leak(self):
+        with self.assertRaises(IsolationError):
+            self._qualify({"ABX_FAKE_STDERR": "loaded profile ABXPROFILECANARY"})
+
+    def test_missing_codex_login_is_recorded_then_exit_2(self):
+        lin = self.fw.config.lineage("codex")
+        cfg = config.Config(**{**self.fw.config.__dict__, "lineages": {
+            **self.fw.config.lineages,
+            "codex": config.Lineage(**{**lin.__dict__, "auth_file": "/nonexistent/auth.json"})}})
+        with self.assertRaises(UsageError) as cm:
+            qualify.qualify(self.ws, cfg)
+        self.assertEqual(cm.exception.exit_code, 2)
+        self.assertFalse(store.read_json(self.ws.path("run/qualification-evidence/codex-setup.json"))["passed"])
 
     def test_canary_in_a_codex_error_notice_is_a_leak(self):
         with self.assertRaises(IsolationError):

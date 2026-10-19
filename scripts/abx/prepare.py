@@ -18,6 +18,9 @@ RECEIPT_OUTPUT_GLOBS = ("prepare/redacted.txt", "prepare/offsets.json", "prepare
 
 REPO = Path(__file__).resolve().parents[2]
 THIN, STOP = 0.50, 0.25
+# The most hypotheses text one earlier era can pass to discovery: the schema allows 40 of 300 characters,
+# plus list markers. Era k carries the hypotheses of every era before it.
+MAX_HYPOTHESES_CHARS = 40 * 303
 
 
 def _stage_method(ws: store.Workspace) -> None:
@@ -42,8 +45,10 @@ def _stage_method(ws: store.Workspace) -> None:
         store.write_json(schema_path, schema)
 
 
-def _review_files(ws: store.Workspace, original: str) -> bool:
-    """Write the templates the user edits; True when both are present and approved."""
+def _review_files(ws: store.Workspace, original: str) -> dict[str, tuple[dict, str]] | None:
+    """Write the templates the user edits on first run. Returns each review file read exactly once, as
+    (parsed document, sha256 of the bytes read), when both are approved; None while either is not.
+    Preparation uses only this snapshot, so a file edited mid-run cannot change what was approved."""
     red, eras = ws.path("prepare/redactions.json"), ws.path("prepare/eras.json")
     if not red.exists():
         store.write_json(red, {"approved": False, "names": {}})
@@ -53,12 +58,23 @@ def _review_files(ws: store.Workspace, original: str) -> bool:
             {"id": "e1", "label": "", "date_range": "", "segment_ids": [s.id for s in segs]}]})
         preview = [f"{s.id}: {original[s.start:s.end][:100]}" for s in segs]
         store.write_text_atomic(ws.path("prepare/segments-preview.txt"), "\n".join(preview) + "\n")
-    return review_doc(ws, "redactions.json")["approved"] is True and review_doc(ws, "eras.json")["approved"] is True
+    snapshot = {}
+    for name in ("redactions.json", "eras.json"):
+        raw = ws.path(f"prepare/{name}").read_bytes()
+        snapshot[name] = (_parse_review(name, raw), store.sha256_bytes(raw))
+    return snapshot if all(doc["approved"] is True for doc, _ in snapshot.values()) else None
 
 
 def review_doc(ws: store.Workspace, name: str) -> dict:
     """A review file, parsed whole: an object with `approved` and its list or mapping, else a usage error."""
-    doc = store.read_json(ws.path(f"prepare/{name}"))
+    return _parse_review(name, ws.path(f"prepare/{name}").read_bytes())
+
+
+def _parse_review(name: str, raw: bytes) -> dict:
+    try:
+        doc = store.loads_strict(raw.decode("utf-8"))
+    except (UnicodeDecodeError, ValueError) as exc:
+        raise UsageError(f"{name} is not valid JSON") from exc
     key, kind = ("names", dict) if name == "redactions.json" else ("eras", list)
     if not isinstance(doc, dict) or not isinstance(doc.get(key), kind) or not isinstance(doc.get("approved"), bool):
         raise UsageError(f"{name}: expected an object with \"approved\" (true or false) and \"{key}\"")
@@ -91,12 +107,13 @@ def prepare(ws: store.Workspace) -> dict:
     lifecycle.enter(ws, STAGE)
     cfg = config.load(ws)
     original = ws.path("text/original.txt").read_text(encoding="utf-8")
-    if not _review_files(ws, original):
+    snapshot = _review_files(ws, original)
+    if snapshot is None:
         return {"status": "review", "next": "approve_review_files"}
-    names = review_doc(ws, "redactions.json")["names"]
+    names = snapshot["redactions.json"][0]["names"]
     if not all(isinstance(k, str) and isinstance(v, str) for k, v in names.items()):
         raise UsageError("redactions.json: names must map each name to its replacement text")
-    eras = review_doc(ws, "eras.json")["eras"]
+    eras = snapshot["eras.json"][0]["eras"]
     if not all(isinstance(e, dict) for e in eras):
         raise UsageError("eras.json: eras must be a list of era objects")
     redacted, spans = text.redact(original, names)
@@ -116,10 +133,10 @@ def prepare(ws: store.Workspace) -> dict:
         labels |= _zone(ws, cfg, era, era_sents, redacted)
         store.write_json(ws.path(f"prepare/zoning/{era['id']}.json"),
                          {sid: labels[sid] for sid in (s.id for s in era_sents)})
-    return _substrate(ws, cfg, eras, sents, redacted, labels)
+    return _substrate(ws, cfg, eras, sents, redacted, labels, {f"prepare/{n}": h for n, (_, h) in snapshot.items()})
 
 
-def _substrate(ws, cfg: config.Config, eras, sents, redacted, labels) -> dict:
+def _substrate(ws, cfg: config.Config, eras, sents, redacted, labels, approved: dict[str, str]) -> dict:
     kept = {sid for sid, lab in labels.items() if lab == "keep"}
     kept_text = {redacted[s.start:s.end] for s in sents if s.id in kept}
     removed = [redacted[s.start:s.end] for s in sents if s.id not in kept]
@@ -146,12 +163,22 @@ def _substrate(ws, cfg: config.Config, eras, sents, redacted, labels) -> dict:
             template = ws.path(f"prereg/prompts/{policy.name}.md")
             if not (policy.per_era and policy.name != "zoner" and template.exists()):
                 continue
-            need = invoke.estimate_tokens(template.read_text() + body)
+            fixed = template.read_text() + ws.path(f"prereg/schemas/{policy.schema}.json").read_text() + body
+            if "facets" in policy.kinds:
+                fixed += ws.path("prereg/facets.md").read_text()
+            if "hypotheses" in policy.kinds:
+                fixed += "x" * (MAX_HYPOTHESES_CHARS * eras.index(era))
+            fixed += era["label"] or era["id"]
+            need = invoke.estimate_tokens(fixed)
             for lin in cfg.lineages.values():
                 if need + lin.reserve_output_tokens > lin.input_budget_tokens:
                     raise UsageError(f"era {era['id']} is too large for {policy.name} on {lin.name}")
     store.write_json(ws.path("prepare/stats.json"), stats)
-    store.write_json(ws.path(RECEIPT), _receipt(ws))
+    receipt = _receipt(ws)
+    changed = [rel for rel, digest in approved.items() if receipt[rel] != digest]
+    if changed:
+        raise UsageError(f"{', '.join(changed)} changed while `prepare` ran; rerun it")
+    store.write_json(ws.path(RECEIPT), receipt)
     return {"status": "done", "stats": stats}
 
 

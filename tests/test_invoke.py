@@ -96,6 +96,15 @@ class CallTest(unittest.TestCase):
         with self.assertRaises(IsolationError):
             self.call(_req())
 
+    def test_a_record_with_a_non_integer_exit_is_not_reused(self):
+        self.call(_req())
+        path = invoke.record_path(self.ws, _req())
+        rec = store.read_json(path)
+        rec["exit"] = False
+        store.write_json(path, rec)
+        self.call(_req())
+        self.assertEqual(len(self.fw.prompts_logged()), 2)
+
     def test_a_record_without_output_is_not_reused(self):
         self.call(_req())
         path = invoke.record_path(self.ws, _req())

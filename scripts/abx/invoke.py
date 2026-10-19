@@ -341,17 +341,28 @@ def _env(cfg: Config, extra: dict[str, str]) -> dict[str, str]:
     return {**{k: os.environ[k] for k in keys if k in os.environ}, **extra}
 
 
-def _run(argv: list[str], prompt: str, cwd: Path, env: dict[str, str], timeout: int) -> tuple[int | None, list[str]]:
-    """(exit code, stdout lines); exit code None on a timeout, with whatever stdout arrived."""
+def _text(value) -> str:
+    return value.decode(errors="replace") if isinstance(value, bytes) else (value or "")
+
+
+def _run(argv: list[str], prompt: str, cwd: Path, env: dict[str, str],
+         timeout: int) -> tuple[int | None, list[str], list[str]]:
+    """(exit code, stdout lines, stderr lines); exit code None on a timeout, with whatever arrived."""
     try:
         p = subprocess.run(argv, input=prompt, capture_output=True, text=True, cwd=cwd, env=env, timeout=timeout,
                            check=False)
     except subprocess.TimeoutExpired as exc:
-        partial = exc.stdout.decode(errors="replace") if isinstance(exc.stdout, bytes) else (exc.stdout or "")
-        return None, partial.splitlines()
+        return None, _text(exc.stdout).splitlines(), _text(exc.stderr).splitlines()
     except OSError as exc:
         raise CallFailed(f"CLI could not start: {exc}") from exc
-    return p.returncode, p.stdout.splitlines()
+    return p.returncode, p.stdout.splitlines(), p.stderr.splitlines()
+
+
+def _parsed(lineage: str, code: int | None, out: list[str], err: list[str]) -> tuple[int | None, Result]:
+    """The stdout stream parsed; stderr is never an event, but every line of it is scanned for canaries."""
+    result = parse_claude(out) if lineage == "claude" else parse_codex(out)
+    result.messages += err
+    return code, result
 
 
 def execute(cfg: Config, lineage: str, prompt_text: str, schema: str | None, argv: list[str] | None = None,
@@ -375,17 +386,18 @@ def execute(cfg: Config, lineage: str, prompt_text: str, schema: str | None, arg
             (cwd / name).write_text(body)
         env = _env(cfg, env_extra or {})
         if lineage == "claude":
-            code, lines = _run(argv, prompt_text, cwd, env, cfg.timeout_s)
-            return code, parse_claude(lines)
+            return _parsed(lineage, *_run(argv, prompt_text, cwd, env, cfg.timeout_s))
         home = tmp / "home"
         home.mkdir()
-        shutil.copy(os.path.expanduser(lin.auth_file), home / "auth.json")
+        auth = Path(os.path.expanduser(lin.auth_file))
+        if not auth.is_file():
+            raise UsageError(f"Codex login not found at {lin.auth_file}; run `codex login` first")
+        shutil.copy(auth, home / "auth.json")
         (tmp / "profile.sb").write_text(sandbox_profile([*lin.sandbox_allow, str(tmp)]))
         (tmp / "schema.json").write_text(schema or "{}")
         argv = [{"<profile>": str(tmp / "profile.sb"), "<cwd>": str(cwd),
                  "<schema>": str(tmp / "schema.json")}.get(a, a) for a in argv]
-        code, lines = _run(argv, prompt_text, cwd, {**env, "CODEX_HOME": str(home)}, cfg.timeout_s)
-        return code, parse_codex(lines)
+        return _parsed(lineage, *_run(argv, prompt_text, cwd, {**env, "CODEX_HOME": str(home)}, cfg.timeout_s))
     finally:
         shutil.rmtree(tmp, ignore_errors=True)
 
@@ -477,7 +489,10 @@ def _reusable(ws: store.Workspace, req: CallRequest, expect: dict, schema: dict)
     events = decode_events(rec.get("events"))
     if events is None:
         return None
-    state = outcome(req.lineage, rec.get("exit"), events)
+    code = rec.get("exit")
+    if not isinstance(code, int) or isinstance(code, bool):
+        return None
+    state = outcome(req.lineage, code, events)
     if state == "tool_event":
         raise IsolationError(f"{req.identity}: its record holds a tool event; it cannot be reused")
     if state != "success":

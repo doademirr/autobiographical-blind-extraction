@@ -79,6 +79,10 @@ class ParseTest(unittest.TestCase):
         with self.assertRaises(UsageError):
             ipip.parse_responses("\n".join(rows[:-1]), inst)
         with self.assertRaises(UsageError):
+            ipip.parse_responses("\n".join(["item_id,response,response", *(r + ",1" for r in answers)]), inst)
+        with self.assertRaises(UsageError):
+            ipip.parse_responses("\n".join([rows[0], rows[1] + ",9", *rows[2:]]), inst)
+        with self.assertRaises(UsageError):
             ipip.parse_responses("\n".join([*rows[:-1], rows[-1].replace(",3", ",7")]), inst)
 
 

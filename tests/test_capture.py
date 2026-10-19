@@ -54,6 +54,10 @@ class CaptureServerTest(unittest.TestCase):
         weird = ({"input": None, "messages": None}, {"messages": [None, {"content": None}], "input": [None]})
         self.assertEqual(capture.tool_text(weird, "x"), "")
         self.assertEqual(capture.claude_tools({"tools": [None]}), ["?"])
+        for falsy in ("", 0, False, {}):
+            with self.subTest(falsy=falsy):
+                self.assertEqual(capture.claude_tools({"tools": falsy}), ["?"])
+                self.assertEqual(capture.codex_tools({"tools": falsy}), ["?"])
         self.assertEqual(capture.codex_tools({"input": [{"type": "additional_tools", "tools": [None]}]}), ["?"])
 
     def test_tool_list_walks_namespaces(self):

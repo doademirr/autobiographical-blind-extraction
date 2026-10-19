@@ -20,6 +20,7 @@ failures:
   ABX_FAKE_ERROR_NOTICE (codex) emit a top-level error notice with this message
   ABX_FAKE_READ_INSTRUCTIONS  repeat any CLAUDE.md / AGENTS.md found in the working directory, as an
                         unlocked CLI would load it
+  ABX_FAKE_STDERR       write this to stderr
 """
 
 import hashlib
@@ -134,6 +135,8 @@ def main(lineage: str) -> int:
             if not os.environ.get("ABX_FAKE_NO_MESSAGE"):
                 events.append({"type": "item.completed", "item": {"id": "i1", "type": "agent_message", "text": text}})
             events.append({"type": "turn.completed", "usage": {}})
+    if os.environ.get("ABX_FAKE_STDERR"):
+        print(os.environ["ABX_FAKE_STDERR"], file=sys.stderr, flush=True)
     for ev in events:
         print(json.dumps(ev), flush=True)
     if os.environ.get("ABX_FAKE_SLEEP"):

@@ -146,11 +146,17 @@ def _captured(cfg: Config, lineage: str, cap: capture.Capture, prompt: str, argv
     A CLI that cannot start becomes a failed run, so it is recorded and fails closed like any other."""
     with cap:
         extra, env = wiring(cap)
+        setup_error = None
         try:
             code, result = invoke.execute(cfg, lineage, prompt, None, argv=argv, extra_args=extra, env_extra=env)
         except CallFailed:
             code, result = -1, invoke.Result(status="failed")
-    return Run(cap.evidence, code, result)
+        except UsageError as exc:  # a missing login: recorded below like any failed capture, then reported as such
+            code, result, setup_error = -1, invoke.Result(status="failed"), exc
+    run = Run(cap.evidence, code, result)
+    if setup_error:
+        raise _SetupFailed(run, setup_error)
+    return run
 
 
 def _run_codex(cfg: Config, prompt: str, tool_item: dict | None = None, argv=None, extra=()) -> Run:
@@ -175,6 +181,14 @@ def _scripted(item: dict, call_id: str) -> dict:
 
 Recorder = Callable[[str, Run, list[str]], None]
 NO_CANARY = "positive control did not return its canary; the probe cannot see access"
+
+
+class _SetupFailed(Exception):
+    """A capture that could not be set up; carries the empty run so it is recorded before the usage error."""
+
+    def __init__(self, run: Run, error: UsageError):
+        super().__init__(str(error))
+        self.run, self.error = run, error
 
 
 def _check(lineage: str, name: str, run: Run, problems: list[str], record: Recorder | None) -> None:
@@ -276,7 +290,11 @@ def qualify(ws: store.Workspace, cfg: Config, out: str = invoke.QUALIFICATION) -
     result = {}
     with Canary() as canary:
         for lineage, check in (("claude", qualify_claude), ("codex", qualify_codex)):
-            evidence = check(cfg, canary, prompt, record)
+            try:
+                evidence = check(cfg, canary, prompt, record)
+            except _SetupFailed as exc:
+                record(f"{lineage}-setup", exc.run, ["setup_failed"])
+                raise exc.error from None
             probe = leak_probe(ws, cfg, lineage, canary)
             probe_record = dict(probe.record)
             resolved = probe.model if lineage == "claude" else cfg.lineage(lineage).model

@@ -211,10 +211,11 @@ class Capture:
 
 def codex_tools(request: dict) -> list[str]:
     """Every tool name Codex offered, namespaced as `namespace.tool`."""
-    top = list(request.get("tools") or []) if isinstance(request.get("tools") or [], list) else ["?"]
+    supplied = request.get("tools", [])
+    top = list(supplied) if isinstance(supplied, list) else ["?"]
     for item in request.get("input") if isinstance(request.get("input"), list) else []:
         if isinstance(item, dict) and item.get("type") == "additional_tools":
-            top += item.get("tools") if isinstance(item.get("tools"), list) else ["?"]
+            top += item.get("tools") if isinstance(item.get("tools", []), list) and "tools" in item else ["?"]
     names: list[str] = []
 
     def walk(tools, prefix):
@@ -233,7 +234,7 @@ def codex_tools(request: dict) -> list[str]:
 
 
 def claude_tools(request: dict) -> list[str]:
-    tools = request.get("tools") or []
+    tools = request.get("tools", [])
     return [str(t.get("name")) if isinstance(t, dict) else "?" for t in tools] if isinstance(tools, list) else ["?"]
 
 

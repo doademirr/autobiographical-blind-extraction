@@ -57,7 +57,7 @@ Each stage module declares a `lifecycle.Stage` descriptor (name, order, argument
 
 - **`store.py`**: the `Workspace` path holder, strict JSON (no NaN, no duplicate keys), atomic writes (temp file + rename), sha256, and the manifest: an append-only hash chain of generations, each mapping frozen paths to hashes. `verify_manifest` re-hashes every frozen file.
 - **`errors.py`**: typed errors carrying their exit codes; `run.py` maps them and turns any other exception into exit 70, never 1.
-- **`config.py`**: parses `config.json` once into typed `Config` and `Lineage` records; malformed config is a usage error. Each lineage keeps its raw dict, whose hash is the fingerprint's config hash.
+- **`config.py`**: parses `config.json` once into typed `Config` and `Lineage` records; malformed config is a usage error. Each lineage keeps its config as canonical JSON text, whose hash is the fingerprint's config hash.
 - **`roles.py`**: the single table of role policy: each role's allowed artifact kinds, schema, labels it may take, whether it reads zoned material, whether it runs per era, and which inputs must belong to the calling rater.
 - **`schema.py`**: a validator for the JSON Schema subset the schemas use; unsupported keywords are an error.
 - **`text.py`**: redaction with an offset map, paragraph segments, sentences (code-point offsets), era validation, and the two renderings: numbered chunks for the zoner, zoned eras for raters.

@@ -32,12 +32,16 @@ def load_instrument(ws: store.Workspace | None = None) -> dict:
 def parse_responses(csv_text: str, instrument: dict) -> dict[str, int | None]:
     """`item_id,response` rows; a blank response is missing. Every item must appear once."""
     ids = {i["id"] for i in instrument["items"]}
-    rows = list(csv.DictReader(io.StringIO(csv_text)))
-    if not rows or set(rows[0]) != {"item_id", "response"}:
-        raise UsageError("ipip-120.csv: header must be item_id,response")
+    rows = list(csv.reader(io.StringIO(csv_text)))
+    if not rows or [c.strip() for c in rows[0]] != ["item_id", "response"]:
+        raise UsageError("ipip-120.csv: the header must be exactly item_id,response")
     out: dict[str, int | None] = {}
-    for number, row in enumerate(rows, start=2):
-        item, raw = (row["item_id"] or "").strip(), (row["response"] or "").strip()
+    for number, row in enumerate(rows[1:], start=2):
+        if not row:
+            continue
+        if len(row) != 2:
+            raise UsageError(f"ipip-120.csv line {number}: expected exactly two cells")
+        item, raw = row[0].strip(), row[1].strip()
         if item not in ids or item in out:
             raise UsageError(f"ipip-120.csv line {number}: unknown or repeated item id")
         if raw and raw not in {"1", "2", "3", "4", "5"}:
