@@ -88,6 +88,20 @@ class EndToEndTest(unittest.TestCase):
     def test_every_report_figure_recomputes_from_frozen_files(self):
         self.assertEqual(recompute.problems(self.ws), [])
 
+    def test_recomputation_catches_wrong_figures(self):
+        exp = recompute.expected(self.ws)
+        bad = json.loads(json.dumps(self.results))
+        bad["agreement"]["inductive"]["raw_agreement"] = 0.123
+        bad["agreement"]["deductive"]["missing_rate"] = 0.999
+        bad["deductive_vs_ipip"]["compared"] += 1
+        bad["predictions"]["coder_agreement"] = 0.5
+        bad["corpus"]["e1"]["kept_ratio"] = 0.01
+        found = recompute.compare(bad, self.report, exp)
+        for field in ("raw_agreement", "missing_rate", "deductive_vs_ipip.compared", "coder_agreement", "corpus"):
+            self.assertTrue(any(field in f for f in found), (field, found))
+        alpha = f"{self.results['agreement']['inductive']['alpha']:.3f}"
+        self.assertTrue(recompute.compare(self.results, self.report.replace(alpha, "0.000"), exp))
+
     def test_sealed_content_reaches_crosswalk_prompts_only_and_ipip_none(self):
         predictions = [line.split(":", 1)[1].strip() for line in
                        (FIXTURE / "self-prediction.md").read_text().splitlines() if line.startswith("P")]

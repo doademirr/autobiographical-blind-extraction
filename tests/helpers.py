@@ -6,13 +6,14 @@ import tempfile
 from pathlib import Path
 from unittest import mock
 
-from abx import init, invoke, store
+from abx import config, init, invoke, store
 
 from . import REPO
 
 FAKES = REPO / "tests" / "fakes"
 FAKE_ENV = ["ABX_FAKE_LOG", "ABX_FAKE_VERSION", "ABX_FAKE_TOOL_EVENT", "ABX_FAKE_FAIL", "ABX_FAKE_LEAK",
-            "ABX_FAKE_FAIL_AFTER", "ABX_FAKE_RAW", "ABX_FAKE_CAPTURE_EXTRA_TOOL", "ABX_FAKE_CAPTURE_RESULT"]
+            "ABX_FAKE_FAIL_AFTER", "ABX_FAKE_RAW", "ABX_FAKE_CAPTURE_EXTRA_TOOL", "ABX_FAKE_CODEX_CAPTURE_RESULT",
+            "ABX_FAKE_CLAUDE_CAPTURE_RESULT", "ABX_FAKE_SLEEP", "ABX_FAKE_STRAY_CITATION"]
 
 
 def fake_config(auth_file: Path) -> dict:
@@ -36,23 +37,31 @@ def fake_config(auth_file: Path) -> dict:
 
 
 class FakeWorkspace:
-    """A temp workspace with the repo's schemas frozen under prereg/, plus a fake log dir."""
+    """A temp workspace with the repo's prompts and schemas under prereg/, plus a fake log dir.
+
+    `cfg` is the raw config written by `init`; `config` the parsed one the harness uses.
+    """
 
     def __init__(self):
         self._tmp = tempfile.TemporaryDirectory(prefix="abx-test-")
         root = Path(os.path.realpath(self._tmp.name))
         self.ws = store.Workspace(root / "ws")
-        shutil.copytree(REPO / "schemas", self.ws.path("prereg/schemas"))
+        for name in ("schemas", "prompts"):
+            shutil.copytree(REPO / name, self.ws.path(f"prereg/{name}"))
         self.log = root / "fakelog"
         auth = root / "auth.json"
         auth.write_text("{}")
         self.cfg = fake_config(auth)
+        self.config = config.parse(self.cfg)
         self._env = mock.patch.dict(os.environ, {"ABX_FAKE_LOG": str(self.log)})
         self._env.start()
 
-    def qualified(self) -> dict:
-        return {lin: {**invoke.live_fingerprint(self.cfg, lin), "resolved_model": self.cfg["lineages"][lin]["model"]}
-                for lin in self.cfg["lineages"]}
+    def qualify_stub(self) -> dict:
+        """Record the live fingerprints as qualified, without running qualification."""
+        q = {lin: {**invoke.live_fingerprint(self.config, lin), "resolved_model": self.config.lineage(lin).model}
+             for lin in self.config.lineages}
+        store.write_json(self.ws.path(invoke.QUALIFICATION), q)
+        return q
 
     def prompts_logged(self) -> list[str]:
         path = self.log / "prompts.jsonl"

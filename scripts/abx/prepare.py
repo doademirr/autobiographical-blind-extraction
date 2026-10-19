@@ -1,23 +1,26 @@
 """`prepare`: local redaction and eras (review point 1), qualification, zoning, the substrate."""
 
-import re
 import shutil
 from pathlib import Path
 
-from . import artifacts, invoke, prompts, qualify, store, text
+from . import artifacts, config, invoke, ipip, lifecycle, qualify, store, text, withheld
 from .errors import UsageError
+from .roles import ROLES
+
+__all__ = ["estimate", "prepare"]
 
 REPO = Path(__file__).resolve().parents[2]
-PER_ERA_ROLES = ("discovery", "recode", "deductive_ledger")
 THIN, STOP = 0.50, 0.25
 
 
-def stage_method(ws: store.Workspace) -> None:
-    """Copy the repo's prompts and schemas into the workspace; freeze hashes them in generation A."""
+def _stage_method(ws: store.Workspace) -> None:
+    """Copy the repo's prompts, schemas and IPIP instrument in; freeze hashes them in generation A."""
     for name in ("prompts", "schemas"):
-        dest = ws.path(f"prereg/{name}")
-        if not dest.exists():
-            shutil.copytree(REPO / name, dest)
+        if not ws.path(f"prereg/{name}").exists():
+            shutil.copytree(REPO / name, ws.path(f"prereg/{name}"))
+    if not ws.path(ipip.FROZEN_COPY).exists():
+        ws.path(ipip.FROZEN_COPY).parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy(ipip.INSTRUMENT, ws.path(ipip.FROZEN_COPY))
 
 
 def _review_files(ws: store.Workspace, original: str) -> bool:
@@ -34,29 +37,15 @@ def _review_files(ws: store.Workspace, original: str) -> bool:
     return store.read_json(red).get("approved") is True and store.read_json(eras).get("approved") is True
 
 
-def load_secrets(ws: store.Workspace) -> prompts.Secrets:
-    """Everything no prompt may carry, read only for this substring check."""
-    s = prompts.Secrets(redacted_names=list(store.read_json(ws.path("prepare/redactions.json"))["names"]))
-    retro = ws.path("prepare/zoning/removed.json")
-    if retro.exists():
-        s.removed_sentences = store.read_json(retro)
-    pred = ws.path("sealed/self-prediction.md")
-    if pred.exists():
-        s.self_prediction = [m.group(1).strip() for m in re.finditer(r"^P\d+:(.+)$", pred.read_text(), re.M)
-                             if len(m.group(1).strip()) >= 12]
-    answers = ws.path("sealed/ipip-120.csv")
-    if answers.exists():
-        s.ipip = [line for line in answers.read_text().splitlines()[1:] if re.fullmatch(r"i\d{3},[1-5]", line)]
-    return s
+def estimate(ws: store.Workspace) -> dict:
+    eras = ws.path("prepare/eras.json")
+    n = len(store.read_json(eras)["eras"]) if eras.exists() else 0
+    return {"model_calls": n + 2, "note": "one zoning call per era plus one leak probe per lineage"}
 
 
-def _zone(ws: store.Workspace, cfg: dict, qual: dict, era: dict, sents: list[text.Sentence],
-          redacted: str, secrets: prompts.Secrets) -> dict[str, str]:
+def _zone(ws: store.Workspace, cfg: config.Config, era: dict, sents: list[text.Sentence],
+          redacted: str) -> dict[str, str]:
     store.write_text_atomic(artifacts.path_of(ws, f"chunk:{era['id']}"), text.render_numbered(redacted, sents) + "\n")
-    lineage = cfg["roles"]["zoner"]
-    prompt = prompts.assemble("zoner", {"chunk": f"chunk:{era['id']}", "schema": "schema:zoner"},
-                              artifacts.resolver(ws), {"era_label": era["label"] or era["id"]}, era=era["id"])
-    prompts.audit(prompt, secrets)
     expected = {s.id for s in sents}
 
     def validate(out) -> list[str]:
@@ -65,21 +54,19 @@ def _zone(ws: store.Workspace, cfg: dict, qual: dict, era: dict, sents: list[tex
             return [f"labels must cover the chunk's {len(expected)} sentence ids exactly once"]
         return []
 
-    spec = invoke.CallSpec(stage="prepare", role="zoner", lineage=lineage, run=None, era=era["id"], generation="A",
-                           schema_name="zoner", prompt=prompt, validate=validate)
-    out = invoke.call(ws, cfg, spec, qual[lineage])
+    req = invoke.CallRequest(stage="prepare", role="zoner", lineage=cfg.zoner, run=None, era=era["id"],
+                             generation="A", slots={"chunk": f"chunk:{era['id']}"},
+                             params={"era_label": era["label"] or era["id"]}, validate=validate)
+    out = invoke.call(ws, cfg, req)
     return {lab["sentence_id"]: lab["label"] for lab in out["labels"]}
 
 
-def _words(s: str) -> int:
-    return len(s.split())
-
-
 def prepare(ws: store.Workspace) -> dict:
-    cfg = store.read_json(ws.path("config.json"))
+    lifecycle.enter(ws, "prepare")
+    cfg = config.load(ws)
     original = ws.path("text/original.txt").read_text(encoding="utf-8")
     if not _review_files(ws, original):
-        return {"status": "review", "next": "edit and approve prepare/redactions.json and prepare/eras.json"}
+        return {"status": "review", "next": "approve_review_files"}
     names = store.read_json(ws.path("prepare/redactions.json"))["names"]
     eras = store.read_json(ws.path("prepare/eras.json"))["eras"]
     redacted, spans = text.redact(original, names)
@@ -90,25 +77,24 @@ def prepare(ws: store.Workspace) -> dict:
     store.write_json(ws.path("prepare/offsets.json"), spans)
     store.write_json(ws.path("prepare/segments.json"), text.as_dicts(segs))
     store.write_json(ws.path("prepare/sentences.json"), text.as_dicts(sents))
-    stage_method(ws)
-
-    qual = qualify.qualify(ws, cfg) if not ws.path("run/qualification.json").exists() else qualify.qualified(ws)
-    secrets = load_secrets(ws)
+    _stage_method(ws)
+    if not ws.path(invoke.QUALIFICATION).exists():
+        qualify.qualify(ws, cfg)
     labels: dict[str, str] = {}
     for era in eras:
         era_sents = [s for s in sents if s.segment_id in set(era["segment_ids"])]
-        labels |= _zone(ws, cfg, qual, era, era_sents, redacted, secrets)
+        labels |= _zone(ws, cfg, era, era_sents, redacted)
         store.write_json(ws.path(f"prepare/zoning/{era['id']}.json"),
                          {sid: labels[sid] for sid in (s.id for s in era_sents)})
-    return build_substrate(ws, cfg, eras, sents, redacted, labels)
+    return _substrate(ws, cfg, eras, sents, redacted, labels)
 
 
-def build_substrate(ws, cfg, eras, sents, redacted, labels) -> dict:
+def _substrate(ws, cfg: config.Config, eras, sents, redacted, labels) -> dict:
     kept = {sid for sid, lab in labels.items() if lab == "keep"}
     kept_text = {redacted[s.start:s.end] for s in sents if s.id in kept}
     removed = [redacted[s.start:s.end] for s in sents if s.id not in kept]
     store.write_json(ws.path("prepare/zoning/removed.json"),
-                     [r for r in removed if len(r) >= prompts.MIN_REMOVED_LEN and r not in kept_text])
+                     [r for r in removed if len(r) >= withheld.MIN_REMOVED_LEN and r not in kept_text])
     store.write_text_atomic(ws.path("prepare/retrospective.md"), "".join(
         f"[{s.id}] ({labels[s.id]}) {redacted[s.start:s.end]}\n" for s in sents if s.id not in kept))
     stats = {}
@@ -116,8 +102,8 @@ def build_substrate(ws, cfg, eras, sents, redacted, labels) -> dict:
         era_sents = [s for s in sents if s.segment_id in set(era["segment_ids"])]
         body = text.render_zoned(redacted, era["segment_ids"], era_sents, kept)
         store.write_text_atomic(artifacts.path_of(ws, f"era:{era['id']}"), body)
-        total = sum(_words(redacted[s.start:s.end]) for s in era_sents)
-        kept_words = sum(_words(redacted[s.start:s.end]) for s in era_sents if s.id in kept)
+        total = sum(len(redacted[s.start:s.end].split()) for s in era_sents)
+        kept_words = sum(len(redacted[s.start:s.end].split()) for s in era_sents if s.id in kept)
         ratio = kept_words / total if total else 0.0
         stats[era["id"]] = {
             "sentences": len(era_sents), "segments": len(era["segment_ids"]), "words": total,
@@ -126,12 +112,13 @@ def build_substrate(ws, cfg, eras, sents, redacted, labels) -> dict:
             "removed": sum(1 for s in era_sents if labels[s.id] == "remove"),
             "band": "normal" if ratio >= THIN else "thin" if ratio >= STOP else "stop",
         }
-        for role in PER_ERA_ROLES:
-            template = ws.path(f"prereg/prompts/{role}.md")
-            if template.exists():
-                need = invoke.estimate_tokens(template.read_text() + body)
-                for lineage, lcfg in cfg["lineages"].items():
-                    if need + lcfg["reserve_output_tokens"] > lcfg["input_budget_tokens"]:
-                        raise UsageError(f"era {era['id']} is too large for {role} on {lineage}")
+        for policy in ROLES.values():
+            template = ws.path(f"prereg/prompts/{policy.name}.md")
+            if not (policy.per_era and policy.name != "zoner" and template.exists()):
+                continue
+            need = invoke.estimate_tokens(template.read_text() + body)
+            for lin in cfg.lineages.values():
+                if need + lin.reserve_output_tokens > lin.input_budget_tokens:
+                    raise UsageError(f"era {era['id']} is too large for {policy.name} on {lin.name}")
     store.write_json(ws.path("prepare/stats.json"), stats)
     return {"status": "done", "stats": stats}

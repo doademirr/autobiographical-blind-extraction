@@ -92,7 +92,7 @@ class ArmTest(unittest.TestCase):
         res = ag.arm(_runs({"claude": [claude] * 3, "codex": [codex] * 3}), list(self.UNITS), "nominal")
         self.assertIsNone(res.alpha)
         self.assertEqual(res.verdict, "not_reportable")
-        self.assertIn("25%", res.reason)
+        self.assertEqual(res.reason, "low_pairing")
 
     def test_one_lineage_is_never_supported(self):
         self.assertEqual(ag.status(["present", N]), "one-lineage")
@@ -131,6 +131,14 @@ class IntegrityAuditTest(unittest.TestCase):
         self.assertTrue(all(r["ok"] for r in res.values()))
         res = ag.integrity_audit({"events": check("events", False)})
         self.assertFalse(res["events"]["ok"])
+
+        def broken():
+            raise RuntimeError("cannot read records")
+
+        res = ag.integrity_audit({"requalify": broken, "manifest": check("manifest", True)})
+        self.assertFalse(res["requalify"]["ok"])
+        self.assertIn("cannot read records", res["requalify"]["detail"])
+        self.assertTrue(res["manifest"]["ok"])
 
 
 if __name__ == "__main__":

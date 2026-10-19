@@ -38,11 +38,12 @@ class CaptureServerTest(unittest.TestCase):
 
     def test_unforwarded_reads_and_other_posts_are_refused_and_logged(self):
         with capture.Capture("codex") as cap:
-            for path in ("/backend-api/ps/mcp",):
-                with self.assertRaises(urllib.error.HTTPError):
-                    _post(f"{cap.base_url}{path}", {})
-            with self.assertRaises(urllib.error.HTTPError):
+            with self.assertRaises(urllib.error.HTTPError) as cm:
+                _post(f"{cap.base_url}/backend-api/ps/mcp", {})
+            cm.exception.close()
+            with self.assertRaises(urllib.error.HTTPError) as cm:
                 urllib.request.urlopen(f"{cap.base_url}/codex-up/models", timeout=10)
+            cm.exception.close()
         self.assertEqual([t["outcome"] for t in cap.traffic], ["refused", "refused"])
 
     def test_tool_list_walks_namespaces(self):

@@ -1,5 +1,6 @@
 """`init`: create a workspace, copy the text in read-only, write config and the sealed templates."""
 
+import copy
 import os
 import shutil
 import stat
@@ -78,12 +79,12 @@ def default_config(canaries: list[str]) -> dict:
             "codex": {"cli": codex_bin, "model": "gpt-6.1-sol",
                       "input_budget_tokens": 400000, "reserve_output_tokens": 32000,
                       "sandbox_exec": "/usr/bin/sandbox-exec", "sandbox_allow": [codex_root],
-                      "auth_file": "~/.codex/auth.json", "disable": CODEX_DISABLE, "config": CODEX_CONFIG,
-                      "retained_tools": CODEX_RETAINED, "capture_forward": True},
+                      "auth_file": "~/.codex/auth.json", "disable": list(CODEX_DISABLE), "config": list(CODEX_CONFIG),
+                      "retained_tools": copy.deepcopy(CODEX_RETAINED), "capture_forward": True},
         },
         "runs": 3,
         "roles": {"zoner": "claude", "codebook_author": "claude", "crosswalk_coders": ["claude", "codex"]},
-        "canaries": canaries,
+        "canaries": list(canaries),
         "env_passthrough": [],
         "timeout_s": 900,
     }

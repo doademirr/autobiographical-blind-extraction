@@ -3,7 +3,7 @@ import os
 import unittest
 from unittest import mock
 
-from abx import extract, seal, store
+from abx import extract, lifecycle, store
 from abx.errors import CallFailed, IntegrityError
 
 from .helpers import FakeWorkspace, build
@@ -53,6 +53,13 @@ class CodebookValidatorTest(unittest.TestCase):
         self.assertEqual(extract.validate_codebook(ok, {"c001", "c002"}), [])
         bad = self.book([("Thrift", ["c001"]), ("Wit", ["c001"])])
         self.assertTrue(extract.validate_codebook(bad, {"c001"}))
+
+    def test_split_within_one_construct_is_not_a_split(self):
+        one = self.book([("Thrift", ["c001", "c001"])],
+                        [{"candidate_ref": "c001", "disposition": "split", "reason": "two claims"}])
+        problems = extract.validate_codebook(one, {"c001"})
+        self.assertTrue(any("repeats" in p for p in problems))
+        self.assertTrue(any("not placed" in p for p in problems))
 
 
 class ExtractPipelineTest(unittest.TestCase):
@@ -117,6 +124,29 @@ class ExtractPipelineTest(unittest.TestCase):
         self.assertEqual(roles.count("# abx-role: codebook_author"), 1)
 
 
+class AuditEvidenceTest(unittest.TestCase):
+    def setUp(self):
+        self.fw = FakeWorkspace()
+        self.ws = build(self.fw)
+
+    def tearDown(self):
+        self.fw.close()
+
+    def test_integrity_audit_reads_call_record_events(self):
+        c = extract._context(self.ws)
+        clean = extract.integrity_audit(c)
+        self.assertTrue(all(check["ok"] for check in clean.values()), clean)
+        path = next(iter(sorted(self.ws.root.glob("run/calls/extract/recode/*.json"))))
+        rec = store.read_json(path)
+        rec["events"].append({"type": "item.completed", "detail": "command_execution", "tools": [], "mcp_servers": [],
+                              "registry_present": True})
+        store.write_json(path, rec)
+        tampered = extract.integrity_audit(c)
+        self.assertFalse(tampered["events"]["ok"])
+        self.assertFalse(tampered["manifest"]["ok"])
+        self.assertTrue(tampered["allowlist"]["ok"])
+
+
 class IntegrityTest(unittest.TestCase):
     def setUp(self):
         self.fw = FakeWorkspace()
@@ -141,7 +171,12 @@ class IntegrityTest(unittest.TestCase):
         with self.assertRaises(IntegrityError):
             extract.extract(self.ws)
         with self.assertRaises(IntegrityError):
-            seal.verify_sealed(self.ws)
+            lifecycle.verify_sealed(self.ws)
+
+    def test_scorer_citing_evidence_outside_its_ledgers_fails_the_call(self):
+        with mock.patch.dict(os.environ, {"ABX_FAKE_STRAY_CITATION": "1"}), self.assertRaises(CallFailed) as cm:
+            extract.extract(self.ws)
+        self.assertIn("deductive_scorer", str(cm.exception))
 
 
 class ResumeTest(unittest.TestCase):

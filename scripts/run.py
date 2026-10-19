@@ -17,13 +17,21 @@ from abx import extract, freeze, init, prepare, seal, status, store, unmask
 from abx.errors import AbxError
 
 UNEXPECTED = 70
+NEXT_TEXT = {
+    "approve_review_files": "edit and approve prepare/redactions.json and prepare/eras.json, then run `prepare`",
+    "prepare": "run `prepare` (first approve prepare/redactions.json and prepare/eras.json)",
+    "seal": "fill in sealed/self-prediction.md and sealed/ipip-120.csv in your own editor, then run `seal`",
+    "freeze": "run `freeze`", "extract": "run `extract`", "unmask": "run `unmask`",
+    "done": "done: read report/report.md",
+}
+ESTIMATES = {"prepare": prepare.estimate, "extract": extract.estimate, "unmask": unmask.estimate}
 
 
 def _print(obj) -> None:
     print(json.dumps(obj, indent=1, ensure_ascii=False))
 
 
-def main(argv: list[str] | None = None) -> int:
+def _parser() -> argparse.ArgumentParser:
     ap = argparse.ArgumentParser(prog="run.py", description=__doc__, formatter_class=argparse.RawTextHelpFormatter)
     sub = ap.add_subparsers(dest="cmd", required=True)
     p_init = sub.add_parser("init", help="create a workspace from the text")
@@ -39,7 +47,31 @@ def main(argv: list[str] | None = None) -> int:
     p_rev = sub.add_parser("revise", help="authorised pre-unmask revision (not in this version)")
     p_rev.add_argument("ws", type=Path)
     p_rev.add_argument("artifact")
-    args = ap.parse_args(argv)
+    return ap
+
+
+def _stage(cmd: str, ws: store.Workspace) -> int:
+    if cmd in ESTIMATES and ws.path("prepare/eras.json").exists():
+        est = ESTIMATES[cmd](ws)
+        print(f"{cmd}: about {est['model_calls']} model calls ({est['note']})", file=sys.stderr)
+    if cmd == "extract":
+        result = extract.extract(ws)
+        gates = {arm: result[arm]["verdict"] for arm in ("inductive", "deductive")}
+        _print({"gates": gates, "alpha": {arm: result[arm]["alpha"] for arm in gates}})
+        return 1 if "not_reportable" in gates.values() else 0
+    if cmd == "unmask":
+        unmask.unmask(ws)
+        _print({"report": str(ws.path("report/report.md"))})
+        return 0
+    out = {"prepare": prepare.prepare, "seal": seal.seal, "freeze": freeze.freeze, "status": status.status}[cmd](ws)
+    if "next" in out:
+        out["next"] = NEXT_TEXT[out["next"]]
+    _print(out)
+    return 0
+
+
+def main(argv: list[str] | None = None) -> int:
+    args = _parser().parse_args(argv)
     try:
         if args.cmd == "init":
             ws = init.init(args.ws, args.text, args.canary, args.allow_synced)
@@ -52,18 +84,7 @@ def main(argv: list[str] | None = None) -> int:
         if not ws.path("config.json").exists():
             print(f"{args.ws} is not a workspace (no config.json)", file=sys.stderr)
             return 2
-        if args.cmd == "extract":
-            result = extract.extract(ws)
-            gates = {arm: result[arm]["verdict"] for arm in ("inductive", "deductive")}
-            _print({"gates": gates, "alpha": {arm: result[arm]["alpha"] for arm in gates}})
-            return 1 if "not_reportable" in gates.values() else 0
-        if args.cmd == "unmask":
-            unmask.unmask(ws)
-            _print({"report": str(ws.path("report/report.md"))})
-            return 0
-        run = {"prepare": prepare.prepare, "seal": seal.seal, "freeze": freeze.freeze, "status": status.status}
-        _print(run[args.cmd](ws))
-        return 0
+        return _stage(args.cmd, ws)
     except AbxError as exc:
         print(f"error: {exc}", file=sys.stderr)
         return exc.exit_code

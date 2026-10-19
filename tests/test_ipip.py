@@ -44,10 +44,25 @@ class ScoringTest(unittest.TestCase):
             responses.update(self._answers(f, [4, None, None, None]))
         self.assertIsNone(ipip.score(responses, self.inst)["domains"]["N"])
 
+    def test_domain_mean_of_exactly_eleven_thirds_is_high_on_every_python(self):
+        n_facets = [f for f in self.inst["facets"] if f.startswith("N")]
+        responses = dict.fromkeys((i["id"] for i in self.inst["items"]), None)
+
+        def answer(facet, scored):
+            for item, s in zip(self.items[facet], scored, strict=False):
+                responses[item["id"]] = s if item["key"] == 1 else 6 - s
+
+        answer(n_facets[0], [1, 2, 2])
+        for f in n_facets[1:4]:
+            answer(f, [4, 4, 5])
+        domain = ipip.score(responses, self.inst)["domains"]["N"]
+        self.assertEqual(domain, ipip.IPIP_HIGH)
+        self.assertEqual(ipip.ipip_band(domain), "high")
+
     def test_bands_are_equal_thirds(self):
-        self.assertEqual(ipip.ipip_band((2 + 2 + 3) / 3), "low")
+        self.assertEqual(ipip.ipip_band(ipip.mean([2, 2, 3])), "low")
         self.assertEqual(ipip.ipip_band(3.0), "mid")
-        self.assertEqual(ipip.ipip_band((4 + 4 + 3) / 3), "high")
+        self.assertEqual(ipip.ipip_band(ipip.mean([4, 4, 3])), "high")
         self.assertEqual(ipip.observer_band(3), "low")
         self.assertEqual(ipip.observer_band(4), "mid")
         self.assertEqual(ipip.observer_band(5), "high")

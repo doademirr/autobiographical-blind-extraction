@@ -10,12 +10,15 @@ failures:
   ABX_FAKE_LEAK         answer the leak probe with this text
   ABX_FAKE_FAIL_AFTER   fail every call after this many successful ones (interruption)
   ABX_FAKE_RAW          print this string as the final message verbatim
+  ABX_FAKE_SLEEP        after printing the stream, sleep this many seconds (timeouts)
+  ABX_FAKE_STRAY_CITATION  the deductive scorer cites a sentence id no ledger holds
 """
 
 import hashlib
 import json
 import os
 import sys
+import time
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
@@ -108,7 +111,9 @@ def main(lineage: str) -> int:
             events += [{"type": "item.completed", "item": {"id": "i1", "type": "agent_message", "text": text}},
                        {"type": "turn.completed", "usage": {}}]
     for ev in events:
-        print(json.dumps(ev))
+        print(json.dumps(ev), flush=True)
+    if os.environ.get("ABX_FAKE_SLEEP"):
+        time.sleep(float(os.environ["ABX_FAKE_SLEEP"]))
     if failing:
         return 1
     _bump(log, lineage, prompt)

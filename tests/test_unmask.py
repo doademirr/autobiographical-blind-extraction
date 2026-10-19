@@ -31,7 +31,8 @@ class PredictionRatesTest(unittest.TestCase):
         rows = codes([("P1", "C01", "match"), ("P1", "C02", "match")])
         r = unmask.prediction_rates({"claude": rows, "codex": rows}, ["P1"], {"C03"})
         self.assertEqual(r["outcome"], {"P1": "unmatched"})
-        self.assertEqual(r["descriptive_matches"], ["P1~C01", "P1~C02"])
+        self.assertEqual(r["descriptive_matches"], [{"prediction_id": "P1", "construct_id": "C01"},
+                                                    {"prediction_id": "P1", "construct_id": "C02"}])
         self.assertEqual(r["constructs_matched"], [])
 
     def test_zero_denominators_are_none(self):
@@ -48,8 +49,9 @@ class PredictionRatesTest(unittest.TestCase):
 class DomainComparisonTest(unittest.TestCase):
     def test_bands_and_rate(self):
         inst = ipip.load_instrument()
-        collapsed = {"claude": dict.fromkeys(inst["facets"], 6), "codex": dict.fromkeys(inst["facets"], 5)}
-        collapsed["codex"].update({f: None for f in inst["facets"] if f.startswith("N")})
+        collapsed = [{"lineage": "claude", "facet": f, "value": 6} for f in inst["facets"]]
+        collapsed += [{"lineage": "codex", "facet": f, "value": None if f.startswith("N") else 5}
+                      for f in inst["facets"]]
         observer = unmask.deductive_domains(collapsed, inst)
         self.assertIsNone(observer["domains"]["N"])
         self.assertEqual(observer["domains"]["E"], 5.5)

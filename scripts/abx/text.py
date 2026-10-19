@@ -7,6 +7,7 @@ Every unit downstream is addressed in redacted coordinates.
 import re
 from dataclasses import asdict, dataclass
 
+from .artifacts import ERA_ID
 from .errors import UsageError
 
 _PARAGRAPH_BREAK = re.compile(r"\n[ \t]*\n\s*")
@@ -127,6 +128,8 @@ def validate_eras(eras: list[dict], segments: list[Segment]) -> None:
         for key in ("id", "label", "date_range", "segment_ids"):
             if key not in era:
                 raise UsageError(f"eras.json: era missing {key!r}")
+        if not isinstance(era["id"], str) or not ERA_ID.match(era["id"]):
+            raise UsageError("eras.json: era ids are 1-32 letters, digits, '-' or '_', starting with a letter or digit")
         if era["id"] in ids:
             raise UsageError(f"eras.json: duplicate era id {era['id']!r}")
         ids.add(era["id"])

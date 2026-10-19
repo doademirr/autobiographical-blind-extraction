@@ -64,6 +64,17 @@ class Capture:
     forward: bool = False                      # Codex: forward GETs to the real backend
     requests: list[dict] = field(default_factory=list)
     traffic: list[dict] = field(default_factory=list)
+    _lock: threading.Lock = field(default_factory=threading.Lock, repr=False)
+
+    def _log(self, method: str, path: str, outcome: str) -> None:
+        with self._lock:
+            self.traffic.append({"method": method, "path": path, "outcome": outcome})
+
+    def _capture(self, req: dict) -> int:
+        """Record an inference request; its sequence number decides the scripted reply."""
+        with self._lock:
+            self.requests.append(req)
+            return len(self.requests)
 
     def __enter__(self):
         cap = self
@@ -80,12 +91,12 @@ class Capture:
 
             def do_GET(self):
                 if self.headers.get("Upgrade"):
-                    cap.traffic.append({"method": "GET", "path": self.path, "outcome": "ws-refused"})
+                    cap._log("GET", self.path, "ws-refused")
                     return self._send(404)
                 upstream = next((base + self.path[len(pre):] for pre, base in CODEX_UPSTREAM.items()
                                  if self.path.startswith(pre)), None)
                 if not (cap.forward and upstream):
-                    cap.traffic.append({"method": "GET", "path": self.path, "outcome": "refused"})
+                    cap._log("GET", self.path, "refused")
                     return self._send(404)
                 headers = {k: v for k, v in self.headers.items() if k.lower() not in _DROP_HEADERS}
                 try:
@@ -95,7 +106,7 @@ class Capture:
                     code, body, ctype = exc.code, exc.read(), "application/json"
                 except OSError:
                     code, body, ctype = 502, b"", "application/json"
-                cap.traffic.append({"method": "GET", "path": self.path.split("?")[0], "outcome": f"forwarded:{code}"})
+                cap._log("GET", self.path.split("?")[0], f"forwarded:{code}")
                 self._send(code, body, ctype)
 
             def do_POST(self):
@@ -105,17 +116,16 @@ class Capture:
                     try:
                         req = json.loads(body)
                     except ValueError:
-                        cap.traffic.append({"method": "POST", "path": path, "outcome": "unreadable"})
+                        cap._log("POST", path, "unreadable")
                         return self._send(400)
-                    cap.requests.append(req)
-                    cap.traffic.append({"method": "POST", "path": path, "outcome": "captured"})
-                    n = len(cap.requests)
+                    n = cap._capture(req)
+                    cap._log("POST", path, "captured")
                     stream = (responses_stream(n, cap.tool_item) if cap.lineage == "codex"
                               else messages_stream(n, req.get("model", ""), cap.tool_use))
                     return self._send(200, stream, "text/event-stream")
                 if path.endswith("count_tokens"):
                     return self._send(200, b'{"input_tokens": 1}')
-                cap.traffic.append({"method": "POST", "path": path, "outcome": "refused"})
+                cap._log("POST", path, "refused")
                 self._send(404)
 
             def log_message(self, *args):

@@ -1,7 +1,12 @@
-"""IPIP-NEO-120 scoring (SPEC § Data Model, IPIP) and the band rule shared with observer scores."""
+"""IPIP-NEO-120 scoring (SPEC § Data Model, IPIP) and the band rule shared with observer scores.
+
+Means and band boundaries are exact fractions: a domain mean of exactly 11/3 must land in the
+same band on every Python version, which float sums do not guarantee.
+"""
 
 import csv
 import io
+from fractions import Fraction
 from pathlib import Path
 
 from . import store
@@ -11,12 +16,14 @@ INSTRUMENT = Path(__file__).resolve().parents[2] / "instruments" / "ipip-neo-120
 
 FACET_MIN_ITEMS = 3
 DOMAIN_MIN_FACETS = 4
-IPIP_LOW, IPIP_HIGH = 7 / 3, 11 / 3
-OBSERVER_LOW, OBSERVER_HIGH = 3, 5
+IPIP_LOW, IPIP_HIGH = Fraction(7, 3), Fraction(11, 3)
+OBSERVER_LOW, OBSERVER_HIGH = Fraction(3), Fraction(5)
+FROZEN_COPY = "prereg/instrument/ipip-neo-120.json"
 
 
-def load_instrument() -> dict:
-    return store.read_json(INSTRUMENT)
+def load_instrument(ws: store.Workspace | None = None) -> dict:
+    """The workspace's frozen copy when given a workspace, else the repository's."""
+    return store.read_json(ws.path(FROZEN_COPY) if ws else INSTRUMENT)
 
 
 def parse_responses(csv_text: str, instrument: dict) -> dict[str, int | None]:
@@ -38,8 +45,8 @@ def parse_responses(csv_text: str, instrument: dict) -> dict[str, int | None]:
     return out
 
 
-def _mean(values: list[float]) -> float:
-    return sum(values) / len(values)
+def mean(values: list) -> Fraction:
+    return Fraction(sum(Fraction(v) for v in values), len(values))
 
 
 def score(responses: dict[str, int | None], instrument: dict) -> dict:
@@ -49,21 +56,21 @@ def score(responses: dict[str, int | None], instrument: dict) -> dict:
         r = responses.get(item["id"])
         if r is not None:
             by_facet[item["facet"]].append(r if item["key"] == 1 else 6 - r)
-    facets = {f: (_mean(v) if len(v) >= FACET_MIN_ITEMS else None) for f, v in by_facet.items()}
+    facets = {f: (mean(v) if len(v) >= FACET_MIN_ITEMS else None) for f, v in by_facet.items()}
     domains = {}
     for d in instrument["domains"]:
         present = [s for f, s in facets.items() if f.startswith(d) and s is not None]
-        domains[d] = _mean(present) if len(present) >= DOMAIN_MIN_FACETS else None
+        domains[d] = mean(present) if len(present) >= DOMAIN_MIN_FACETS else None
     return {"facets": facets, "domains": domains}
 
 
-def ipip_band(value: float | None) -> str | None:
+def ipip_band(value: Fraction | None) -> str | None:
     if value is None:
         return None
     return "low" if value <= IPIP_LOW else "high" if value >= IPIP_HIGH else "mid"
 
 
-def observer_band(value: float | None) -> str | None:
+def observer_band(value: Fraction | None) -> str | None:
     if value is None:
         return None
     return "low" if value <= OBSERVER_LOW else "high" if value >= OBSERVER_HIGH else "mid"

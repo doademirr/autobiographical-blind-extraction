@@ -91,7 +91,13 @@ def read_manifest(ws: Workspace) -> list[dict]:
     path = ws.path(MANIFEST)
     if not path.exists():
         return []
-    return [loads_strict(line) for line in path.read_text(encoding="utf-8").splitlines() if line.strip()]
+    try:
+        entries = [loads_strict(line) for line in path.read_text(encoding="utf-8").splitlines() if line.strip()]
+    except ValueError as exc:
+        raise IntegrityError(f"manifest is unreadable: {exc}") from exc
+    if not all(isinstance(e, dict) and isinstance(e.get("artifacts"), dict) and "gen" in e for e in entries):
+        raise IntegrityError("manifest entries are malformed")
+    return entries
 
 
 def _entry_hash(entry: dict) -> str:

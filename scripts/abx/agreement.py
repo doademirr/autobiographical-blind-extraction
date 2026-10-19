@@ -1,13 +1,14 @@
 """Agreement arithmetic. Every number the report states about reliability comes from here.
 
-Matrices are `{rater: {unit: value or None}}`; None is a missing value (insufficient, a
-collapse tie, or no rating) and never takes part in the coincidence counts.
+Matrices are `{rater: {unit: value or None}}`, with any hashable unit (a named tuple in the
+engine); None is a missing value (insufficient, a collapse tie, or no rating) and never takes
+part in the coincidence counts. Undefined results carry a reason code, rendered by the report.
 """
 
 import itertools
 import math
 from collections import Counter
-from collections.abc import Callable
+from collections.abc import Callable, Hashable
 from dataclasses import dataclass, field
 
 REPORT = 0.80
@@ -16,7 +17,7 @@ MIN_PAIRED = 0.50
 INTEGRITY_TRIGGER = 0.95
 
 
-def alpha(matrix: dict[str, dict[str, object]], metric: str) -> tuple[float | None, str]:
+def alpha(matrix: dict[str, dict[Hashable, object]], metric: str) -> tuple[float | None, str]:
     """Krippendorff's alpha (nominal or ordinal), after Krippendorff (2011).
 
     Returns (None, reason) when undefined: no unit has two values, or there is no
@@ -31,7 +32,7 @@ def alpha(matrix: dict[str, dict[str, object]], metric: str) -> tuple[float | No
         for a, b in itertools.permutations(vals, 2):
             coincidence[(a, b)] += 1.0 / (len(vals) - 1)
     if not coincidence:
-        return None, "no unit has values from two raters"
+        return None, "no_pairable_unit"
     values = sorted({v for pair in coincidence for v in pair})
     marginal = {c: sum(coincidence[(c, k)] for k in values) for c in values}
     n = sum(marginal.values())
@@ -50,7 +51,7 @@ def alpha(matrix: dict[str, dict[str, object]], metric: str) -> tuple[float | No
     observed = sum(delta(c, k) * w for (c, k), w in coincidence.items())
     expected = sum(delta(c, k) * marginal[c] * marginal[k] for c in values for k in values) / (n - 1)
     if expected == 0:
-        return None, "no variation across values"
+        return None, "no_variation"
     return 1.0 - observed / expected, ""
 
 
@@ -90,8 +91,8 @@ class ArmResult:
     """One arm's gate: cross-lineage alpha on collapsed runs, plus its context figures."""
 
     metric: str
-    units: list[str]
-    collapsed: dict[str, dict[str, object]]
+    units: list[Hashable]
+    collapsed: dict[str, dict[Hashable, object]]
     paired_fraction: float
     alpha: float | None
     reason: str
@@ -105,7 +106,7 @@ class ArmResult:
         return self.alpha is not None and self.alpha >= INTEGRITY_TRIGGER
 
 
-def arm(runs: dict[str, dict[str, dict[str, object]]], units: list[str], metric: str) -> ArmResult:
+def arm(runs: dict[str, dict[int, dict[Hashable, object]]], units: list[Hashable], metric: str) -> ArmResult:
     """`runs` is {lineage: {run: {unit: value}}}; units outside `units` are ignored."""
     collapse = collapse_mode if metric == "nominal" else collapse_median
     collapsed = {
@@ -130,9 +131,9 @@ def arm(runs: dict[str, dict[str, dict[str, object]]], units: list[str], metric:
             {r: {u: by_run[r].get(u) for u in units} for r in by_run}, metric
         )[0]
     if len(lineages) < 2:
-        result.reason = "fewer than two lineages"
+        result.reason = "fewer_lineages"
     elif paired_fraction < MIN_PAIRED:
-        result.reason = f"only {paired_fraction:.0%} of units carry a value from both lineages"
+        result.reason = "low_pairing"
     else:
         result.alpha, result.reason = alpha(collapsed, metric)
     result.verdict = band(result.alpha)
@@ -152,9 +153,12 @@ def status(values: list[object]) -> str:
 
 
 def integrity_audit(checks: dict[str, Callable[[], tuple[bool, str]]]) -> dict[str, dict]:
-    """Run every check; high agreement alone never invalidates, a failed check does."""
+    """Run every check, even after one fails or raises; high agreement alone never invalidates."""
     results = {}
     for name, check in checks.items():
-        ok, detail = check()
+        try:
+            ok, detail = check()
+        except Exception as exc:  # a check that cannot complete is a failed check, and the rest still run
+            ok, detail = False, f"{type(exc).__name__}: {exc}"
         results[name] = {"ok": ok, "detail": detail}
     return results

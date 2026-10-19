@@ -3,8 +3,8 @@
 Mirrors what the real CLIs were measured to do: send a request listing their tools,
 run a scripted tool call by the rules of the locked or unlocked configuration, and send
 the result back by call id. Switches:
-  ABX_FAKE_CAPTURE_EXTRA_TOOL   list this extra tool in the locked registry
-  ABX_FAKE_CAPTURE_RESULT       return this instead of the real result for scripted calls
+  ABX_FAKE_CAPTURE_EXTRA_TOOL   list this extra tool in Codex's locked registry
+  ABX_FAKE_<LINEAGE>_CAPTURE_RESULT   return this instead of the real result for that CLI's scripted calls
 """
 
 import json
@@ -40,25 +40,25 @@ def codex_endpoint(argv: list[str]) -> str | None:
     return None
 
 
-def _override(real: str) -> str:
-    return os.environ.get("ABX_FAKE_CAPTURE_RESULT", real)
+def _override(lineage: str, real: str) -> str:
+    return os.environ.get(f"ABX_FAKE_{lineage.upper()}_CAPTURE_RESULT", real)
 
 
 def _codex_result(item: dict, locked: bool, argv: list[str]) -> tuple[str, list[dict]]:
     name = item.get("name")
     if locked:
-        return _override(CODEX_LOCKED_RESULTS.get(name, f"unsupported call: {name}")), []
+        return _override("codex", CODEX_LOCKED_RESULTS.get(name, f"unsupported call: {name}")), []
     script = item.get("input", "")
     cat = re.search(r'cat ([^"]+)"', script)
     if cat:
         with open(cat.group(1)) as f:
             text = f.read()
-        return _override(json.dumps({"exit_code": 0, "output": text})), [
+        return _override("codex", json.dumps({"exit_code": 0, "output": text})), [
             {"type": "item.completed", "item": {"id": "i5", "type": "command_execution"}}]
     if "mcp__abxcanary__" in script:
         server = next(v for v in _config_values(argv) if v.startswith("mcp_servers.abxcanary="))
         token = re.search(r'args=\["[^"]+","([^"]+)"\]', server).group(1)
-        return _override(json.dumps({"content": [{"type": "text", "text": token}]})), [
+        return _override("codex", json.dumps({"content": [{"type": "text", "text": token}]})), [
             {"type": "item.completed", "item": {"id": "i6", "type": "mcp_tool_call"}}]
     return "unsupported", []
 
@@ -111,5 +111,5 @@ def claude(argv: list[str], prompt: str, model: str, base: str) -> list[dict]:
         _post(base.rstrip("/") + "/v1/messages", {**request, "messages": [
             *request["messages"], {"role": "assistant", "content": [block]},
             {"role": "user", "content": [{"type": "tool_result", "tool_use_id": block["id"],
-                                          "content": _override(result)}]}]})
+                                          "content": _override("claude", result)}]}]})
     return [*events, {"type": "result", "subtype": "success", "is_error": False, "result": "DONE"}]

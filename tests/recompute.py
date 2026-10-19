@@ -1,73 +1,106 @@
-"""Recompute every report figure from a finished workspace's frozen files.
+"""Recompute every report figure from a finished workspace's raw run files.
 
 Shared by the offline smoke (`test_end_to_end`) and the live smoke (`live_smoke.sh`), so both
-hold a run to the same standard: each reported number must equal its recomputation.
+hold a run to the same standard. Collapses are rebuilt from the raw ratings, not read from the
+stored agreement, and every numeric field of `results.json` is compared, then looked for in
+`report.md` as the report formats it.
 """
 
-import json
 import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "scripts"))
 
-from abx import agreement, extract, ipip, seal, store, unmask
+from abx import config, extract, freeze, ipip, report, seal, store, unmask
+from abx.errors import AbxError
+
+ARM_FIELDS = ("alpha", "verdict", "reason", "paired_fraction", "raw_agreement", "missing_rate", "stability", "units")
+
+
+def expected(ws: store.Workspace) -> dict:
+    """The figures `results.json` must hold, rebuilt from raw ratings and sealed inputs."""
+    cfg = config.load(ws)
+    book = store.read_json(ws.path("run/codebook/codebook.json"))
+    eras = [e["id"] for e in store.read_json(ws.path("prepare/eras.json"))["eras"]]
+    instrument = ipip.load_instrument(ws)
+    ratings = extract.load_ratings(ws)
+    inductive, deductive_arm = extract.arms(ratings, book, eras, list(instrument["facets"]))
+    lineages = sorted(inductive.collapsed)
+    status = {c["id"]: {e: extract.agreement.status([inductive.collapsed[lin][extract.Unit(c["item_id"], e)]
+                                                     for lin in lineages]) for e in eras} for c in book["constructs"]}
+    collapsed = [{"lineage": lin, "facet": f, "value": v}
+                 for lin in sorted(deductive_arm.collapsed) for f, v in deductive_arm.collapsed[lin].items()]
+    self_report = ipip.score(ipip.parse_responses(ws.path("sealed/ipip-120.csv").read_text(), instrument), instrument)
+    supported = {cid for cid, by_era in status.items() if "supported" in by_era.values()}
+    eligible = supported if inductive.verdict in unmask.REPORTABLE else set()
+    codes = {c: store.read_json(ws.path(f"run/crosswalk/codes-{c}.json"))["codes"] for c in cfg.crosswalk_coders}
+    preds = list(seal.predictions(ws.path("sealed/self-prediction.md").read_text()))
+    return {
+        "arms": {"inductive": inductive, "deductive": deductive_arm},
+        "downgrades": sum(1 for rows in ratings.verdicts.values() for v in rows if v["downgrade"]),
+        "status": status,
+        "predictions": unmask.prediction_rates(codes, preds, eligible),
+        "domains": unmask.domain_comparison(unmask.deductive_domains(collapsed, instrument), self_report),
+        "corpus": store.read_json(ws.path("prepare/stats.json")),
+        "fingerprints": store.read_json(ws.path(freeze.QUALIFICATION_A)),
+    }
+
+
+def compare(results: dict, report_md: str, exp: dict) -> list[str]:
+    out = []
+    for name, arm in exp["arms"].items():
+        got = results["agreement"][name]
+        want = {"alpha": arm.alpha, "verdict": arm.verdict, "reason": arm.reason,
+                "paired_fraction": arm.paired_fraction, "raw_agreement": arm.raw_agreement,
+                "missing_rate": arm.missing_rate, "stability": dict(sorted(arm.stability.items())),
+                "units": len(arm.units)}
+        out += [f"{name}.{k}: reported {got.get(k)!r}, recomputed {want[k]!r}" for k in ARM_FIELDS
+                if got.get(k) != want[k]]
+        for figure in (report.num(arm.alpha), report.pct(arm.paired_fraction), report.pct(arm.raw_agreement),
+                       report.pct(arm.missing_rate), *(report.num(v) for v in arm.stability.values())):
+            if figure not in report_md:
+                out.append(f"{name}: {figure} missing from report.md")
+    if results["agreement"]["downgrades"] != exp["downgrades"]:
+        out.append("downgrade count differs")
+    if {c["id"]: c["status"] for c in results["constructs"]} != exp["status"]:
+        out.append("construct statuses differ")
+    for key, value in exp["predictions"].items():
+        if results["predictions"].get(key) != value:
+            out.append(f"predictions.{key} differs")
+    for key in ("predictions_matched_rate", "supported_constructs_matched_rate", "coder_agreement"):
+        if exp["predictions"][key] is not None and report.pct(exp["predictions"][key]) not in report_md:
+            out.append(f"predictions.{key} missing from report.md")
+    got_dom = results["deductive_vs_ipip"]
+    for key in ("domains", "compared", "agreement_rate"):
+        if got_dom[key] != exp["domains"][key]:
+            out.append(f"deductive_vs_ipip.{key} differs")
+    for row in exp["domains"]["domains"].values():
+        for v in (row["observer"], row["ipip"]):
+            if v is not None and report.num(v, 2) not in report_md:
+                out.append(f"domain figure {report.num(v, 2)} missing from report.md")
+    if report.pct(exp["domains"]["agreement_rate"]) not in report_md:
+        out.append("domain agreement rate missing from report.md")
+    if results["corpus"] != exp["corpus"]:
+        out.append("corpus statistics differ from the frozen preparation statistics")
+    for era, s in exp["corpus"].items():
+        if f"Era {era}: {s['sentences']} sentences" not in report_md or report.pct(s["kept_ratio"]) not in report_md:
+            out.append(f"corpus figures for {era} missing from report.md")
+    for lin, fp in exp["fingerprints"].items():
+        if results["fingerprints"][lin] != {k: v for k, v in fp.items() if k != "evidence"}:
+            out.append(f"{lin} fingerprint differs from the frozen qualification")
+    return out
 
 
 def problems(ws: store.Workspace) -> list[str]:
-    out = []
     try:
         gens = [e["gen"] for e in store.verify_manifest(ws)]
-    except Exception as exc:  # reported as a finding, not raised
+    except AbxError as exc:
         return [f"manifest: {exc}"]
-    if gens != ["A", "B", "C", "D", "E"]:
-        out.append(f"generations {gens}")
-    results = store.read_json(ws.path("report/results.json"))
-    report = ws.path("report/report.md").read_text()
-    if [h for h in report.splitlines() if h.startswith("## ")][:1] != ["## This is not a clinical assessment"]:
+    out = [] if gens == ["A", "B", "C", "D", "E"] else [f"generations {gens}"]
+    report_md = ws.path("report/report.md").read_text()
+    if [h for h in report_md.splitlines() if h.startswith("## ")][:1] != ["## This is not a clinical assessment"]:
         out.append("report's first section is not the non-clinical statement")
-
-    r = extract.Run(ws)
-    book = store.read_json(ws.path("run/codebook/codebook.json"))
-    runs = {lin: {str(n): {} for n in r.runs} for lin in r.lineages}
-    downgrades = 0
-    for path in sorted(ws.root.glob("run/recode/*.json")):
-        lineage, run, era = path.stem.split("-")
-        for v in store.read_json(path):
-            runs[lineage][run[1:]][f"{v['item_id']}@{era}"] = None if v["verdict"] == "insufficient" else v["verdict"]
-            downgrades += bool(v["downgrade"])
-    units = [f"{c['item_id']}@{e}" for c in book["constructs"] for e in r.era_ids]
-    druns = {lin: {} for lin in r.lineages}
-    for path in sorted(ws.root.glob("run/deductive/scores-*.json")):
-        _, lineage, run = path.stem.split("-")
-        druns[lineage][run[1:]] = {s["facet"]: s["score"] for s in store.read_json(path)["scores"]}
-    arms = {"inductive": agreement.arm(runs, units, "nominal"),
-            "deductive": agreement.arm(druns, extract.FACETS, "ordinal")}
-    for name, arm in arms.items():
-        if results["agreement"][name]["alpha"] != arm.alpha:
-            out.append(f"{name} alpha {results['agreement'][name]['alpha']} != recomputed {arm.alpha}")
-        if arm.alpha is not None and f"{arm.alpha:.3f}" not in report:
-            out.append(f"{name} alpha {arm.alpha:.3f} missing from report.md")
-    if results["agreement"]["downgrades"] != downgrades:
-        out.append("downgrade count differs")
-
-    agree = store.read_json(ws.path("run/agreement.json"))
-    inst = ipip.load_instrument()
-    self_report = ipip.score(ipip.parse_responses(ws.path("sealed/ipip-120.csv").read_text(), inst), inst)
-    domains = unmask.domain_comparison(unmask.deductive_domains(agree["deductive_collapsed"], inst), self_report)
-    if results["deductive_vs_ipip"]["domains"] != json.loads(json.dumps(domains["domains"])):
-        out.append("deductive-vs-IPIP domain rows differ")
-    coders = sorted(p.stem.removeprefix("codes-") for p in ws.root.glob("run/crosswalk/codes-*.json"))
-    codes = {c: store.read_json(ws.path(f"run/crosswalk/codes-{c}.json")) for c in coders}
-    supported = {cid for cid, eras in agree["construct_status"].items() if "supported" in eras.values()}
-    eligible = supported if agree["inductive"]["verdict"] in unmask.REPORTABLE else set()
-    preds = list(seal.predictions(ws.path("sealed/self-prediction.md").read_text()))
-    rates = unmask.prediction_rates(codes, preds, eligible)
-    for key in ("predictions_matched_rate", "supported_constructs_matched_rate", "coder_agreement"):
-        if results["predictions"][key] != rates[key]:
-            out.append(f"{key} differs")
-        if rates[key] is not None and f"{rates[key]:.0%}" not in report:
-            out.append(f"{key} {rates[key]:.0%} missing from report.md")
-    return out
+    return out + compare(store.read_json(ws.path("report/results.json")), report_md, expected(ws))
 
 
 if __name__ == "__main__":

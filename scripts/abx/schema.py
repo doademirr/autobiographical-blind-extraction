@@ -45,9 +45,9 @@ def errors(value, schema: dict, where: str = "$") -> list[str]:
         if not any(_is_type(value, n) for n in names):
             return [f"{where}: expected {expected}, got {type(value).__name__}"]
     if "const" in schema and value != schema["const"]:
-        out.append(f"{where}: expected {schema['const']!r}")
+        out.append(f"{where}: not the required constant")
     if "enum" in schema and value not in schema["enum"]:
-        out.append(f"{where}: {value!r} not in {schema['enum']}")
+        out.append(f"{where}: not one of the allowed values")
     if isinstance(value, str):
         if len(value) < schema.get("minLength", 0):
             out.append(f"{where}: shorter than {schema['minLength']}")
@@ -74,7 +74,7 @@ def errors(value, schema: dict, where: str = "$") -> list[str]:
             if key not in value:
                 out.append(f"{where}: missing {key!r}")
         if schema.get("additionalProperties") is False:
-            out += [f"{where}: unexpected field {k!r}" for k in value if k not in props]
+            out += [f"{where}: unexpected field" for k in value if k not in props]
         for key, sub in props.items():
             if key in value:
                 out += errors(value[key], sub, f"{where}.{key}")

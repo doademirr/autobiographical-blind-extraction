@@ -7,6 +7,7 @@ verdicts, run-to-run drift, insufficient facets, and prediction matches.
 
 import hashlib
 import json
+import os
 import re
 
 ROLE_LINE = re.compile(r"^# abx-role: ([a-z_]+)", re.M)
@@ -116,7 +117,8 @@ def scorer(prompt, lineage, occurrence):
             if occurrence == 1 and h(f, "run") % 5 == 0:
                 score -= 1
             score = max(1, min(7, score))
-        scores.append({"facet": f, "score": score, "cited_sentence_ids": cited[f][:12]})
+        stray = ["s99999"] if os.environ.get("ABX_FAKE_STRAY_CITATION") and score is not None else []
+        scores.append({"facet": f, "score": score, "cited_sentence_ids": (cited[f] + stray)[:12]})
     return {"scores": scores}
 
 

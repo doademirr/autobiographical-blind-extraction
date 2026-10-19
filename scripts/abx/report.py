@@ -1,9 +1,17 @@
 """`report.md` from `results.json`. Formatting only: every number arrives already computed."""
 
+from .agreement import MIN_PAIRED, REPORT, TENTATIVE
+
+__all__ = ["render"]
+
 DOMAIN_NAMES = {"N": "Neuroticism", "E": "Extraversion", "O": "Openness", "A": "Agreeableness",
                 "C": "Conscientiousness"}
-VERDICT_TEXT = {"report": "reportable (α ≥ .80)", "tentative": "tentative (.667 ≤ α < .80)",
-                "not_reportable": "not reportable"}
+VERDICT_TEXT = {"report": f"reportable (α ≥ {REPORT:.2f})",
+                "tentative": f"tentative ({TENTATIVE:.3f} ≤ α < {REPORT:.2f})", "not_reportable": "not reportable"}
+REASON_TEXT = {"no_pairable_unit": "no unit has values from both lineages",
+               "no_variation": "the ratings do not vary, so agreement is undefined",
+               "fewer_lineages": "fewer than two lineages rated",
+               "low_pairing": f"fewer than {MIN_PAIRED:.0%} of units carry a value from both lineages"}
 
 
 def num(value, digits: int = 3) -> str:
@@ -19,7 +27,7 @@ def _arm(name: str, arm: dict) -> list[str]:
     lines = [f"- **{name}** ({arm['metric']}, {arm['units']} units): α = {num(arm['alpha'])}, "
              f"{VERDICT_TEXT[arm['verdict']]}."]
     if arm["reason"]:
-        lines.append(f"  - Undefined: {arm['reason']}.")
+        lines.append(f"  - Undefined: {REASON_TEXT.get(arm['reason'], arm['reason'])}.")
     lines.append(f"  - Units with both lineages: {pct(arm['paired_fraction'])}; raw agreement on them: "
                  f"{pct(arm['raw_agreement'])}; missing: {pct(arm['missing_rate'])}; "
                  f"stability α within lineage: {stab}.")
@@ -74,7 +82,7 @@ def render(r: dict) -> str:
         out.append(f"  - {pid}: {outcome}")
     if p["descriptive_matches"]:
         out.append(f"- Descriptive only (matches to constructs that are not supported): "
-                   f"{', '.join(p['descriptive_matches'])}.")
+                   f"{', '.join(m['prediction_id'] + '~' + m['construct_id'] for m in p['descriptive_matches'])}.")
     d = r["deductive_vs_ipip"]
     out += ["", "## Observer estimate vs your IPIP-NEO-120", "",
             "The observer estimate covers the whole record; your questionnaire describes you now. "
