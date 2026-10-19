@@ -8,13 +8,15 @@ scoring -> agreement by script -> integrity audit when agreement is very high
 
 import hashlib
 import re
+from collections.abc import Mapping
 from dataclasses import dataclass
+from types import MappingProxyType
 from typing import NamedTuple
 
 from . import agreement, artifacts, config, invoke, ipip, lifecycle, prompts, qualify, store
 from .errors import AbxError, IntegrityError
 
-__all__ = [
+__all__ = ["STAGE",
     "RaterKey",
     "Ratings",
     "Unit",
@@ -50,10 +52,10 @@ class Context:
 
     ws: store.Workspace
     cfg: config.Config
-    eras: tuple[dict, ...]
-    sentences: dict[str, dict]
-    seg_index: dict[str, int]
-    kept: dict[str, frozenset[str]]
+    eras: tuple[Mapping, ...]
+    sentences: Mapping[str, dict]
+    seg_index: Mapping[str, int]
+    kept: Mapping[str, frozenset[str]]
     facets: tuple[str, ...]
 
     @property
@@ -70,10 +72,11 @@ def _context(ws: store.Workspace) -> Context:
     eras = tuple(store.read_json(ws.path("prepare/eras.json"))["eras"])
     kept = {e["id"]: frozenset(sid for sid, lab in store.read_json(ws.path(f"prepare/zoning/{e['id']}.json")).items()
                                if lab == "keep") for e in eras}
-    return Context(ws=ws, cfg=config.load(ws), eras=eras,
-                   sentences={s["id"]: s for s in store.read_json(ws.path("prepare/sentences.json"))},
-                   seg_index={s["id"]: i for i, s in enumerate(store.read_json(ws.path("prepare/segments.json")))},
-                   kept=kept, facets=tuple(ipip.load_instrument(ws)["facets"]))
+    return Context(ws=ws, cfg=config.load(ws), eras=tuple(MappingProxyType(e) for e in eras),
+                   sentences=MappingProxyType({s["id"]: s for s in store.read_json(ws.path("prepare/sentences.json"))}),
+                   seg_index=MappingProxyType({s["id"]: i for i, s in
+                                               enumerate(store.read_json(ws.path("prepare/segments.json")))}),
+                   kept=MappingProxyType(kept), facets=tuple(ipip.load_instrument(ws)["facets"]))
 
 
 def _cited(node, keys: tuple[str, ...]) -> list[str]:
@@ -290,20 +293,21 @@ def _deductive(c: Context) -> None:
 class Ratings:
     """The blind ratings as named records, read from the run files; the report's recomputation uses this too."""
 
-    verdicts: dict[RaterKey, list[dict]]
-    scores: dict[RaterKey, dict[str, int | None]]
+    verdicts: Mapping[RaterKey, tuple[dict, ...]]
+    scores: Mapping[RaterKey, Mapping[str, int | None]]
 
 
 def load_ratings(ws: store.Workspace) -> Ratings:
     verdicts = {}
     for path in sorted(ws.root.glob("run/recode/*.json")):
         rec = store.read_json(path)
-        verdicts[RaterKey(rec["lineage"], rec["run"], rec["era"])] = rec["verdicts"]
+        verdicts[RaterKey(rec["lineage"], rec["run"], rec["era"])] = tuple(rec["verdicts"])
     scores = {}
     for path in sorted(ws.root.glob("run/deductive/scores-*.json")):
         rec = store.read_json(path)
-        scores[RaterKey(rec["lineage"], rec["run"], None)] = {s["facet"]: s["score"] for s in rec["scores"]}
-    return Ratings(verdicts, scores)
+        scores[RaterKey(rec["lineage"], rec["run"], None)] = MappingProxyType({s["facet"]: s["score"]
+                                                                               for s in rec["scores"]})
+    return Ratings(MappingProxyType(verdicts), MappingProxyType(scores))
 
 
 def arms(ratings: Ratings, book: dict, era_ids: list[str],
@@ -368,13 +372,11 @@ def integrity_audit(c: Context) -> dict:
     def events():
         def tool_events(path):
             rec = store.read_json(path)
-            try:
-                evs = [invoke.Event(str(e["type"]), str(e["detail"]), tuple(e["tools"]), tuple(e["mcp_servers"]),
-                                    bool(e["registry_present"])) for e in rec["events"]]
-            except (KeyError, TypeError):
+            evs = invoke.decode_events(rec.get("events"))
+            if evs is None:
                 return ["unreadable"]
-            return invoke.audit_events(rec["lineage"], evs) or ([] if invoke.succeeded(rec["lineage"], evs)
-                                                               else ["no_terminal_success"])
+            state = invoke.outcome(rec["lineage"], rec.get("exit"), evs)
+            return [] if state == "success" else [state]
 
         hits = sum(1 for p in records if tool_events(p))
         incidents = sum(1 for p in sorted(c.ws.root.glob("run/incidents/**/*.json"))
@@ -404,7 +406,7 @@ def integrity_audit(c: Context) -> dict:
 
 
 def extract(ws: store.Workspace) -> dict:
-    gens = lifecycle.enter(ws, "extract")
+    gens = lifecycle.enter(ws, STAGE)
     c = _context(ws)
     if "B" not in gens:
         _discovery(c)
@@ -428,4 +430,5 @@ def extract(ws: store.Workspace) -> dict:
     return result
 
 
-STAGE = lifecycle.Stage("extract", 4, "the blind engine, to generation C", extract, estimate)
+STAGE = lifecycle.Stage("extract", 4, "the blind engine, to generation C", extract, estimate, needs="A",
+                        closed_after="E")

@@ -13,10 +13,11 @@ import secrets
 import shutil
 import sys
 import tempfile
+from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
 
-from . import artifacts, capture, invoke, store
+from . import artifacts, capture, invoke, prompts, store
 from .config import Config, retained
 from .errors import IsolationError, UsageError
 
@@ -159,24 +160,44 @@ def _scripted(item: dict, call_id: str) -> dict:
     return {"id": f"item_{call_id}", "call_id": call_id, "status": "completed", **item}
 
 
-def _require(lineage: str, problems: list[str]) -> None:
+Recorder = Callable[[str, Run, list[str]], None]
+NO_CANARY = "positive control did not return its canary; the probe cannot see access"
+
+
+def _check(lineage: str, name: str, run: Run, problems: list[str], record: Recorder | None) -> None:
+    """Record one capture's sanitized evidence, pass or fail, then fail closed on any problem."""
+    if record:
+        record(f"{lineage}-{name}", run, problems)
     if problems:
         raise _fail(lineage, "; ".join(problems))
 
 
-def qualify_codex(cfg: Config, canary: Canary, prompt: str) -> dict:
+def evidence_recorder(ws: store.Workspace) -> Recorder:
+    """Write each capture's evidence (counts, codes and problems, never request or reply text)."""
+    def record(name: str, run: Run, problems: list[str]) -> None:
+        traffic: dict[str, int] = {}
+        for t in run.evidence.traffic:
+            traffic[t.outcome] = traffic.get(t.outcome, 0) + 1
+        store.write_json(ws.path(f"run/qualification-evidence/{name}.json"), {
+            "check": name, "passed": not problems, "problems": problems, "exit": run.code,
+            "requests": len(run.evidence.requests_json), "traffic": traffic,
+            "tool_events": invoke.audit_events(name.split("-")[0], run.result.events)})
+    return record
+
+
+def qualify_codex(cfg: Config, canary: Canary, prompt: str, record: Recorder | None = None) -> dict:
     lin = cfg.lineage("codex")
     pinned = retained(lin)
     baseline = _run_codex(cfg, prompt)
-    _require("codex", _locked_problems("codex", cfg, baseline, canary, None))
+    _check("codex", "baseline", baseline, _locked_problems("codex", cfg, baseline, canary, None), record)
     tools = tuple(sorted(capture.codex_tools(baseline.evidence.requests[0])))
     results = {}
     for n, tool in enumerate(tools):
         call, result = pinned[tool]
         item = json.loads(json.dumps(call).replace("{canary}", str(canary.path)))
         run = _run_codex(cfg, prompt, _scripted(item, f"call_q{n}"))
-        _require("codex", [f"{tool}: {p}" for p in
-                           _locked_problems("codex", cfg, run, canary, (f"call_q{n}", result), baseline=tools)])
+        _check("codex", f"retained-{tool}", run, [f"{tool}: {p}" for p in _locked_problems(
+            "codex", cfg, run, canary, (f"call_q{n}", result), baseline=tools)], record)
         results[tool] = result
     file_js = f'const r = await tools.exec_command({{cmd: "cat {canary.path}"}}); text(JSON.stringify(r));'
     mcp_js = "const r = await tools.mcp__abxcanary__read_canary({}); text(JSON.stringify(r));"
@@ -187,19 +208,19 @@ def qualify_codex(cfg: Config, canary: Canary, prompt: str) -> dict:
                                    ("mcp", mcp_js, ["-c", mcp_server], canary.mcp_token)):
         item = _scripted({"type": "custom_tool_call", "name": "exec", "input": js}, f"call_pc_{name}")
         run = _run_codex(cfg, prompt, item, argv=invoke.codex_argv(lin, locked=False), extra=extra)
-        if token not in capture.tool_text(run.evidence.requests, f"call_pc_{name}"):
-            raise _fail("codex", f"positive control ({name}) did not return its canary; the probe cannot see access")
+        seen = token in capture.tool_text(run.evidence.requests, f"call_pc_{name}")
+        _check("codex", f"control-{name}", run, [] if seen else [f"{name} {NO_CANARY}"], record)
         controls[name] = "canary returned"
     return {"registry": list(tools), "retained_results": results, "positive_controls": controls}
 
 
-def qualify_claude(cfg: Config, canary: Canary, prompt: str) -> dict:
+def qualify_claude(cfg: Config, canary: Canary, prompt: str, record: Recorder | None = None) -> dict:
     lin = cfg.lineage("claude")
     baseline = _run_claude(cfg, prompt, None)
-    _require("claude", _locked_problems("claude", cfg, baseline, canary, None))
+    _check("claude", "baseline", baseline, _locked_problems("claude", cfg, baseline, canary, None), record)
     scripted = _run_claude(cfg, prompt, ("Read", {"file_path": str(canary.path)}))
-    _require("claude", [f"Read: {p}" for p in
-                        _locked_problems("claude", cfg, scripted, canary, (CLAUDE_CALL_ID, lin.locked_read_result))])
+    _check("claude", "retained-Read", scripted, [f"Read: {p}" for p in _locked_problems(
+        "claude", cfg, scripted, canary, (CLAUDE_CALL_ID, lin.locked_read_result))], record)
     mcp_config = json.dumps({"mcpServers": {"abxcanary": {"command": sys.executable,
                                                           "args": [str(MCP_SCRIPT), canary.mcp_token]}}})
     controls = {}
@@ -210,8 +231,8 @@ def qualify_claude(cfg: Config, canary: Canary, prompt: str) -> dict:
              invoke.claude_argv(lin, "", ("--mcp-config", mcp_config, "--allowedTools", "mcp__abxcanary__read_canary")),
              canary.mcp_token)):
         run = _run_claude(cfg, prompt, tool, argv=argv)
-        if token not in capture.tool_text(run.evidence.requests, CLAUDE_CALL_ID):
-            raise _fail("claude", f"positive control ({name}) did not return its canary; the probe cannot see access")
+        seen = token in capture.tool_text(run.evidence.requests, CLAUDE_CALL_ID)
+        _check("claude", f"control-{name}", run, [] if seen else [f"{name} {NO_CANARY}"], record)
         controls[name] = "canary returned"
     return {"registry": [], "retained_results": {"Read": lin.locked_read_result}, "positive_controls": controls}
 
@@ -233,17 +254,18 @@ def leak_control(ws: store.Workspace, cfg: Config, lineage: str) -> dict:
     out = invoke.probe(ws, cfg, lineage, cfg.canaries, mode="control")
     if out.verdict != "leak":
         raise IsolationError(f"{lineage} leak-probe control failed ({out.reason}); the probe cannot detect a leak")
-    return out.record
+    return dict(out.record)
 
 
 def qualify(ws: store.Workspace, cfg: Config, out: str = invoke.QUALIFICATION) -> dict:
-    prompt = artifacts.resolver(ws)("template:probe")
+    prompt = prompts.assemble("probe", {"schema": "schema:probe"}, artifacts.resolver(ws)).text
+    record = evidence_recorder(ws)
     result = {}
     with Canary() as canary:
         for lineage, check in (("claude", qualify_claude), ("codex", qualify_codex)):
-            evidence = check(cfg, canary, prompt)
+            evidence = check(cfg, canary, prompt, record)
             probe = leak_probe(ws, cfg, lineage, canary)
-            probe_record = probe.record
+            probe_record = dict(probe.record)
             resolved = probe.model if lineage == "claude" else cfg.lineage(lineage).model
             if not resolved:
                 raise _fail(lineage, "no resolved model")

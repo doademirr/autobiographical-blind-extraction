@@ -128,6 +128,8 @@ def validate_eras(eras: list[dict], segments: list[Segment]) -> None:
     seen: list[str] = []
     ids = set()
     for era in eras:
+        if not isinstance(era, dict):
+            raise UsageError("eras.json: every era is an object")
         for key in ("id", "label", "date_range", "segment_ids"):
             if key not in era:
                 raise UsageError(f"eras.json: era missing {key!r}")

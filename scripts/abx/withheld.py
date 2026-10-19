@@ -8,9 +8,10 @@ from dataclasses import dataclass, field
 
 from . import store
 
-__all__ = ["MIN_REMOVED_LEN", "Withheld", "load"]
+__all__ = ["MIN_REMOVED_LEN", "REMOVED", "Withheld", "load"]
 
 MIN_REMOVED_LEN = 40
+REMOVED = "prepare/removed-sentences.json"
 _PREDICTION_TEXT = re.compile(r"^P\d{1,3}:[ \t]*(\S.*)$", re.M)
 _ANSWER = re.compile(r"^i\d{3},[1-5]$")
 
@@ -28,7 +29,7 @@ def load(ws: store.Workspace) -> Withheld:
     redactions = ws.path("prepare/redactions.json")
     if redactions.exists():
         w.redacted_names = list(store.read_json(redactions)["names"])
-    removed = ws.path("prepare/zoning/removed.json")
+    removed = ws.path(REMOVED)
     if removed.exists():
         w.removed_sentences = store.read_json(removed)
     prediction = ws.path("sealed/self-prediction.md")

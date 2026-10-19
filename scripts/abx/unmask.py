@@ -8,8 +8,16 @@ from statistics import median
 
 from . import artifacts, config, invoke, ipip, lifecycle, report, seal, store
 
-__all__ = ["REPORTABLE", "compute", "deductive_domains", "domain_comparison", "estimate", "prediction_rates",
-           "unmask"]
+__all__ = [
+    "REPORTABLE",
+    "STAGE",
+    "compute",
+    "deductive_domains",
+    "domain_comparison",
+    "estimate",
+    "prediction_rates",
+    "unmask",
+]
 
 REPORTABLE = {"report", "tentative"}
 CODE_RANK = {"none": 0, "partial": 1, "match": 2}
@@ -132,7 +140,7 @@ def compute(ws: store.Workspace, cfg: config.Config) -> dict:
 
 
 def unmask(ws: store.Workspace) -> dict:
-    gens = lifecycle.enter(ws, "unmask")
+    gens = lifecycle.enter(ws, STAGE)
     cfg = config.load(ws)
     if "D" not in gens:
         book = store.read_json(ws.path("run/codebook/codebook.json"))
@@ -147,4 +155,5 @@ def unmask(ws: store.Workspace) -> dict:
     return results
 
 
-STAGE = lifecycle.Stage("unmask", 5, "crosswalk, IPIP reveal, report", unmask, estimate)
+STAGE = lifecycle.Stage("unmask", 5, "crosswalk, IPIP reveal, report", unmask, estimate, needs="C",
+                        closed_after="E")

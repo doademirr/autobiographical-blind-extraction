@@ -2,7 +2,7 @@
 
 from . import lifecycle, store
 
-__all__ = ["status"]
+__all__ = ["STAGE", "status"]
 
 
 def status(ws: store.Workspace) -> dict:

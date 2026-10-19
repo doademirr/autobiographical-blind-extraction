@@ -9,10 +9,10 @@ import shutil
 from . import config, invoke, ipip, lifecycle, prepare, qualify, store
 from .errors import IntegrityError, UsageError
 
-__all__ = ["estimate", "freeze"]
+__all__ = ["STAGE", "estimate", "freeze"]
 
 GEN_A_FILES = ("config.json", lifecycle.HASHES, ipip.FROZEN_COPY, invoke.QUALIFICATION_A, "prereg/facets.md",
-               "prepare/redacted.txt",
+               "prepare/redacted.txt", "prepare/offsets.json", "prepare/removed-sentences.json",
                "prepare/segments.json", "prepare/sentences.json", "prepare/eras.json", "prepare/redactions.json",
                "prepare/stats.json", "prepare/receipt.json")
 GEN_A_GLOBS = ("prereg/prompts/*.md", "prereg/schemas/*.json", "prepare/substrate/*.md", "prepare/chunks/*.txt",
@@ -25,7 +25,7 @@ def estimate(ws: store.Workspace) -> lifecycle.Preflight:
 
 
 def freeze(ws: store.Workspace) -> dict:
-    lifecycle.enter(ws, "freeze")
+    lifecycle.enter(ws, STAGE)
     stale = prepare.receipt_problems(ws)
     if stale:
         raise UsageError(f"preparation is not current ({', '.join(stale[:3])}); rerun `prepare`")
@@ -43,4 +43,4 @@ def freeze(ws: store.Workspace) -> dict:
     return {"generation": "A", "artifacts": len(entry["artifacts"]), "requalified": requalified}
 
 
-STAGE = lifecycle.Stage("freeze", 3, "pre-register generation A", freeze, estimate)
+STAGE = lifecycle.Stage("freeze", 3, "pre-register generation A", freeze, estimate, closed_after="A")

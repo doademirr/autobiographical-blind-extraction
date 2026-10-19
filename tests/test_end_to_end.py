@@ -99,6 +99,14 @@ class EndToEndTest(unittest.TestCase):
         found = recompute.compare(bad, self.report, exp)
         for field in ("raw_agreement", "missing_rate", "deductive_vs_ipip.compared", "coder_agreement", "corpus"):
             self.assertTrue(any(field in f for f in found), (field, found))
+        audit = self.results["agreement"]["integrity_audit"]
+        if audit:
+            bad_audit = json.loads(json.dumps(self.results))
+            bad_audit["agreement"]["integrity_audit"]["events"]["counts"]["records"] = 999
+            self.assertTrue(recompute.compare(bad_audit, self.report, exp))
+            count = audit["events"]["counts"]["records"]
+            tampered = self.report.replace(f"{count} call records", "999 call records")
+            self.assertTrue(recompute.compare(self.results, tampered, exp))
         alpha = f"{self.results['agreement']['inductive']['alpha']:.3f}"
         self.assertTrue(recompute.compare(self.results, self.report.replace(alpha, "0.000"), exp))
 

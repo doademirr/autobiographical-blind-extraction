@@ -43,7 +43,6 @@
     ],
     "additionalProperties": false
    },
-   "minItems": 1,
    "maxItems": 80
   },
   "appendix": {

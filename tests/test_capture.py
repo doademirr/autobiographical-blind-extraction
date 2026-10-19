@@ -50,6 +50,12 @@ class CaptureServerTest(unittest.TestCase):
             cm.exception.close()
         self.assertEqual([t.outcome for t in cap.evidence.traffic], ["refused", "refused"])
 
+    def test_malformed_captured_requests_do_not_crash(self):
+        weird = ({"input": None, "messages": None}, {"messages": [None, {"content": None}], "input": [None]})
+        self.assertEqual(capture.tool_text(weird, "x"), "")
+        self.assertEqual(capture.claude_tools({"tools": [None]}), ["?"])
+        self.assertEqual(capture.codex_tools({"input": [{"type": "additional_tools", "tools": [None]}]}), ["?"])
+
     def test_tool_list_walks_namespaces(self):
         request = {"input": [{"type": "additional_tools", "tools": [
             {"type": "namespace", "name": "functions", "tools": [{"type": "custom", "name": "exec"},

@@ -17,6 +17,9 @@ failures:
   ABX_FAKE_NO_INIT      (claude) omit the init event
   ABX_FAKE_NO_MESSAGE   finish successfully without a final message
   ABX_FAKE_CROSS_FACET  the deductive scorer scores a facet with no evidence, citing another facet's
+  ABX_FAKE_ERROR_NOTICE (codex) emit a top-level error notice with this message
+  ABX_FAKE_READ_INSTRUCTIONS  repeat any CLAUDE.md / AGENTS.md found in the working directory, as an
+                        unlocked CLI would load it
 """
 
 import hashlib
@@ -91,7 +94,10 @@ def main(lineage: str) -> int:
             f.write(json.dumps({"lineage": lineage, "argv": argv, "prompt": prompt}) + "\n")
     fail_after = os.environ.get("ABX_FAKE_FAIL_AFTER")
     failing = bool(os.environ.get("ABX_FAKE_FAIL")) or (fail_after is not None and calls >= int(fail_after))
-    if "ABX_FAKE_RAW" in os.environ:
+    if os.environ.get("ABX_FAKE_READ_INSTRUCTIONS") and "--setting-sources" not in argv and "--disable" not in argv:
+        planted = [Path(n).read_text() for n in ("CLAUDE.md", "AGENTS.md") if Path(n).exists()]
+        text = json.dumps({"answer": " ".join(planted) or "NONE"})
+    elif "ABX_FAKE_RAW" in os.environ:
         text = os.environ["ABX_FAKE_RAW"]
     else:
         text = json.dumps(roles.respond(prompt, lineage, occurrence, os.environ.get("ABX_FAKE_LEAK")))
@@ -115,6 +121,8 @@ def main(lineage: str) -> int:
         events += [{"type": "thread.started", "thread_id": "t"}, {"type": "turn.started"},
                    {"type": "item.completed", "item": {"id": "i0", "type": "error",
                                                        "message": "Code Mode is unavailable"}}]
+        if os.environ.get("ABX_FAKE_ERROR_NOTICE"):
+            events.append({"type": "error", "message": os.environ["ABX_FAKE_ERROR_NOTICE"]})
         if os.environ.get("ABX_FAKE_PRELUDE"):
             events.append({"type": "item.completed", "item": {"id": "ip", "type": "agent_message",
                                                               "text": os.environ["ABX_FAKE_PRELUDE"]}})

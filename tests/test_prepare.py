@@ -95,6 +95,26 @@ class PrepareTest(unittest.TestCase):
         self.assertEqual(self.fw.prompts_logged(), [])
         self.assertFalse(self.ws.path(invoke.QUALIFICATION).exists())
 
+    def test_malformed_review_files_are_usage_errors(self):
+        prepare.prepare(self.ws)
+        eras = store.read_json(FIXTURE / "eras.json")
+        for redactions, era_list in (({"approved": True, "names": {"Collins": None}}, eras),
+                                     (store.read_json(FIXTURE / "redactions.json"), {**eras, "eras": [None]})):
+            store.write_json(self.ws.path("prepare/redactions.json"), redactions)
+            store.write_json(self.ws.path("prepare/eras.json"), era_list)
+            with self.subTest(redactions=redactions), self.assertRaises(UsageError):
+                prepare.prepare(self.ws)
+
+    def test_an_era_named_like_a_prepare_file_does_not_collide(self):
+        prepare.prepare(self.ws)
+        eras = store.read_json(FIXTURE / "eras.json")
+        eras["eras"][0]["id"] = "removed"
+        store.write_json(self.ws.path("prepare/eras.json"), eras)
+        store.write_json(self.ws.path("prepare/redactions.json"), store.read_json(FIXTURE / "redactions.json"))
+        prepare.prepare(self.ws)
+        self.assertIsInstance(store.read_json(self.ws.path("prepare/zoning/removed.json")), dict)
+        self.assertIsInstance(store.read_json(self.ws.path("prepare/removed-sentences.json")), list)
+
     def test_era_ids_are_checked(self):
         prepare.prepare(self.ws)
         eras = store.read_json(FIXTURE / "eras.json")
@@ -128,7 +148,10 @@ class PrepareTest(unittest.TestCase):
         q = store.read_json(self.ws.path(invoke.QUALIFICATION))
         self.assertEqual(q["codex"]["evidence"]["registry"], sorted(init.CODEX_RETAINED))
         self.assertEqual(q["claude"]["resolved_model"], "fake-claude-1")
-        self.assertEqual(q["claude"]["evidence"]["leak_probe"]["status"], "success")
+        self.assertEqual(q["claude"]["evidence"]["leak_probe"]["verdict"], "clean")
+        evidence = sorted(p.name for p in self.ws.root.glob("run/qualification-evidence/*.json"))
+        self.assertIn("codex-retained-functions.exec.json", evidence)
+        self.assertIn("claude-control-mcp.json", evidence)
 
 
 class LifecycleTest(unittest.TestCase):
@@ -277,6 +300,24 @@ class QualifyFailureTest(unittest.TestCase):
                     {"ABX_FAKE_THINKING": "The profile says ABXPROFILECANARY."}):
             with self.subTest(env=env), self.assertRaises(IsolationError):
                 self._qualify(env)
+
+    def test_canary_in_a_codex_error_notice_is_a_leak(self):
+        with self.assertRaises(IsolationError):
+            self._qualify({"ABX_FAKE_ERROR_NOTICE": "reconnecting for ABXPROFILECANARY"})
+
+    def test_failure_before_any_stream_is_exit_2_not_a_leak(self):
+        with self.assertRaises(UsageError):
+            self._qualify({"ABX_FAKE_NO_INIT": "1", "ABX_FAKE_FAIL": "1"})
+
+    def test_leak_control_needs_success_and_its_own_planted_canary(self):
+        with mock.patch.dict(os.environ, {"ABX_FAKE_READ_INSTRUCTIONS": "1"}):
+            for lineage in ("claude", "codex"):
+                self.assertEqual(qualify.leak_control(self.ws, self.fw.config, lineage)["verdict"], "leak")
+        with mock.patch.dict(os.environ, {"ABX_FAKE_READ_INSTRUCTIONS": "1", "ABX_FAKE_FAIL": "1"}), \
+                self.assertRaises(IsolationError):
+            qualify.leak_control(self.ws, self.fw.config, "claude")
+        with mock.patch.dict(os.environ, {"ABX_FAKE_LEAK": "ABXPROFILECANARY"}), self.assertRaises(IsolationError):
+            qualify.leak_control(self.ws, self.fw.config, "claude")
 
     def test_probe_without_init_or_final_message_never_passes(self):
         with self.assertRaises(IsolationError):

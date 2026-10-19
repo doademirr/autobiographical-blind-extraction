@@ -13,7 +13,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "scripts"))
 
-from abx import agreement, config, extract, invoke, ipip, report, seal, store, unmask
+from abx import agreement, config, extract, invoke, ipip, prompts, report, seal, store, unmask
 from abx.errors import AbxError
 
 __all__ = ["compare", "expected", "problems"]
@@ -36,6 +36,41 @@ def _corpus(ws: store.Workspace) -> dict:
                             "removed": sum(1 for lab in labels.values() if lab == "remove"),
                             "band": "normal" if ratio >= 0.5 else "thin" if ratio >= 0.25 else "stop"}
     return stats
+
+
+def _audit(ws: store.Workspace, eras: list[str]) -> dict:
+    """The integrity audit as it must have run inside `extract`, before generation C: over the prepare and
+    extract call records, with generations A and B frozen, against the frozen qualification baseline."""
+    records = [p for stage in ("prepare", "extract") for p in sorted(ws.root.glob(f"run/calls/{stage}/**/*.json"))]
+    bad_events = outside = 0
+    for path in records:
+        rec = store.read_json(path)
+        evs = invoke.decode_events(rec.get("events"))
+        if evs is None or invoke.outcome(rec["lineage"], rec.get("exit"), evs) != "success":
+            bad_events += 1
+        rater = (rec["lineage"], rec["run"]) if rec["run"] is not None else None
+        try:
+            prompts.check_allowlist(rec["role"], list(rec["input_artifacts"]), rater=rater, era=rec["era"],
+                                    era_order=eras)
+        except AbxError:
+            outside += 1
+    incidents = sum(1 for stage in ("prepare", "extract") for p in ws.root.glob(f"run/incidents/{stage}/**/*.json")
+                    if store.read_json(p)["kind"] == "tool_event")
+    fresh = store.read_json(ws.path(extract.REQUALIFICATION_AUDIT))
+    baseline = store.read_json(ws.path(invoke.QUALIFICATION_A))
+    keys = ("cli_version", "invocation_hash", "config_hash", "resolved_model")
+    moved = sum(1 for lin, q in fresh.items() if any(q[k] != baseline[lin][k] for k in keys))
+    clean = not bad_events and not incidents
+    return {
+        "requalify": {"ok": not moved, "code": "fingerprint_moved" if moved else "requalified",
+                      "counts": {"lineages_moved": moved}},
+        "events": {"ok": clean, "code": "clean" if clean else "tool_events",
+                   "counts": {"records": len(records), "records_with_tool_events": bad_events,
+                              "tool_event_incidents": incidents}},
+        "allowlist": {"ok": not outside, "code": "within_allowlists" if not outside else "outside_allowlist",
+                      "counts": {"records": len(records), "outside": outside}},
+        "manifest": {"ok": True, "code": "verified", "counts": {"generations": 2}},
+    }
 
 
 def _arm(arm: agreement.ArmResult) -> dict:
@@ -63,14 +98,14 @@ def expected(ws: store.Workspace) -> dict:
     supported = {cid for cid, by_era in status.items() if "supported" in by_era.values()}
     codes = {c: store.read_json(ws.path(f"run/crosswalk/codes-{c}.json"))["codes"] for c in cfg.crosswalk_coders}
     preds = list(seal.predictions(ws.path("sealed/self-prediction.md").read_text()))
-    stored_audit = store.read_json(ws.path("run/agreement.json")).get("integrity_audit")
+    audit = _audit(ws, eras) if inductive.integrity_audit_due or deductive_arm.integrity_audit_due else None
     return {
         "corpus": _corpus(ws),
         "fingerprints": {lin: {k: v for k, v in q.items() if k != "evidence"}
                          for lin, q in store.read_json(ws.path(invoke.QUALIFICATION_A)).items()},
         "agreement": {"inductive": _arm(inductive), "deductive": _arm(deductive_arm),
                       "downgrades": sum(1 for rows in ratings.verdicts.values() for v in rows if v["downgrade"]),
-                      "integrity_audit": stored_audit},
+                      "integrity_audit": audit},
         "constructs": [{"id": c["id"], "name": c["name"], "definition": c["definition"], "lineages": c["lineages"],
                         "status": status[c["id"]]} for c in book["constructs"]],
         "predictions": unmask.prediction_rates(codes, preds, supported if inductive_ok else set())
@@ -113,6 +148,15 @@ def _rows(want: dict) -> list[str]:
                     f"{_pct(a['raw_agreement'])}; missing: {_pct(a['missing_rate'])}; stability α within lineage: "
                     + ", ".join(f"{lin} {_num(v)}" for lin, v in sorted(a["stability"].items())) + ".")
     rows.append(f"rules: {want['agreement']['downgrades']}.")
+    audit = want["agreement"]["integrity_audit"]
+    if audit:
+        ev, al = audit["events"]["counts"], audit["allowlist"]["counts"]
+        rows.append(f"events: {ev['records']} call records audited, none with a tool event" if audit["events"]["ok"]
+                    else f"events: {ev['records_with_tool_events']} call record(s)")
+        rows.append(f"allowlist: {al['records']} call records within their roles' allowlists"
+                    if audit["allowlist"]["ok"] else f"allowlist: {al['outside']} of {al['records']} call records")
+        generations = audit["manifest"]["counts"]["generations"]
+        rows.append(f"manifest: manifest chain verified across {generations} generations")
     eras = list(want["corpus"])
     for c in want["constructs"]:
         rows.append(f"| {c['id']} | {c['name']} | {', '.join(c['lineages'])} | "

@@ -136,7 +136,9 @@ def arm(runs: dict[str, dict[int, dict[Hashable, object]]], units: list[Hashable
         result.stability[lineage] = alpha(
             {r: {u: by_run[r].get(u) for u in units} for r in by_run}, metric
         )[0]
-    if len(lineages) < 2:
+    if not units:
+        result.reason = "no_units"
+    elif len(lineages) < 2:
         result.reason = "fewer_lineages"
     elif paired_fraction < MIN_PAIRED:
         result.reason = "low_pairing"

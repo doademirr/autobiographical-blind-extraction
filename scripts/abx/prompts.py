@@ -5,8 +5,9 @@ its role declares, so every call's provenance is the id list it records.
 """
 
 import re
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass
+from types import MappingProxyType
 
 from . import artifacts, store
 from .errors import IsolationError, UsageError
@@ -24,7 +25,7 @@ _SLOT = re.compile(r"\{\{([a-z_]+)\}\}")
 class Prompt:
     role: str
     text: str
-    artifacts: dict[str, str]  # artifact id -> sha256 of its text
+    artifacts: Mapping[str, str]  # artifact id -> sha256 of its text
 
 
 def check_allowlist(role: str, ids: list[str], rater: tuple[str, int] | None = None,
@@ -71,7 +72,7 @@ def assemble(role: str, slots: dict[str, str], resolve: Callable[[str], str],
     if missing:
         raise UsageError(f"template:{role} has unfilled slots {sorted(missing)}")
     text = _SLOT.sub(lambda m: values[m.group(1)], template)
-    return Prompt(role, text, {aid: store.sha256_text(t) for aid, t in texts.items()})
+    return Prompt(role, text, MappingProxyType({aid: store.sha256_text(t) for aid, t in texts.items()}))
 
 
 def audit(prompt: Prompt, withheld: Withheld, after_blind_results: bool = False) -> None:

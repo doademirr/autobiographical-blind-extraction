@@ -7,12 +7,13 @@ from . import artifacts, config, invoke, ipip, lifecycle, qualify, store, text, 
 from .errors import UsageError
 from .roles import ROLES
 
-__all__ = ["RECEIPT", "estimate", "prepare", "receipt_problems"]
+__all__ = ["RECEIPT", "STAGE", "estimate", "prepare", "receipt_problems"]
 
 RECEIPT = "prepare/receipt.json"
 RECEIPT_INPUTS = ("text/original.txt", "config.json", "prepare/redactions.json", "prepare/eras.json",
                   "prereg/prompts/zoner.md", "prereg/schemas/zoner.json")
-RECEIPT_OUTPUT_GLOBS = ("prepare/redacted.txt", "prepare/segments.json", "prepare/sentences.json", "prepare/stats.json",
+RECEIPT_OUTPUT_GLOBS = ("prepare/redacted.txt", "prepare/offsets.json", "prepare/segments.json",
+                        "prepare/sentences.json", "prepare/stats.json", "prepare/removed-sentences.json",
                         "prepare/substrate/*.md", "prepare/chunks/*.txt", "prepare/zoning/*.json")
 
 REPO = Path(__file__).resolve().parents[2]
@@ -79,13 +80,17 @@ def _zone(ws: store.Workspace, cfg: config.Config, era: dict, sents: list[text.S
 
 
 def prepare(ws: store.Workspace) -> dict:
-    lifecycle.enter(ws, "prepare")
+    lifecycle.enter(ws, STAGE)
     cfg = config.load(ws)
     original = ws.path("text/original.txt").read_text(encoding="utf-8")
     if not _review_files(ws, original):
         return {"status": "review", "next": "approve_review_files"}
-    names = store.read_json(ws.path("prepare/redactions.json"))["names"]
-    eras = store.read_json(ws.path("prepare/eras.json"))["eras"]
+    names = store.read_json(ws.path("prepare/redactions.json")).get("names")
+    if not isinstance(names, dict) or not all(isinstance(k, str) and isinstance(v, str) for k, v in names.items()):
+        raise UsageError("redactions.json: names must map each name to its replacement text")
+    eras = store.read_json(ws.path("prepare/eras.json")).get("eras")
+    if not isinstance(eras, list) or not all(isinstance(e, dict) for e in eras):
+        raise UsageError("eras.json: eras must be a list of era objects")
     redacted, spans = text.redact(original, names)
     segs = text.segment(redacted)
     sents = text.sentences(redacted, segs)
@@ -110,7 +115,7 @@ def _substrate(ws, cfg: config.Config, eras, sents, redacted, labels) -> dict:
     kept = {sid for sid, lab in labels.items() if lab == "keep"}
     kept_text = {redacted[s.start:s.end] for s in sents if s.id in kept}
     removed = [redacted[s.start:s.end] for s in sents if s.id not in kept]
-    store.write_json(ws.path("prepare/zoning/removed.json"),
+    store.write_json(ws.path(withheld.REMOVED),
                      [r for r in removed if len(r) >= withheld.MIN_REMOVED_LEN and r not in kept_text])
     store.write_text_atomic(ws.path("prepare/retrospective.md"), "".join(
         f"[{s.id}] ({labels[s.id]}) {redacted[s.start:s.end]}\n" for s in sents if s.id not in kept))
@@ -156,4 +161,5 @@ def receipt_problems(ws: store.Workspace) -> list[str]:
     return sorted(rel for rel in set(recorded) | set(current) if recorded.get(rel) != current.get(rel))
 
 
-STAGE = lifecycle.Stage("prepare", 1, "redaction and eras review, qualification, zoning", prepare, estimate)
+STAGE = lifecycle.Stage("prepare", 1, "redaction and eras review, qualification, zoning", prepare, estimate,
+                        closed_after="A", verifies_seal=False)

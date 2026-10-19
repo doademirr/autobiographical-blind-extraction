@@ -9,7 +9,9 @@ stops, `Capture.evidence` is the immutable record.
 """
 
 import http.server
+import itertools
 import json
+import queue
 import threading
 import urllib.error
 import urllib.request
@@ -50,26 +52,31 @@ class Evidence:
 
 
 class _Recorder:
-    """The single owner of what handler threads observe."""
+    """Handler threads only post messages; the evidence is assembled once, by the owner, after they finish.
+
+    A request's sequence number (which decides the scripted reply) comes from an atomic counter.
+    """
 
     def __init__(self):
-        self._lock = threading.Lock()
-        self._requests: list[dict] = []
-        self._traffic: list[Traffic] = []
+        self._inbox: queue.SimpleQueue = queue.SimpleQueue()
+        self._sequence = itertools.count(1)
 
     def request(self, req: dict, path: str) -> int:
-        with self._lock:
-            self._requests.append(req)
-            self._traffic.append(Traffic("POST", path, "captured"))
-            return len(self._requests)
+        n = next(self._sequence)
+        self._inbox.put(("request", n, req, Traffic("POST", path, "captured")))
+        return n
 
     def traffic(self, item: Traffic) -> None:
-        with self._lock:
-            self._traffic.append(item)
+        self._inbox.put(("traffic", 0, None, item))
 
     def finish(self) -> Evidence:
-        with self._lock:
-            return Evidence.of(self._requests, self._traffic)
+        requests, traffic = [], []
+        while not self._inbox.empty():
+            kind, n, req, item = self._inbox.get()
+            traffic.append(item)
+            if kind == "request":
+                requests.append((n, req))
+        return Evidence.of([req for _, req in sorted(requests, key=lambda r: r[0])], traffic)
 
 
 def _sse(events: list[dict]) -> bytes:
@@ -200,14 +207,17 @@ class Capture:
 
 def codex_tools(request: dict) -> list[str]:
     """Every tool name Codex offered, namespaced as `namespace.tool`."""
-    top = list(request.get("tools") or [])
-    for item in request.get("input", []):
+    top = list(request.get("tools") or []) if isinstance(request.get("tools") or [], list) else ["?"]
+    for item in request.get("input") if isinstance(request.get("input"), list) else []:
         if isinstance(item, dict) and item.get("type") == "additional_tools":
-            top += item.get("tools", [])
+            top += item.get("tools") if isinstance(item.get("tools"), list) else ["?"]
     names: list[str] = []
 
     def walk(tools, prefix):
         for t in tools:
+            if not isinstance(t, dict):
+                names.append(f"{prefix}?")
+                continue
             name = t.get("name") or t.get("type")
             if isinstance(t.get("tools"), list):
                 walk(t["tools"], f"{prefix}{name}.")
@@ -219,7 +229,8 @@ def codex_tools(request: dict) -> list[str]:
 
 
 def claude_tools(request: dict) -> list[str]:
-    return [t.get("name") for t in request.get("tools", [])]
+    tools = request.get("tools") or []
+    return [str(t.get("name")) if isinstance(t, dict) else "?" for t in tools] if isinstance(tools, list) else ["?"]
 
 
 _MISSING = object()
@@ -228,13 +239,15 @@ _MISSING = object()
 def tool_output(requests: tuple[dict, ...], call_id: str):
     """The tool output the CLI returned for `call_id`, exactly as sent; `_MISSING` if absent."""
     for req in requests[1:]:
-        for item in req.get("input", []):
+        for item in req.get("input") if isinstance(req.get("input"), list) else []:
             is_output = isinstance(item, dict) and str(item.get("type", "")).endswith("_output")
             if is_output and item.get("call_id") == call_id:
                 return item.get("output")
-        for msg in req.get("messages", []):
-            for block in msg.get("content", []) if isinstance(msg.get("content"), list) else []:
-                if block.get("type") == "tool_result" and block.get("tool_use_id") == call_id:
+        for msg in req.get("messages") if isinstance(req.get("messages"), list) else []:
+            content = msg.get("content") if isinstance(msg, dict) else None
+            for block in content if isinstance(content, list) else []:
+                is_result = isinstance(block, dict) and block.get("type") == "tool_result"
+                if is_result and block.get("tool_use_id") == call_id:
                     return block.get("content")
     return _MISSING
 

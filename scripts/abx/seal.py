@@ -10,7 +10,7 @@ from . import ipip, lifecycle, store
 from .errors import UsageError
 from .lifecycle import HASHES, SEALED
 
-__all__ = ["HASHES", "SEALED", "predictions", "seal"]
+__all__ = ["HASHES", "SEALED", "STAGE", "predictions", "seal"]
 PREDICTION = re.compile(r"(P[0-9]{1,3}):[ \t]*(.*)")
 # Anything a person might have meant as a prediction line: list markers, numbering, any digit script.
 LOOKS_LIKE_PREDICTION = re.compile(r"\s*(?:[-*+>]\s*|\d+[.)]\s*)*[Pp]\s*\d")
@@ -37,7 +37,7 @@ def predictions(text: str) -> dict[str, str]:
 
 
 def seal(ws: store.Workspace) -> dict:
-    lifecycle.enter(ws, "seal")
+    lifecycle.enter(ws, STAGE)
     for rel in SEALED:
         if not ws.path(rel).exists():
             raise UsageError(f"{rel} is missing")
@@ -52,4 +52,4 @@ def seal(ws: store.Workspace) -> dict:
     return {"predictions": count, "ipip_answered": answered}
 
 
-STAGE = lifecycle.Stage("seal", 2, "check and hash sealed/", seal)
+STAGE = lifecycle.Stage("seal", 2, "check and hash sealed/", seal, closed_after="A", verifies_seal=False)

@@ -9,7 +9,7 @@ from typing import NamedTuple
 from . import store
 from .errors import UsageError
 
-__all__ = ["LINEAGES", "Config", "Lineage", "RetainedTool", "load", "parse", "retained"]
+__all__ = ["LINEAGES", "Config", "Lineage", "RetainedSpec", "RetainedTool", "load", "parse", "retained"]
 
 LINEAGES = ("claude", "codex")
 
@@ -55,9 +55,14 @@ class Config:
         return self.lineages[name]
 
 
-def retained(lin: Lineage) -> dict[str, tuple[dict, str]]:
-    """Codex's retained tools as {tool: (scripted call, pinned result)}; fresh objects every time."""
-    return {t.tool: (json.loads(t.call_json), t.result) for t in lin.retained_tools}
+class RetainedSpec(NamedTuple):
+    call: dict
+    result: str
+
+
+def retained(lin: Lineage) -> dict[str, RetainedSpec]:
+    """Codex's retained tools by name, each with its scripted call (a fresh object) and pinned result."""
+    return {t.tool: RetainedSpec(json.loads(t.call_json), t.result) for t in lin.retained_tools}
 
 
 def _get(obj: dict, key: str, kind, where: str):

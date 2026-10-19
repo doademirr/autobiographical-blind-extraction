@@ -11,7 +11,7 @@ from typing import NamedTuple
 from . import store
 from .errors import IntegrityError, UsageError
 
-__all__ = ["HASHES", "SEALED", "Preflight", "Stage", "enter", "verify_sealed"]
+__all__ = ["HASHES", "SEALED", "Arg", "Preflight", "Stage", "enter", "verify_sealed"]
 
 
 class Preflight(NamedTuple):
@@ -22,34 +22,43 @@ class Preflight(NamedTuple):
     note: str
 
 
+class Arg(NamedTuple):
+    flags: tuple[str, ...]
+    options: dict
+
+
 class Stage(NamedTuple):
-    """A workspace command, declared by the module that implements it; `run.py` discovers these."""
+    """A command, declared by the module that implements it; `run.py` discovers and dispatches these.
+
+    A workspace stage's `run` takes the workspace; one that `creates_workspace` takes the path and
+    its parsed arguments. `needs`, `closed_after` and `verifies_seal` are its lifecycle rules.
+    """
 
     name: str
     order: int
     help: str
     run: Callable
     estimate: Callable | None = None
+    args: tuple[Arg, ...] = ()
+    needs: str | None = None
+    closed_after: str | None = None
+    verifies_seal: bool = True
+    creates_workspace: bool = False
 
 SEALED = ("sealed/self-prediction.md", "sealed/ipip-120.csv")
 HASHES = "prereg/sealed-hashes.json"
 
-_BEFORE_A = {"prepare", "seal", "freeze"}
-_NEEDS = {"extract": "A", "unmask": "C"}
-
-
-def enter(ws: store.Workspace, stage: str) -> set[str]:
-    """Check integrity and stage order; returns the frozen generations."""
+def enter(ws: store.Workspace, stage: "Stage") -> set[str]:
+    """Check integrity and the stage's own lifecycle rules before it writes or calls anything."""
     store.verify_manifest(ws)
     gens = store.frozen_generations(ws)
-    if stage not in _BEFORE_A - {"freeze"}:
+    if stage.verifies_seal:
         verify_sealed(ws)
-    if stage in _BEFORE_A and "A" in gens:
-        raise UsageError(f"`{stage}` is closed: generation A is frozen; a new run needs a new workspace")
-    if stage in _NEEDS and "E" in gens:
-        raise UsageError("this workspace is unmasked; a new run needs a new workspace")
-    if stage in _NEEDS and _NEEDS[stage] not in gens:
-        raise UsageError(f"`{stage}` needs generation {_NEEDS[stage]}; run the earlier stages first")
+    if stage.closed_after and stage.closed_after in gens:
+        raise UsageError(f"`{stage.name}` is closed: generation {stage.closed_after} is frozen; "
+                         "a new run needs a new workspace")
+    if stage.needs and stage.needs not in gens:
+        raise UsageError(f"`{stage.name}` needs generation {stage.needs}; run the earlier stages first")
     return gens
 
 

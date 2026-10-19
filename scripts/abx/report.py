@@ -6,7 +6,8 @@ __all__ = ["render"]
 
 VERDICT_TEXT = {"report": f"reportable (α ≥ {REPORT:.2f})",
                 "tentative": f"tentative ({TENTATIVE:.3f} ≤ α < {REPORT:.2f})", "not_reportable": "not reportable"}
-REASON_TEXT = {"no_pairable_unit": "no unit has values from both lineages",
+REASON_TEXT = {"no_units": "there is nothing to rate (an empty codebook)",
+               "no_pairable_unit": "no unit has values from both lineages",
                "no_variation": "the ratings do not vary, so agreement is undefined",
                "fewer_lineages": "fewer than two lineages rated",
                "low_pairing": f"fewer than {MIN_PAIRED:.0%} of units carry a value from both lineages"}

@@ -54,6 +54,13 @@ class CodebookValidatorTest(unittest.TestCase):
         bad = self.book([("Thrift", ["c001"]), ("Wit", ["c001"])])
         self.assertTrue(extract.validate_codebook(bad, {"c001"}))
 
+    def test_an_empty_codebook_is_a_valid_outcome(self):
+        empty = {"constructs": [], "appendix": [{"candidate_ref": "c001", "disposition": "excluded", "reason": "x"}]}
+        self.assertEqual(extract.validate_codebook(empty, {"c001"}), [])
+        self.assertEqual(extract.validate_codebook({"constructs": [], "appendix": []}, set()), [])
+        from abx import agreement
+        self.assertEqual(agreement.arm({}, [], "nominal").reason, "no_units")
+
     def test_a_construct_must_trace_a_candidate(self):
         book = self.book([("Thrift", ["c001"]), ("Invented", [])])
         self.assertTrue(any("traces no candidate" in p for p in extract.validate_codebook(book, {"c001"})))

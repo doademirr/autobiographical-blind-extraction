@@ -96,6 +96,22 @@ class CallTest(unittest.TestCase):
         with self.assertRaises(IsolationError):
             self.call(_req())
 
+    def test_a_record_without_output_is_not_reused(self):
+        self.call(_req())
+        path = invoke.record_path(self.ws, _req())
+        rec = store.read_json(path)
+        del rec["output"]
+        store.write_json(path, rec)
+        self.call(_req())
+        self.assertEqual(len(self.fw.prompts_logged()), 2)
+
+    def test_claude_failure_before_init_is_exit_5_with_no_tool_incident(self):
+        with mock.patch.dict(os.environ, {"ABX_FAKE_NO_INIT": "1", "ABX_FAKE_FAIL": "1"}), \
+                self.assertRaises(CallFailed):
+            self.call(_req())
+        self.assertEqual(store.read_json(self.ws.path(f"run/incidents/{_req().identity}.json"))["kind"],
+                         "call_failed")
+
     def test_a_record_copied_to_another_replicate_is_not_reused(self):
         self.call(_req(run=1))
         src, dst = invoke.record_path(self.ws, _req(run=1)), invoke.record_path(self.ws, _req(run=2))
@@ -275,6 +291,25 @@ class OutputParsingTest(unittest.TestCase):
                  json.dumps({"type": "turn.completed"})]
         out = invoke.parse_codex(lines)
         self.assertEqual((out.status, out.text, invoke.audit_events("codex", out.events)), ("success", "second", []))
+
+    def test_terminal_failure_is_never_overwritten(self):
+        claude = invoke.parse_claude([
+            json.dumps({"type": "system", "subtype": "init", "tools": [], "mcp_servers": [], "model": "m"}),
+            json.dumps({"type": "result", "subtype": "success", "is_error": True, "result": "x"})])
+        self.assertEqual(invoke.outcome("claude", 0, claude.events), "failed")
+        codex = invoke.parse_codex([json.dumps({"type": "turn.failed"}), json.dumps({"type": "turn.completed"})])
+        self.assertEqual(codex.status, "failed")
+        self.assertEqual(invoke.outcome("codex", 0, codex.events), "failed")
+
+    def test_failure_before_init_is_a_failure_and_success_without_init_is_isolation(self):
+        self.assertEqual(invoke.outcome("claude", 1, []), "failed")
+        ok = invoke.parse_claude([json.dumps({"type": "result", "subtype": "success", "is_error": False,
+                                              "result": "{}"})])
+        self.assertEqual(invoke.outcome("claude", 0, ok.events), "no_registry")
+
+    def test_unknown_event_kinds_are_reported_as_codes_not_content(self):
+        events = invoke.parse_codex([json.dumps({"type": "item.completed", "item": {"type": "secret-name-xyz"}})])
+        self.assertEqual(invoke.audit_events("codex", events.events), ["item:other"])
 
     def test_malformed_json_events_fail_closed(self):
         self.assertTrue(invoke.audit_events("codex", invoke.parse_codex(['{"type": "item.started", ']).events))

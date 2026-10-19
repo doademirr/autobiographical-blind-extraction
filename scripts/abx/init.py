@@ -6,11 +6,19 @@ import shutil
 import stat
 from pathlib import Path
 
-from . import ipip, store
+from . import ipip, lifecycle, store
 from .errors import UsageError
 
-__all__ = ["CLAUDE_LOCKED_READ", "CODEX_CONFIG", "CODEX_DISABLE", "CODEX_RETAINED", "codex_native", "default_config",
-           "init"]
+__all__ = [
+    "CLAUDE_LOCKED_READ",
+    "CODEX_CONFIG",
+    "CODEX_DISABLE",
+    "CODEX_RETAINED",
+    "STAGE",
+    "codex_native",
+    "default_config",
+    "init",
+]
 
 SYNCED_MARKERS = ("/Library/CloudStorage/", "/Dropbox/", "/Library/Mobile Documents/", "/Google Drive/",
                   "/OneDrive")
@@ -134,3 +142,16 @@ IPIP_HEADER = """# IPIP-NEO-120 (Johnson, 2014; public domain)
 Answer each statement in ipip-120.csv as you are now: 1 very inaccurate, 2 moderately inaccurate,
 3 neither, 4 moderately accurate, 5 very accurate. Leave a response blank to skip it.
 """
+
+
+def _run(ws_path: Path, args) -> dict:
+    ws = init(ws_path, args.text, args.canary, args.allow_synced)
+    return {"workspace": str(ws.root), "next": "review_config"}
+
+
+STAGE = lifecycle.Stage(
+    "init", 0, "create a workspace from the text", _run, creates_workspace=True, args=(
+        lifecycle.Arg(("--text",), {"type": Path, "nargs": "+", "required": True}),
+        lifecycle.Arg(("--canary",), {"nargs": "*", "default": [],
+                                      "help": "terms only your own profile would contain"}),
+        lifecycle.Arg(("--allow-synced",), {"action": "store_true"})))

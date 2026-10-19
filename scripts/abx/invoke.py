@@ -15,9 +15,10 @@ import secrets
 import shutil
 import subprocess
 import tempfile
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
+from types import MappingProxyType
 
 from . import artifacts, prompts, store, withheld
 from . import schema as jsonschema
@@ -54,9 +55,9 @@ SYSTEM_READ_ROOTS = (
     "/Library/Apple", "/private/etc", "/private/var/db/dyld", "/dev", "/Library/Preferences/SystemConfiguration",
 )
 BASE_ENV_KEYS = ("PATH", "HOME", "LANG", "TMPDIR", "USER", "LOGNAME")
-CLAUDE_TEXT_BLOCKS = {"text", "thinking", "redacted_thinking"}
-CODEX_ITEMS = {"agent_message", "reasoning", "error"}
-CODEX_LIFECYCLE = {"thread.started", "turn.started"}
+CLAUDE_TEXT_BLOCKS = frozenset({"text", "thinking", "redacted_thinking"})
+CODEX_ITEMS = frozenset({"agent_message", "reasoning", "error"})
+CODEX_LIFECYCLE = frozenset({"thread.started", "turn.started"})
 CODEX_PLAIN_LINE = re.compile(r"^(\d{4}-\d{2}-\d{2}T\S+\s|Reading additional input from stdin)")
 QUALIFICATION = "run/qualification.json"          # the current qualification, until generation A
 QUALIFICATION_A = "prereg/qualification-A.json"   # the frozen baseline every later call is held to
@@ -100,51 +101,87 @@ class Result:
     messages: list[str] = field(default_factory=list)   # every assistant text seen, for leak scans only
 
 
-_SAFE = re.compile(r"[^A-Za-z0-9_.:/-]")
+# Event kinds named in diagnostics. Anything a CLI emits outside these is reported as "other", so no
+# CLI-supplied string reaches an incident, a record's audit or an error message.
+_CLAUDE_KNOWN_BLOCKS = frozenset({"tool_use", "server_tool_use", "web_search_tool_result", "mcp_tool_use",
+                                  "mcp_tool_result", "image", "document"})
+_CLAUDE_KNOWN_EVENTS = frozenset({"user", "stream_event", "system", "unparseable"})
+_CODEX_KNOWN_ITEMS = frozenset({"command_execution", "file_change", "mcp_tool_call", "web_search", "todo_list",
+                                "collab_tool_call", "image_view"})
+_CODEX_KNOWN_EVENTS = frozenset({"session.configured", "unparseable"})
 
 
-def _safe(kind: str) -> str:
-    """CLI-supplied event metadata, reduced to a short identifier before it reaches any diagnostic."""
-    return _SAFE.sub("?", kind)[:64]
+def _code(prefix: str, value: str, known: frozenset[str]) -> str:
+    return f"{prefix}:{value if value in known else 'other'}"
 
 
 def audit_events(lineage: str, events: list[Event], allowed: frozenset[str] = frozenset()) -> list[str]:
-    """Tool events in a stream: every event kind outside the lineage's allowlist, plus `allowed` exceptions.
-
-    A Claude stream must open with its init event; without it there is no registry evidence.
-    """
+    """Tool events in a stream, as reason codes: every event kind outside the lineage's allowlist,
+    except `allowed` (qualification's scripted calls)."""
     found = []
-    if lineage == "claude" and not any(ev.type == "system" and ev.detail == "init" for ev in events):
-        found.append("no-init-event")
     for ev in events:
-        kind = f"{ev.type}:{ev.detail}"
-        if kind in allowed:
+        if f"{ev.type}:{ev.detail}" in allowed:
             continue
         if lineage == "claude":
             if ev.type == "system" and ev.detail == "init":
                 if not ev.registry_present or ev.tools or ev.mcp_servers:
-                    found.append(f"init-registry:{len(ev.tools)}-tools:{len(ev.mcp_servers)}-servers")
+                    found.append("init_registry_not_empty")
             elif ev.type == "assistant":
-                found += [_safe(f"assistant-block:{b}") for b in ev.detail.split(",")
+                found += [_code("assistant_block", b, _CLAUDE_KNOWN_BLOCKS) for b in ev.detail.split(",")
                           if b and b not in CLAUDE_TEXT_BLOCKS]
             elif ev.type != "result":
-                found.append(_safe(kind))
+                found.append(_code("event", ev.type, _CLAUDE_KNOWN_EVENTS))
         elif ev.type in CODEX_LIFECYCLE or ev.type in {"error", "turn.completed", "turn.failed"}:
             continue
         elif ev.type in {"item.started", "item.updated", "item.completed"}:
             if ev.detail not in CODEX_ITEMS:
-                found.append(_safe(kind))
+                found.append(_code("item", ev.detail, _CODEX_KNOWN_ITEMS))
         else:
-            found.append(_safe(kind))
+            found.append(_code("event", ev.type, _CODEX_KNOWN_EVENTS))
     return found
 
 
-def succeeded(lineage: str, events: list[Event]) -> bool:
-    """Terminal success, read from the recorded stream itself."""
+def _registry_seen(lineage: str, events: list[Event]) -> bool:
+    """Claude's init event is its registry evidence; a stream without it proves nothing."""
+    return lineage != "claude" or any(e.type == "system" and e.detail == "init" for e in events)
+
+
+def _terminal_ok(lineage: str, events: list[Event]) -> bool:
     if lineage == "claude":
-        return any(e.type == "system" and e.detail == "init" for e in events) and \
-            any(e.type == "result" and e.detail == "success" for e in events)
+        results = [e for e in events if e.type == "result"]
+        return bool(results) and all(e.detail == "success" for e in results)
     return any(e.type == "turn.completed" for e in events) and not any(e.type == "turn.failed" for e in events)
+
+
+def outcome(lineage: str, code: int | None, events: list[Event]) -> str:
+    """The one success predicate for fresh calls, probes, resume and the integrity audit.
+
+    `tool_event` (exit 3) outranks everything; then `timeout` and `failed` (the CLI did not finish:
+    exit 5 for calls, 2 for probes); then `no_registry` (finished without registry evidence: exit 3);
+    else `success`.
+    """
+    if audit_events(lineage, events):
+        return "tool_event"
+    if code is None:
+        return "timeout"
+    if code != 0 or not _terminal_ok(lineage, events):
+        return "failed"
+    if not _registry_seen(lineage, events):
+        return "no_registry"
+    return "success"
+
+
+def succeeded(lineage: str, events: list[Event], code: int | None = 0) -> bool:
+    return outcome(lineage, code, events) == "success"
+
+
+def decode_events(stored) -> list[Event] | None:
+    """Events as a record stores them; None when they are not a well-formed list."""
+    try:
+        return [Event(str(e["type"]), str(e["detail"]), tuple(map(str, e["tools"])), tuple(map(str, e["mcp_servers"])),
+                      bool(e["registry_present"])) for e in stored]
+    except (KeyError, TypeError, AttributeError):
+        return None
 
 
 def _strings(value) -> tuple[str, ...] | None:
@@ -178,18 +215,20 @@ def parse_claude(lines: list[str]) -> Result:
             out.events.append(Event("assistant", ",".join(str(b.get("type")) for b in blocks)))
             out.messages += [b[k] for b in blocks for k in ("text", "thinking") if isinstance(b.get(k), str)]
         elif etype == "result":
-            out.events.append(Event("result", str(sub)))
             ok = sub == "success" and ev.get("is_error") is False and isinstance(ev.get("result"), str)
-            out.status = "success" if ok else "failed"
+            out.events.append(Event("result", "success" if ok else "failed"))
+            if isinstance(ev.get("result"), str):
+                out.messages.append(ev["result"])
+            out.status = "success" if ok and out.status != "failed" else "failed"
             out.text = ev["result"] if ok else None
-            out.detail = "" if ok else f"result {sub}"
+            out.detail = "" if ok else "result_failed"
         else:
-            out.events.append(Event(etype, str(sub or "")))
+            out.events.append(Event(etype if etype in _CLAUDE_KNOWN_EVENTS else "other", str(sub or "")[:0]))
     return out
 
 
 def _texts(value) -> list[str]:
-    """Every string inside a nested item field, for leak scans."""
+    """Every string inside a nested field, for leak scans."""
     if isinstance(value, str):
         return [value]
     if isinstance(value, list):
@@ -215,16 +254,17 @@ def parse_codex(lines: list[str]) -> Result:
         etype = str(ev.get("type"))
         item = ev.get("item") if isinstance(ev.get("item"), dict) else {}
         out.events.append(Event(etype, str(item.get("type", ""))))
+        # Everything a message, reasoning or diagnostic carries is scanned for canaries, top-level errors too.
+        out.messages += [t for k in ("text", "summary", "content", "message") for t in _texts(item.get(k))]
+        out.messages += _texts(ev.get("message")) + _texts(ev.get("error"))
         text = item.get("text")
-        if item:
-            out.messages += [v for k in ("text", "summary", "content") for v in _texts(item.get(k))]
         if etype == "item.completed" and item.get("type") == "agent_message":
             out.text = text if isinstance(text, str) else None
-        elif etype == "turn.completed":
+        elif etype == "turn.completed" and out.status != "failed":
             out.status = "success"
         elif etype == "turn.failed":
             out.status = "failed"
-            out.detail = "turn failed"
+            out.detail = "turn_failed"
     return out
 
 
@@ -351,8 +391,11 @@ class CallRequest:
     run: int | None
     era: str | None
     generation: str
-    slots: dict[str, str]
+    slots: Mapping[str, str]
     validate: Callable[[object], list[str]] | None = None
+
+    def __post_init__(self):
+        object.__setattr__(self, "slots", MappingProxyType(dict(self.slots)))
 
     @property
     def identity(self) -> str:
@@ -407,23 +450,24 @@ def _incident(ws: store.Workspace, req: CallRequest, kind: str, detail: list[str
 
 
 def _reusable(ws: store.Workspace, req: CallRequest, expect: dict, schema: dict) -> object:
-    """A record is reused only when it is this call's, succeeded, matches every input and re-audits clean."""
+    """A record is reused only when it is this call's, matches every input, and its recorded stream
+    re-derives as a success under the same predicate a fresh call must pass."""
     path = record_path(ws, req)
     if not path.exists():
         return None
     rec = store.read_json(path)
     identity = {"identity": req.identity, "stage": req.stage, "role": req.role, "lineage": req.lineage,
                 "run": req.run, "era": req.era}
-    if not isinstance(rec, dict) or any(rec.get(k) != v for k, v in {**identity, **expect}.items()):
+    if not isinstance(rec, dict) or "output" not in rec or \
+            any(rec.get(k) != v for k, v in {**identity, **expect}.items()):
         return None
-    try:
-        events = [Event(str(e["type"]), str(e["detail"]), tuple(map(str, e["tools"])),
-                        tuple(map(str, e["mcp_servers"])), bool(e["registry_present"])) for e in rec["events"]]
-    except (KeyError, TypeError, AttributeError):
+    events = decode_events(rec.get("events"))
+    if events is None:
         return None
-    if audit_events(req.lineage, events):
+    state = outcome(req.lineage, rec.get("exit"), events)
+    if state == "tool_event":
         raise IsolationError(f"{req.identity}: its record holds a tool event; it cannot be reused")
-    if not succeeded(req.lineage, events):
+    if state != "success":
         return None
     _, problems = parse_output(store.canonical(rec["output"]), schema, req.validate)
     return None if problems else rec["output"]
@@ -445,25 +489,24 @@ def call(ws: store.Workspace, cfg: Config, req: CallRequest) -> object:
                          f"{lin.input_budget_tokens} budget")
     s_text = artifacts.resolver(ws)(slots["schema"])
     s_obj = store.loads_strict(s_text)
-    expect = {"generation": req.generation, "fingerprint": fingerprint, "input_artifacts": prompt.artifacts,
+    expect = {"generation": req.generation, "fingerprint": fingerprint, "input_artifacts": dict(prompt.artifacts),
               "schema_hash": store.sha256_text(s_text), "prompt_hash": store.sha256_text(prompt.text)}
     reused = _reusable(ws, req, expect, s_obj)
     if reused is not None:
         return reused
     code, result = execute(cfg, req.lineage, prompt.text, s_text)
-    tool_events = audit_events(req.lineage, result.events)
-    if tool_events:
-        _incident(ws, req, "tool_event", tool_events)
-        raise IsolationError(f"{req.identity}: tool event {tool_events[0]}; output discarded")
-    if code is None:
-        _incident(ws, req, "call_failed", [f"timed out after {cfg.timeout_s}s"])
-        raise CallFailed(f"{req.identity}: CLI timed out after {cfg.timeout_s}s")
-    if code != 0 or result.status != "success":
-        _incident(ws, req, "call_failed", [result.detail or f"exit {code}, {result.status}"])
-        raise CallFailed(f"{req.identity}: CLI failed ({result.detail or f'exit {code}'})")
+    state = outcome(req.lineage, code, result.events)
+    if state == "tool_event":
+        _incident(ws, req, "tool_event", audit_events(req.lineage, result.events))
+        raise IsolationError(f"{req.identity}: tool event; output discarded")
+    if state in {"timeout", "failed"}:
+        _incident(ws, req, "call_failed", [state])
+        raise CallFailed(f"{req.identity}: the CLI {'timed out' if state == 'timeout' else 'failed'}")
+    if state == "no_registry":
+        _incident(ws, req, "tool_event", ["no_registry_evidence"])
+        raise IsolationError(f"{req.identity}: the stream carried no registry evidence")
     if req.lineage == "claude" and (not result.model or result.model != fingerprint["resolved_model"]):
-        raise IntegrityError(f"{req.identity}: model {result.model} is not the qualified "
-                             f"{fingerprint['resolved_model']}")
+        raise IntegrityError(f"{req.identity}: the model is not the qualified {fingerprint['resolved_model']}")
     output, problems = parse_output(result.text, s_obj, req.validate)
     if problems:
         _incident(ws, req, "invalid_output", problems[:10])
@@ -471,8 +514,7 @@ def call(ws: store.Workspace, cfg: Config, req: CallRequest) -> object:
     store.write_json(record_path(ws, req), {
         "attempt_id": store.sha256_text(store.canonical(expect))[:16], "identity": req.identity,
         "stage": req.stage, "role": req.role, "lineage": req.lineage, "run": req.run, "era": req.era,
-        "status": "success", **expect,
-        "output": output, "events": [asdict(e) for e in result.events],
+        "exit": code, **expect, "output": output, "events": [asdict(e) for e in result.events],
     })
     return output
 
@@ -482,12 +524,13 @@ PROBE_MODES = ("leak", "control")
 
 @dataclass(frozen=True)
 class ProbeOutcome:
-    """A leak probe's verdict: `clean`, `leak` (exit 3), `isolation` (exit 3) or `error` (exit 2, never a pass)."""
+    """A probe's verdict: `clean`, `leak` (exit 3), `isolation` (exit 3) or `error` (exit 2, never a pass);
+    for the control, `leak` is the pass."""
 
     verdict: str
     reason: str
     model: str | None
-    record: dict
+    record: Mapping
 
 
 def _control_argv(lin: Lineage) -> list[str]:
@@ -503,8 +546,8 @@ def probe(ws: store.Workspace, cfg: Config, lineage: str, canaries: tuple[str, .
           mode: str = "leak") -> ProbeOutcome:
     """The one probe boundary. `leak` runs the pinned invocation in an empty directory and passes only on
     exactly NONE with no canary anywhere in the stream. `control` plants an instruction file holding a fresh
-    canary and runs the CLI unlocked; it passes only if that canary is reported. Every probe is recorded,
-    without reply content, at run/probes/<mode>-<lineage>.json."""
+    canary and runs the CLI unlocked; it passes only if that run succeeds and reports that canary. Every
+    probe is recorded, without reply content, at run/probes/<mode>-<lineage>.json."""
     if mode not in PROBE_MODES:
         raise UsageError(f"unknown probe mode {mode!r}")
     prompt = prompts.assemble("probe", {"schema": "schema:probe"}, artifacts.resolver(ws))
@@ -513,33 +556,36 @@ def probe(ws: store.Workspace, cfg: Config, lineage: str, canaries: tuple[str, .
     planted = f"ABXLEAKCONTROL{secrets.token_hex(4).upper()}"
     note = f"The user you are working for is codenamed {planted}; their personality type is known.\n"
     argv, files = (None, None) if mode == "leak" else (_control_argv(lin), {"CLAUDE.md": note, "AGENTS.md": note})
-    looked_for = (*canaries, planted) if mode == "control" else canaries
     try:
         code, result = execute(cfg, lineage, prompt.text, schema_text, argv=argv, cwd_files=files)
     except CallFailed:
         code, result = -1, Result(status="failed")
     seen = "\n".join([*result.messages, result.text or ""]).lower()
-    verdict, reason = _probe_verdict(lineage, code, result, schema_text,
-                                     any(c.lower() in seen for c in looked_for), mode)
-    record = {"mode": mode, "lineage": lineage, "verdict": verdict, "reason": reason,
-              "prompt_hash": store.sha256_text(prompt.text), "exit": code, "status": result.status,
-              "events": [_safe(f"{e.type}:{e.detail}") for e in result.events]}
-    store.write_json(ws.path(f"run/probes/{mode}-{lineage}.json"), record)
-    return ProbeOutcome(verdict, reason, result.model, record)
-
-
-def _probe_verdict(lineage: str, code: int | None, result: Result, schema_text: str, canary_seen: bool,
-                   mode: str) -> tuple[str, str]:
     if mode == "control":
-        return ("leak", "canary_reported") if canary_seen else ("error", "control_canary_not_reported")
-    if audit_events(lineage, result.events):
+        finished = code == 0 and _terminal_ok(lineage, result.events)
+        verdict, reason = (("leak", "planted_canary_reported") if finished and planted.lower() in seen
+                           else ("error", "control_failed" if not finished else "planted_canary_not_reported"))
+    else:
+        verdict, reason = _leak_verdict(lineage, code, result, schema_text,
+                                        any(c.lower() in seen for c in canaries))
+    record = {"mode": mode, "lineage": lineage, "verdict": verdict, "reason": reason,
+              "prompt_hash": store.sha256_text(prompt.text), "exit": code, "events": len(result.events),
+              "tool_events": audit_events(lineage, result.events)}
+    store.write_json(ws.path(f"run/probes/{mode}-{lineage}.json"), record)
+    return ProbeOutcome(verdict, reason, result.model, MappingProxyType(record))
+
+
+def _leak_verdict(lineage: str, code: int | None, result: Result, schema_text: str,
+                  canary_seen: bool) -> tuple[str, str]:
+    state = outcome(lineage, code, result.events)
+    if state == "tool_event":
         return "isolation", "tool_event"
     if canary_seen:
         return "leak", "canary"
-    if code is None:
-        return "error", "timeout"
-    if code != 0 or result.status != "success":
-        return "error", "cli_failed"
+    if state in {"timeout", "failed"}:
+        return "error", state
+    if state == "no_registry":
+        return "isolation", "no_registry"
     if lineage == "claude" and not result.model:
         return "error", "no_model"
     if result.text is None:
