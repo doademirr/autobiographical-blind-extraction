@@ -5,10 +5,20 @@ refuses a stage the lifecycle has closed: nothing before generation A can be red
 and a workspace is unmasked once.
 """
 
+from typing import NamedTuple
+
 from . import store
 from .errors import IntegrityError, UsageError
 
-__all__ = ["HASHES", "SEALED", "enter", "verify_sealed"]
+__all__ = ["HASHES", "SEALED", "Preflight", "enter", "verify_sealed"]
+
+
+class Preflight(NamedTuple):
+    """What a model-calling stage will spend, shown before it runs."""
+
+    model_calls: int
+    conditional_calls: int
+    note: str
 
 SEALED = ("sealed/self-prediction.md", "sealed/ipip-120.csv")
 HASHES = "prereg/sealed-hashes.json"

@@ -4,8 +4,6 @@ from .agreement import MIN_PAIRED, REPORT, TENTATIVE
 
 __all__ = ["render"]
 
-DOMAIN_NAMES = {"N": "Neuroticism", "E": "Extraversion", "O": "Openness", "A": "Agreeableness",
-                "C": "Conscientiousness"}
 VERDICT_TEXT = {"report": f"reportable (α ≥ {REPORT:.2f})",
                 "tentative": f"tentative ({TENTATIVE:.3f} ≤ α < {REPORT:.2f})", "not_reportable": "not reportable"}
 REASON_TEXT = {"no_pairable_unit": "no unit has values from both lineages",
@@ -93,7 +91,7 @@ def render(r: dict) -> str:
     out += ["| Domain | Observer (1–7) | Band | IPIP (1–5) | Band | Same band |", "|---|---|---|---|---|---|"]
     for dom, row in d["domains"].items():
         same = "n/a" if row["same_band"] is None else ("yes" if row["same_band"] else "no")
-        out.append(f"| {DOMAIN_NAMES[dom]} | {num(row['observer'], 2)} | {row['observer_band'] or 'n/a'} | "
+        out.append(f"| {r['domain_names'][dom]} | {num(row['observer'], 2)} | {row['observer_band'] or 'n/a'} | "
                    f"{num(row['ipip'], 2)} | {row['ipip_band'] or 'n/a'} | {same} |")
     out += ["", f"Same band in {pct(d['agreement_rate'])} of {d['compared']} domains compared.", "",
             "## Limits", "",

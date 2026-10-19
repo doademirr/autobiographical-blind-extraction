@@ -9,6 +9,10 @@ from pathlib import Path
 
 from .errors import IntegrityError, UsageError
 
+__all__ = ["MANIFEST", "Workspace", "append_generation", "canonical", "frozen_generations", "loads_strict", "read_json",
+           "read_manifest", "sha256_bytes", "sha256_file", "sha256_text", "verify_manifest", "write_json",
+           "write_text_atomic"]
+
 MANIFEST = "prereg/manifest.jsonl"
 
 
@@ -95,7 +99,9 @@ def read_manifest(ws: Workspace) -> list[dict]:
         entries = [loads_strict(line) for line in path.read_text(encoding="utf-8").splitlines() if line.strip()]
     except ValueError as exc:
         raise IntegrityError(f"manifest is unreadable: {exc}") from exc
-    if not all(isinstance(e, dict) and isinstance(e.get("artifacts"), dict) and "gen" in e for e in entries):
+    if not all(isinstance(e, dict) and isinstance(e.get("artifacts"), dict) and isinstance(e.get("gen"), str)
+               and all(isinstance(k, str) and isinstance(v, str) for k, v in e["artifacts"].items())
+               for e in entries):
         raise IntegrityError("manifest entries are malformed")
     return entries
 

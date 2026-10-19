@@ -20,42 +20,25 @@ stage() {
   "${RUN[@]}" "$@"
 }
 
-# 1. The leak probe's own positive control: a rater that is handed an instruction file holding a canary
-#    must report it, so a NONE elsewhere means something.
-python3 - "$REPO" <<'PY'
-import json, os, shutil, subprocess, sys, tempfile
-sys.path.insert(0, os.path.join(sys.argv[1], "scripts"))
-from abx import init, qualify
-canary = "ABXLEAKCONTROL" + os.urandom(3).hex().upper()
-prompt = qualify.PROBE.format(schema=open(os.path.join(sys.argv[1], "schemas", "probe.json")).read())
-d = os.path.realpath(tempfile.mkdtemp(prefix="abx-leakctl-"))
-try:
-    for name in ("CLAUDE.md", "AGENTS.md"):
-        with open(os.path.join(d, name), "w") as f:
-            f.write(f"The user you are working for is codenamed {canary}; their personality type is known.\n")
-    codex_bin, _ = init.codex_native(shutil.which("codex"))
-    runs = {
-        "claude": ["claude", "-p", "--tools", "", "--no-session-persistence", "--model", "claude-opus-5-5"],
-        "codex": [codex_bin, "exec", "--ephemeral", "-s", "read-only", "--skip-git-repo-check", "--cd", d,
-                  "-m", "gpt-6.1-sol", "--disable", "shell_tool", "-"],
-    }
-    for lineage, argv in runs.items():
-        out = subprocess.run(argv, input=prompt, cwd=d, capture_output=True, text=True, timeout=600, check=False)
-        seen = canary in out.stdout
-        print(f"leak-probe control ({lineage}): {'canary reported' if seen else 'CANARY NOT REPORTED'}")
-        if not seen:
-            sys.exit(3)
-finally:
-    shutil.rmtree(d, ignore_errors=True)
-PY
-
-# 2. The pipeline, with production qualification (real logins, metadata reads forwarded, inference captured).
+# 1. The pipeline, with production qualification (real logins, metadata reads forwarded, inference captured).
 stage init "$WS" --text "$FIX/autobiography.txt" --canary ABXPROFILECANARY
 stage prepare "$WS"
 cp "$FIX/redactions.json" "$FIX/eras.json" "$WS/prepare/"
 stage prepare "$WS"
 cp "$FIX/self-prediction.md" "$FIX/ipip-120.csv" "$WS/sealed/"
 stage seal "$WS"
+
+# 2. The leak probe's own positive control, through the same recorded probe path: a rater handed an
+#    instruction file holding a canary must report it, so the NONEs above mean something.
+python3 - "$REPO" "$WS" <<'PY'
+import json, sys
+sys.path.insert(0, sys.argv[1] + "/scripts")
+from abx import config, qualify, store
+ws = store.Workspace(__import__("pathlib").Path(sys.argv[2]))
+cfg = config.load(ws)
+print(json.dumps({lin: qualify.leak_control(ws, cfg, lin) for lin in cfg.lineages}, indent=1))
+PY
+
 stage freeze "$WS"
 set +e
 stage extract "$WS"

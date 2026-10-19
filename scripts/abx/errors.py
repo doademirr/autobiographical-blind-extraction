@@ -5,6 +5,9 @@ also 1, so `run.py` catches everything and maps unexpected exceptions elsewhere.
 """
 
 
+__all__ = ["AbxError", "CallFailed", "GateFired", "IntegrityError", "IsolationError", "UsageError"]
+
+
 class AbxError(Exception):
     exit_code = 99
 

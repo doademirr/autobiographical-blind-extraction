@@ -137,7 +137,8 @@ class IntegrityAuditTest(unittest.TestCase):
 
         res = ag.integrity_audit({"requalify": broken, "manifest": check("manifest", True)})
         self.assertFalse(res["requalify"]["ok"])
-        self.assertIn("cannot read records", res["requalify"]["detail"])
+        self.assertIn("RuntimeError", res["requalify"]["detail"])
+        self.assertNotIn("cannot read records", res["requalify"]["detail"])
         self.assertTrue(res["manifest"]["ok"])
 
 

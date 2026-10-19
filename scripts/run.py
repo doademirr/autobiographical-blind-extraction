@@ -9,6 +9,8 @@ import argparse
 import json
 import sys
 import traceback
+from collections.abc import Callable
+from dataclasses import dataclass
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
@@ -24,11 +26,49 @@ NEXT_TEXT = {
     "freeze": "run `freeze`", "extract": "run `extract`", "unmask": "run `unmask`",
     "done": "done: read report/report.md",
 }
-ESTIMATES = {"prepare": prepare.estimate, "extract": extract.estimate, "unmask": unmask.estimate}
 
 
 def _print(obj) -> None:
     print(json.dumps(obj, indent=1, ensure_ascii=False))
+
+
+def _show(out: dict) -> int:
+    if "next" in out:
+        out = {**out, "next": NEXT_TEXT[out["next"]]}
+    _print(out)
+    return 0
+
+
+def _show_extract(result: dict) -> int:
+    gates = {arm: result[arm]["verdict"] for arm in ("inductive", "deductive")}
+    _print({"gates": gates, "alpha": {arm: result[arm]["alpha"] for arm in gates}})
+    return 1 if "not_reportable" in gates.values() else 0
+
+
+def _show_unmask(_: dict) -> int:
+    _print({"report": "report/report.md"})
+    return 0
+
+
+@dataclass(frozen=True)
+class Stage:
+    """One workspace command: what it runs, what it spends, and how its result is shown."""
+
+    name: str
+    help: str
+    run: Callable[[store.Workspace], dict]
+    estimate: Callable | None = None
+    show: Callable[[dict], int] = _show
+
+
+STAGES = {s.name: s for s in (
+    Stage("prepare", "redaction and eras review, qualification, zoning", prepare.prepare, prepare.estimate),
+    Stage("seal", "check and hash sealed/", seal.seal),
+    Stage("freeze", "pre-register generation A", freeze.freeze, freeze.estimate),
+    Stage("extract", "the blind engine, to generation C", extract.extract, extract.estimate, _show_extract),
+    Stage("unmask", "crosswalk, IPIP reveal, report", unmask.unmask, unmask.estimate, _show_unmask),
+    Stage("status", "where the workspace stands", status.status),
+)}
 
 
 def _parser() -> argparse.ArgumentParser:
@@ -39,35 +79,20 @@ def _parser() -> argparse.ArgumentParser:
     p_init.add_argument("--text", type=Path, nargs="+", required=True)
     p_init.add_argument("--canary", nargs="*", default=[], help="terms only your own profile would contain")
     p_init.add_argument("--allow-synced", action="store_true")
-    for name, text in (("prepare", "redaction and eras review, qualification, zoning"),
-                       ("seal", "check and hash sealed/"), ("freeze", "pre-register generation A"),
-                       ("extract", "the blind engine, to generation C"),
-                       ("unmask", "crosswalk, IPIP reveal, report"), ("status", "where the workspace stands")):
-        sub.add_parser(name, help=text).add_argument("ws", type=Path)
+    for stage in STAGES.values():
+        sub.add_parser(stage.name, help=stage.help).add_argument("ws", type=Path)
     p_rev = sub.add_parser("revise", help="authorised pre-unmask revision (not in this version)")
     p_rev.add_argument("ws", type=Path)
     p_rev.add_argument("artifact")
     return ap
 
 
-def _stage(cmd: str, ws: store.Workspace) -> int:
-    if cmd in ESTIMATES and ws.path("prepare/eras.json").exists():
-        est = ESTIMATES[cmd](ws)
-        print(f"{cmd}: about {est['model_calls']} model calls ({est['note']})", file=sys.stderr)
-    if cmd == "extract":
-        result = extract.extract(ws)
-        gates = {arm: result[arm]["verdict"] for arm in ("inductive", "deductive")}
-        _print({"gates": gates, "alpha": {arm: result[arm]["alpha"] for arm in gates}})
-        return 1 if "not_reportable" in gates.values() else 0
-    if cmd == "unmask":
-        unmask.unmask(ws)
-        _print({"report": str(ws.path("report/report.md"))})
-        return 0
-    out = {"prepare": prepare.prepare, "seal": seal.seal, "freeze": freeze.freeze, "status": status.status}[cmd](ws)
-    if "next" in out:
-        out["next"] = NEXT_TEXT[out["next"]]
-    _print(out)
-    return 0
+def _run_stage(stage: Stage, ws: store.Workspace) -> int:
+    if stage.estimate and ws.path("prepare/eras.json").exists():
+        pre = stage.estimate(ws)
+        extra = f" (+{pre.conditional_calls} conditional)" if pre.conditional_calls else ""
+        print(f"{stage.name}: about {pre.model_calls} model calls{extra}: {pre.note}", file=sys.stderr)
+    return stage.show(stage.run(ws))
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -84,7 +109,7 @@ def main(argv: list[str] | None = None) -> int:
         if not ws.path("config.json").exists():
             print(f"{args.ws} is not a workspace (no config.json)", file=sys.stderr)
             return 2
-        return _stage(args.cmd, ws)
+        return _run_stage(STAGES[args.cmd], ws)
     except AbxError as exc:
         print(f"error: {exc}", file=sys.stderr)
         return exc.exit_code

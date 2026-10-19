@@ -159,6 +159,6 @@ def integrity_audit(checks: dict[str, Callable[[], tuple[bool, str]]]) -> dict[s
         try:
             ok, detail = check()
         except Exception as exc:  # a check that cannot complete is a failed check, and the rest still run
-            ok, detail = False, f"{type(exc).__name__}: {exc}"
+            ok, detail = False, f"the check could not complete ({type(exc).__name__})"
         results[name] = {"ok": ok, "detail": detail}
     return results

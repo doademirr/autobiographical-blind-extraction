@@ -33,7 +33,7 @@ def check_allowlist(role: str, ids: list[str], rater: tuple[str, int] | None = N
     for aid in ids:
         ref = artifacts.parse(aid)
         if ref.kind in FRAME_KINDS:
-            if ref.kind == "template" and ref.parts[0] != role:
+            if ref.kind == "template" and ref.role != role:
                 raise IsolationError(f"{role} call may not use another role's template {aid}")
             continue
         if ref.kind not in policy.kinds:

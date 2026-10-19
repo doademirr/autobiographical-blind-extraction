@@ -12,6 +12,9 @@ from pathlib import Path
 from . import store
 from .errors import UsageError
 
+__all__ = ["DOMAIN_MIN_FACETS", "FROZEN_COPY", "INSTRUMENT", "IPIP_HIGH", "IPIP_LOW", "OBSERVER_HIGH", "OBSERVER_LOW",
+           "ipip_band", "load_instrument", "mean", "observer_band", "parse_responses", "score"]
+
 INSTRUMENT = Path(__file__).resolve().parents[2] / "instruments" / "ipip-neo-120.json"
 
 FACET_MIN_ITEMS = 3
@@ -33,12 +36,12 @@ def parse_responses(csv_text: str, instrument: dict) -> dict[str, int | None]:
     if not rows or set(rows[0]) != {"item_id", "response"}:
         raise UsageError("ipip-120.csv: header must be item_id,response")
     out: dict[str, int | None] = {}
-    for row in rows:
-        item, raw = row["item_id"].strip(), (row["response"] or "").strip()
+    for number, row in enumerate(rows, start=2):
+        item, raw = (row["item_id"] or "").strip(), (row["response"] or "").strip()
         if item not in ids or item in out:
-            raise UsageError(f"ipip-120.csv: unknown or repeated item {item!r}")
+            raise UsageError(f"ipip-120.csv line {number}: unknown or repeated item id")
         if raw and raw not in {"1", "2", "3", "4", "5"}:
-            raise UsageError(f"ipip-120.csv: response for {item} must be 1-5 or blank")
+            raise UsageError(f"ipip-120.csv line {number}: the response must be 1-5 or blank")
         out[item] = int(raw) if raw else None
     if set(out) != ids:
         raise UsageError(f"ipip-120.csv: {len(ids - set(out))} items missing")

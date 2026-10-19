@@ -64,15 +64,6 @@ class Context:
     def runs(self) -> range:
         return range(1, self.cfg.runs + 1)
 
-    def label(self, era: str) -> str:
-        e = next(x for x in self.eras if x["id"] == era)
-        return e["label"] or e["id"]
-
-    def call(self, role: str, lineage: str, run: int | None, era: str | None, generation: str,
-             slots: dict[str, str], params: dict[str, str] | None = None, validate=None):
-        return invoke.call(self.ws, self.cfg, invoke.CallRequest(
-            stage="extract", role=role, lineage=lineage, run=run, era=era, generation=generation, slots=slots,
-            params=params or {}, validate=validate))
 
 
 def _context(ws: store.Workspace) -> Context:
@@ -99,11 +90,12 @@ def _outside(ids: list[str], allowed: frozenset[str] | set[str]) -> list[str]:
     return [f"cites {len(bad)} sentence id(s) outside the zoned era"] if bad else []
 
 
-def estimate(ws: store.Workspace) -> dict:
+def estimate(ws: store.Workspace) -> lifecycle.Preflight:
     cfg = config.load(ws)
     eras = len(store.read_json(ws.path("prepare/eras.json"))["eras"])
-    return {"model_calls": len(cfg.lineages) * cfg.runs * (3 * eras + 1) + 1,
-            "note": "discovery, recode and ledger per rater and era; one scorer per rater; one codebook author"}
+    return lifecycle.Preflight(len(cfg.lineages) * cfg.runs * (3 * eras + 1) + 1, 2,
+                               "discovery, recode and ledger per rater and era, one scorer per rater, one codebook "
+                               "author; if agreement is very high, one leak probe per lineage for the integrity audit")
 
 
 # --- discovery ---------------------------------------------------------------------------------------------------
@@ -114,14 +106,12 @@ def _discovery(c: Context) -> None:
             hypotheses: list[str] = []
             for k, era in enumerate(c.era_ids):
                 slots = {"era": f"era:{era}"}
-                params = {"era_label": c.label(era)}
-                if k == 0:
-                    params["hypotheses"] = "(none: this is the first era)"
-                else:
+                if k > 0:
                     slots["hypotheses"] = f"hypotheses:{lineage}:{run}:{c.era_ids[k - 1]}"
                 allowed = c.kept[era]
-                out = c.call("discovery", lineage, run, era, "B", slots, params,
-                             validate=lambda o, allowed=allowed: _outside(_cited(o, ("sentence_ids",)), allowed))
+                out = invoke.call(c.ws, c.cfg, invoke.CallRequest(
+                    stage="extract", role="discovery", lineage=lineage, run=run, era=era, generation="B", slots=slots,
+                    validate=lambda o, allowed=allowed: _outside(_cited(o, ("sentence_ids",)), allowed)))
                 store.write_json(artifacts.path_of(c.ws, f"discovery:{lineage}:{run}:{era}"), out)
                 hypotheses += out["hypotheses"]
                 store.write_text_atomic(artifacts.path_of(c.ws, f"hypotheses:{lineage}:{run}:{era}"),
@@ -156,6 +146,7 @@ def validate_codebook(out: dict, refs: set[str]) -> list[str]:
     if len(cons) > MAX_CONSTRUCTS:
         problems.append(f"more than {MAX_CONSTRUCTS} constructs")
     problems += [f"{c['id']}: name is not atomic" for c in cons if COMPOUND_NAME.search(c["name"])]
+    problems += [f"{c['id']}: traces no candidate" for c in cons if not c["trace"]]
     problems += [f"{c['id']}: a candidate repeats in its trace" for c in cons
                  if len(c["trace"]) != len(set(c["trace"]))]
     holders: dict[str, set[str]] = {}
@@ -183,8 +174,9 @@ def item_id(construct_id: str, salt: str) -> str:
 
 
 def _codebook(c: Context, candidates: dict[str, dict]) -> dict:
-    out = c.call("codebook_author", c.cfg.codebook_author, None, None, "B", {"pool": "pool:all"},
-                 validate=lambda o: validate_codebook(o, set(candidates)))
+    out = invoke.call(c.ws, c.cfg, invoke.CallRequest(
+        stage="extract", role="codebook_author", lineage=c.cfg.codebook_author, run=None, era=None, generation="B",
+        slots={"pool": "pool:all"}, validate=lambda o: validate_codebook(o, set(candidates))))
     salt = store.sha256_file(c.ws.path("prepare/redacted.txt"))
     constructs = [{**con, "lineages": sorted({candidates[ref]["lineage"] for ref in con["trace"]}),
                    "item_id": item_id(con["id"], salt)} for con in out["constructs"]]
@@ -228,8 +220,9 @@ def _recode(c: Context, book: dict) -> None:
                         return ["verdicts must cover every card item exactly once"]
                     return _outside(_cited(o, ("sentence_ids", "counter_sentence_ids")), allowed)
 
-                out = c.call("recode", lineage, run, era, "C", {"card": "card:B", "era": f"era:{era}"},
-                             {"era_label": c.label(era)}, validate)
+                out = invoke.call(c.ws, c.cfg, invoke.CallRequest(
+                    stage="extract", role="recode", lineage=lineage, run=run, era=era, generation="C",
+                    slots={"card": "card:B", "era": f"era:{era}"}, validate=validate))
                 verdicts = []
                 for v in out["verdicts"]:
                     final, reason = apply_bar(v, seg_of)
@@ -254,12 +247,13 @@ def _deductive(c: Context) -> None:
                         return ["the ledger must list all 30 facets once"]
                     return _outside(_cited(o, ("sentence_ids",)), allowed)
 
-                out = c.call("deductive_ledger", lineage, run, era, "C", {"era": f"era:{era}"},
-                             {"era_label": c.label(era)}, validate)
+                out = invoke.call(c.ws, c.cfg, invoke.CallRequest(
+                    stage="extract", role="deductive_ledger", lineage=lineage, run=run, era=era, generation="C",
+                    slots={"era": f"era:{era}", "facets": "facets:all"}, validate=validate))
                 store.write_json(artifacts.path_of(c.ws, f"ledger:{lineage}:{run}:{era}"), out)
-                ledgers.append({"era": c.label(era), **out})
+                ledgers.append({"era": era, **out})
                 cited |= set(_cited(out, ("sentence_ids",)))
-            store.write_json(artifacts.path_of(c.ws, f"ledger:{lineage}:{run}:all"), ledgers)
+            store.write_json(artifacts.path_of(c.ws, f"ledgers:{lineage}:{run}"), ledgers)
 
             def validate_scores(o, cited=frozenset(cited)):
                 if sorted(s["facet"] for s in o["scores"]) != facets:
@@ -269,8 +263,9 @@ def _deductive(c: Context) -> None:
                 stray = [i for s in o["scores"] for i in s["cited_sentence_ids"] if i not in cited]
                 return problems + ([f"{len(stray)} citation(s) not in this rater's ledgers"] if stray else [])
 
-            out = c.call("deductive_scorer", lineage, run, None, "C", {"ledgers": f"ledger:{lineage}:{run}:all"},
-                         validate=validate_scores)
+            out = invoke.call(c.ws, c.cfg, invoke.CallRequest(
+                stage="extract", role="deductive_scorer", lineage=lineage, run=run, era=None, generation="C",
+                slots={"ledgers": f"ledgers:{lineage}:{run}", "facets": "facets:all"}, validate=validate_scores))
             store.write_json(c.ws.path(f"run/deductive/scores-{lineage}-r{run}.json"),
                              {"lineage": lineage, "run": run, "scores": out["scores"]})
 
@@ -348,8 +343,12 @@ def integrity_audit(c: Context) -> dict:
     records = sorted(c.ws.root.glob("run/calls/**/*.json"))
 
     def requalify():
-        qualify.qualify(c.ws, c.cfg, out=REQUALIFICATION_AUDIT)
-        return True, "both lineages requalified"
+        fresh = qualify.qualify(c.ws, c.cfg, out=REQUALIFICATION_AUDIT)
+        baseline = invoke.qualified(c.ws)
+        moved = [lin for lin, q in fresh.items()
+                 if any(q[k] != baseline[lin].get(k) for k in ("cli_version", "invocation_hash", "config_hash",
+                                                              "resolved_model"))]
+        return not moved, "both lineages requalified" + (f"; fingerprint moved for {moved}" if moved else "")
 
     def events():
         hits = [p for p in records if invoke.audit_events(
@@ -397,6 +396,7 @@ def extract(ws: store.Workspace) -> dict:
     _deductive(c)
     result = _agree(c, book)
     outputs = [ws.rel(p) for g in ("run/recode/*.json", "run/deductive/*.json", "run/calls/extract/recode/*.json",
-                                   "run/calls/extract/deductive_*/*.json") for p in sorted(ws.root.glob(g))]
+                                   "run/calls/extract/deductive_*/*.json", REQUALIFICATION_AUDIT)
+               for p in sorted(ws.root.glob(g))]
     store.append_generation(ws, "C", ["run/agreement.json", *outputs])
     return result

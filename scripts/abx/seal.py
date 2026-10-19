@@ -11,15 +11,24 @@ from .errors import UsageError
 from .lifecycle import HASHES, SEALED
 
 __all__ = ["HASHES", "SEALED", "predictions", "seal"]
-PREDICTION = re.compile(r"^(P\d{1,3}):[ \t]*(.*)$", re.M)
+PREDICTION = re.compile(r"(P[0-9]{1,3}):[ \t]*(.*)")
+LOOKS_LIKE_PREDICTION = re.compile(r"\s*[Pp]\s*[0-9]")
 
 
 def predictions(text: str) -> dict[str, str]:
-    """`P<n>: claim` lines. An empty claim is an error, never silently merged with the next line."""
-    found = [(pid, claim.strip()) for pid, claim in PREDICTION.findall(text)]
+    """`P<n>: claim` lines. A line that looks like a prediction but is malformed, or an empty claim,
+    is an error with its line number, never silently dropped or merged with the next line."""
+    found = []
+    for number, line in enumerate(text.splitlines(), start=1):
+        m = PREDICTION.fullmatch(line.rstrip())
+        if m:
+            found.append((m.group(1), m.group(2).strip()))
+        elif LOOKS_LIKE_PREDICTION.match(line):
+            raise UsageError(f"self-prediction.md line {number}: write predictions as `P<number>: claim`")
     ids = [pid for pid, _ in found]
-    if len(ids) != len(set(ids)):
-        raise UsageError("self-prediction.md: prediction ids must be unique")
+    repeated = sorted({pid for pid in ids if ids.count(pid) > 1})
+    if repeated:
+        raise UsageError(f"self-prediction.md: {', '.join(repeated)} appears more than once")
     empty = [pid for pid, claim in found if not claim]
     if empty:
         raise UsageError(f"self-prediction.md: {', '.join(empty)} has no text; fill it in or delete the line")

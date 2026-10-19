@@ -54,6 +54,10 @@ class CodebookValidatorTest(unittest.TestCase):
         bad = self.book([("Thrift", ["c001"]), ("Wit", ["c001"])])
         self.assertTrue(extract.validate_codebook(bad, {"c001"}))
 
+    def test_a_construct_must_trace_a_candidate(self):
+        book = self.book([("Thrift", ["c001"]), ("Invented", [])])
+        self.assertTrue(any("traces no candidate" in p for p in extract.validate_codebook(book, {"c001"})))
+
     def test_split_within_one_construct_is_not_a_split(self):
         one = self.book([("Thrift", ["c001", "c001"])],
                         [{"candidate_ref": "c001", "disposition": "split", "reason": "two claims"}])
@@ -105,7 +109,7 @@ class ExtractPipelineTest(unittest.TestCase):
     def test_deductive_calls_carry_no_inductive_artifact(self):
         for rec_path in self.ws.root.glob("run/calls/extract/deductive_*/*.json"):
             kinds = {a.split(":")[0] for a in store.read_json(rec_path)["input_artifacts"]}
-            self.assertLessEqual(kinds, {"template", "schema", "era", "ledger"})
+            self.assertLessEqual(kinds, {"template", "schema", "era", "ledgers", "facets"})
 
     def test_no_sealed_content_in_any_prompt(self):
         sealed = [line.split(":", 1)[1].strip() for line in

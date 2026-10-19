@@ -8,6 +8,8 @@ check this validator doesn't perform.
 
 import re
 
+__all__ = ["errors"]
+
 _SUPPORTED = {
     "type", "properties", "required", "additionalProperties", "items", "enum", "const",
     "minItems", "maxItems", "minLength", "maxLength", "pattern", "minimum", "maximum",

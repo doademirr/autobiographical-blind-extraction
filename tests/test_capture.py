@@ -19,32 +19,36 @@ def _events(sse: str) -> list[dict]:
 class CaptureServerTest(unittest.TestCase):
     def test_codex_scripted_call_then_message_and_result_lookup(self):
         item = {"type": "function_call", "id": "fc", "call_id": "call_w", "name": "wait", "arguments": "{}"}
-        with capture.Capture("codex", tool_item=item) as cap:
+        cap = capture.Capture("codex", tool_item=item)
+        with cap:
             first = _events(_post(f"{cap.base_url}/v1/responses", {"input": []}))
             second = _events(_post(f"{cap.base_url}/v1/responses", {"input": [
                 {"type": "function_call_output", "call_id": "call_w", "output": "code-mode host is disabled"}]}))
         self.assertEqual(first[1]["item"]["call_id"], "call_w")
         self.assertEqual(second[1]["item"]["type"], "message")
-        self.assertEqual(capture.tool_result(cap.requests, "call_w"), "code-mode host is disabled")
-        self.assertIsNone(capture.tool_result(cap.requests, "other"))
+        self.assertEqual(capture.tool_output(cap.evidence.requests, "call_w"), "code-mode host is disabled")
+        self.assertEqual(capture.tool_text(cap.evidence.requests, "other"), "")
 
     def test_claude_scripted_tool_use_and_result_lookup(self):
-        with capture.Capture("claude", tool_use=("Read", {"file_path": "/x"})) as cap:
+        cap = capture.Capture("claude", tool_use=("Read", {"file_path": "/x"}))
+        with cap:
             first = _events(_post(f"{cap.base_url}/v1/messages", {"model": "m", "messages": []}))
             _post(f"{cap.base_url}/v1/messages", {"model": "m", "messages": [{"role": "user", "content": [
                 {"type": "tool_result", "tool_use_id": "toolu_abx", "content": [{"type": "text", "text": "C"}]}]}]})
         self.assertEqual(first[1]["content_block"]["name"], "Read")
-        self.assertEqual(capture.tool_result(cap.requests, "toolu_abx"), "C")
+        self.assertEqual(capture.tool_output(cap.evidence.requests, "toolu_abx"), [{"type": "text", "text": "C"}])
+        self.assertEqual(capture.tool_text(cap.evidence.requests, "toolu_abx"), '[{"type": "text", "text": "C"}]')
 
     def test_unforwarded_reads_and_other_posts_are_refused_and_logged(self):
-        with capture.Capture("codex") as cap:
+        cap = capture.Capture("codex")
+        with cap:
             with self.assertRaises(urllib.error.HTTPError) as cm:
                 _post(f"{cap.base_url}/backend-api/ps/mcp", {})
             cm.exception.close()
             with self.assertRaises(urllib.error.HTTPError) as cm:
                 urllib.request.urlopen(f"{cap.base_url}/codex-up/models", timeout=10)
             cm.exception.close()
-        self.assertEqual([t["outcome"] for t in cap.traffic], ["refused", "refused"])
+        self.assertEqual([t.outcome for t in cap.evidence.traffic], ["refused", "refused"])
 
     def test_tool_list_walks_namespaces(self):
         request = {"input": [{"type": "additional_tools", "tools": [

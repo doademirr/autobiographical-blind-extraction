@@ -7,6 +7,8 @@ observable, so a locked CLI that cannot reach it proves something.
 import json
 import sys
 
+__all__ = ["main"]
+
 
 def main() -> None:
     canary = sys.argv[1]

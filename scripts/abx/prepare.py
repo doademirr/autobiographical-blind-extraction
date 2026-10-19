@@ -14,13 +14,16 @@ THIN, STOP = 0.50, 0.25
 
 
 def _stage_method(ws: store.Workspace) -> None:
-    """Copy the repo's prompts, schemas and IPIP instrument in; freeze hashes them in generation A."""
+    """Copy the repo's prompts, schemas and IPIP instrument in, and derive the facet catalog raters see
+    (codes and names only, never questionnaire items); freeze hashes them all in generation A."""
     for name in ("prompts", "schemas"):
         if not ws.path(f"prereg/{name}").exists():
             shutil.copytree(REPO / name, ws.path(f"prereg/{name}"))
     if not ws.path(ipip.FROZEN_COPY).exists():
         ws.path(ipip.FROZEN_COPY).parent.mkdir(parents=True, exist_ok=True)
         shutil.copy(ipip.INSTRUMENT, ws.path(ipip.FROZEN_COPY))
+    facets = ipip.load_instrument(ws)["facets"]
+    store.write_text_atomic(artifacts.path_of(ws, "facets:all"), "".join(f"- {c} {n}\n" for c, n in facets.items()))
 
 
 def _review_files(ws: store.Workspace, original: str) -> bool:
@@ -37,10 +40,10 @@ def _review_files(ws: store.Workspace, original: str) -> bool:
     return store.read_json(red).get("approved") is True and store.read_json(eras).get("approved") is True
 
 
-def estimate(ws: store.Workspace) -> dict:
+def estimate(ws: store.Workspace) -> lifecycle.Preflight:
     eras = ws.path("prepare/eras.json")
     n = len(store.read_json(eras)["eras"]) if eras.exists() else 0
-    return {"model_calls": n + 2, "note": "one zoning call per era plus one leak probe per lineage"}
+    return lifecycle.Preflight(n + 2, 0, "one zoning call per era plus one leak probe per lineage")
 
 
 def _zone(ws: store.Workspace, cfg: config.Config, era: dict, sents: list[text.Sentence],
@@ -55,8 +58,7 @@ def _zone(ws: store.Workspace, cfg: config.Config, era: dict, sents: list[text.S
         return []
 
     req = invoke.CallRequest(stage="prepare", role="zoner", lineage=cfg.zoner, run=None, era=era["id"],
-                             generation="A", slots={"chunk": f"chunk:{era['id']}"},
-                             params={"era_label": era["label"] or era["id"]}, validate=validate)
+                             generation="A", slots={"chunk": f"chunk:{era['id']}"}, validate=validate)
     out = invoke.call(ws, cfg, req)
     return {lab["sentence_id"]: lab["label"] for lab in out["labels"]}
 

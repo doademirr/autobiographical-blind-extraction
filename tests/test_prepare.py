@@ -21,6 +21,15 @@ def approve_fixture(ws: store.Workspace) -> None:
         store.write_json(ws.path(f"prepare/{name}"), store.read_json(FIXTURE / name))
 
 
+class SealTest(unittest.TestCase):
+    def test_malformed_or_empty_prediction_lines_are_refused_with_their_line(self):
+        self.assertEqual(seal.predictions("# head\nP1: one\nP2:   two\n"), {"P1": "one", "P2": "two"})
+        for text in ("P1: one\nP2 : two\n", "P1: one\nP2 - two\n", "P1:\nP2: two\n", "P1: a\nP1: b\n"):
+            with self.subTest(text=text), self.assertRaises(UsageError) as cm:
+                seal.predictions(text)
+            self.assertTrue("line" in str(cm.exception) or "P1" in str(cm.exception))
+
+
 class InitTest(unittest.TestCase):
     def setUp(self):
         self.fw = FakeWorkspace()
@@ -55,6 +64,12 @@ class InitTest(unittest.TestCase):
         store.write_json(ws.path("config.json"), cfg)
         with self.assertRaises(UsageError):
             config.load(ws)
+
+    def test_crosswalk_needs_one_coder_per_lineage(self):
+        for coders in ([], ["claude"], ["claude", "claude"], ["claude", "codex", "codex"]):
+            raw = {**self.fw.cfg, "roles": {**self.fw.cfg["roles"], "crosswalk_coders": coders}}
+            with self.subTest(coders=coders), self.assertRaises(UsageError):
+                config.parse(raw)
 
     def test_default_config_lists_are_independent_copies(self):
         with mock.patch("shutil.which", return_value=str(FIXTURE / "autobiography.txt")):
@@ -110,7 +125,7 @@ class PrepareTest(unittest.TestCase):
             self.assertEqual(line[9:], redacted[s["start"]:s["end"]])
         self.assertIn("[…]", substrate)
         q = store.read_json(self.ws.path(invoke.QUALIFICATION))
-        self.assertEqual(q["codex"]["evidence"]["registry"], list(init.CODEX_RETAINED))
+        self.assertEqual(q["codex"]["evidence"]["registry"], sorted(init.CODEX_RETAINED))
         self.assertEqual(q["claude"]["resolved_model"], "fake-claude-1")
         self.assertEqual(q["claude"]["evidence"]["leak_probe"]["status"], "success")
 
@@ -191,27 +206,55 @@ class QualifyFailureTest(unittest.TestCase):
         with self.assertRaises(UsageError):
             self._qualify({"ABX_FAKE_SLEEP": "5"}, slow)
 
-    def _locked(self, traffic, forward=True, code=0, status="success"):
-        cap = capture.Capture("codex")
-        cap.requests.append({"model": "fake-codex-1", "input": []})
-        cap.traffic.extend(traffic)
+    def _locked(self, traffic=(), forward=True, code=0, status="success", requests=None, scripted=None):
+        T = capture.Traffic
+        requests = requests or ({"model": "fake-codex-1", "input": []},)
         lin = self.fw.config.lineage("codex")
         cfg = config.Config(**{**self.fw.config.__dict__, "lineages": {
             **self.fw.config.lineages, "codex": config.Lineage(**{**lin.__dict__, "capture_forward": forward})}})
-        run = qualify.Capture(cap, code, invoke.Result(status=status))
+        run = qualify.Run(capture.Evidence(tuple(requests), tuple(T(*t) for t in traffic)), code,
+                          invoke.Result(status=status))
         with qualify.Canary() as canary:
-            return qualify._locked_problems("codex", cfg, run, canary, None)
+            return qualify._locked_problems("codex", cfg, run, canary, scripted)
+
+    OK_TRAFFIC = (("GET", "/codex-up/models", "forwarded", 200), ("GET", "/codex-up/responses", "ws-refused"),
+                  ("POST", "/backend-api/codex/analytics-events/events", "refused"))
 
     def test_every_locked_capture_checks_transport_and_cli_success(self):
-        ok = [{"method": "GET", "path": "/codex-up/models", "outcome": "forwarded:200"},
-              {"method": "GET", "path": "/codex-up/responses", "outcome": "ws-refused"},
-              {"method": "POST", "path": "/backend-api/codex/analytics-events/events", "outcome": "refused"}]
+        ok = self.OK_TRAFFIC
         self.assertEqual(self._locked(ok), [])
-        self.assertTrue(self._locked([*ok, {"method": "POST", "path": "/backend-api/ps/mcp", "outcome": "refused"}]))
-        self.assertTrue(self._locked([{"method": "GET", "path": "/codex-up/models", "outcome": "forwarded:500"}]))
+        for bad in ((*ok, ("POST", "/backend-api/ps/mcp", "refused")),
+                    (("GET", "/codex-up/models", "forwarded", 500),),
+                    (("GET", "/codex-up/models", "forwarded", 304),),
+                    (("GET", "/backend-api/wham/x", "ws-refused"),),
+                    (("POST", "/backend-api/other", "refused"),)):
+            with self.subTest(bad=bad):
+                self.assertTrue(self._locked(bad))
         self.assertTrue(self._locked(ok, code=1))
         self.assertTrue(self._locked(ok, status="failed"))
 
+    def test_every_request_registry_is_checked(self):
+        def req(*tools):
+            names = [{"type": "function", "name": t} for t in tools]
+            return {"model": "fake-codex-1", "input": [{"type": "additional_tools", "tools": [
+                {"type": "namespace", "name": "functions", "tools": names}]}]}
+
+        clean = req("exec", "wait")
+        self.assertEqual(self._locked(self.OK_TRAFFIC, requests=(clean, clean)), [])
+        problems = self._locked(self.OK_TRAFFIC, requests=(clean, req("exec", "wait", "exec_command")))
+        self.assertTrue(any("functions.exec_command" in p for p in problems))
+
+    def test_scripted_result_must_match_exactly_in_type(self):
+        wrapped = [{"type": "file", "text": "code-mode host is disabled"}]
+        sent = [{"model": "fake-codex-1", "input": []},
+                {"model": "fake-codex-1",
+                 "input": [{"type": "function_call_output", "call_id": "c1", "output": wrapped}]}]
+        problems = self._locked(self.OK_TRAFFIC, requests=sent, scripted=("c1", "code-mode host is disabled"))
+        self.assertTrue(any("pinned" in p for p in problems))
+
+    def test_canary_in_an_earlier_message_is_a_leak(self):
+        with self.assertRaises(IsolationError):
+            self._qualify({"ABX_FAKE_PRELUDE": "I recall ABXPROFILECANARY."})
 
 if __name__ == "__main__":
     unittest.main()

@@ -30,7 +30,8 @@
       "items": {
        "type": "string",
        "pattern": "^c[0-9]{3,4}$"
-      }
+      },
+      "minItems": 1
      }
     },
     "required": [

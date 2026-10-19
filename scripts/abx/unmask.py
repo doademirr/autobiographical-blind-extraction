@@ -6,7 +6,7 @@ frozen files only, never by a model.
 from fractions import Fraction
 from statistics import median
 
-from . import artifacts, config, freeze, invoke, ipip, lifecycle, report, seal, store
+from . import artifacts, config, invoke, ipip, lifecycle, report, seal, store
 
 __all__ = ["REPORTABLE", "compute", "deductive_domains", "domain_comparison", "estimate", "prediction_rates",
            "unmask"]
@@ -16,8 +16,8 @@ CODE_RANK = {"none": 0, "partial": 1, "match": 2}
 OUTCOME_OF_RANK = {0: "unmatched", 1: "partial", 2: "matched"}
 
 
-def estimate(ws: store.Workspace) -> dict:
-    return {"model_calls": len(config.load(ws).crosswalk_coders), "note": "one crosswalk call per coder"}
+def estimate(ws: store.Workspace) -> lifecycle.Preflight:
+    return lifecycle.Preflight(len(config.load(ws).crosswalk_coders), 0, "one crosswalk call per coder")
 
 
 def _crosswalk(ws: store.Workspace, cfg: config.Config, book: dict) -> None:
@@ -33,8 +33,7 @@ def _crosswalk(ws: store.Workspace, cfg: config.Config, book: dict) -> None:
     for lineage in cfg.crosswalk_coders:
         out = invoke.call(ws, cfg, invoke.CallRequest(
             stage="unmask", role="crosswalk", lineage=lineage, run=None, era=None, generation="D",
-            slots={"constructs": "constructs:all", "predictions": "self_prediction:sealed"}, validate=validate,
-            after_blind_results=True))
+            slots={"constructs": "constructs:all", "predictions": "self_prediction:sealed"}, validate=validate))
         store.write_json(ws.path(f"run/crosswalk/codes-{lineage}.json"), {"coder": lineage, "codes": out["codes"]})
 
 
@@ -116,7 +115,7 @@ def compute(ws: store.Workspace, cfg: config.Config) -> dict:
     self_report = ipip.score(ipip.parse_responses(ws.path("sealed/ipip-120.csv").read_text(encoding="utf-8"),
                                                   instrument), instrument)
     observer = deductive_domains(agree["deductive_collapsed"], instrument)
-    qualification = store.read_json(ws.path(freeze.QUALIFICATION_A))
+    qualification = store.read_json(ws.path(invoke.QUALIFICATION_A))
     return {
         "corpus": store.read_json(ws.path("prepare/stats.json")),
         "fingerprints": {lin: {k: v for k, v in q.items() if k != "evidence"} for lin, q in qualification.items()},
@@ -128,6 +127,7 @@ def compute(ws: store.Workspace, cfg: config.Config) -> dict:
         | {"inductive_reportable": inductive_ok},
         "deductive_vs_ipip": domain_comparison(observer, self_report)
         | {"deductive_reportable": agree["deductive"]["verdict"] in REPORTABLE},
+        "domain_names": instrument["domains"],
     }
 
 

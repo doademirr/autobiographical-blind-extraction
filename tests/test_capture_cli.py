@@ -46,7 +46,7 @@ class RealCliCaptureTest(unittest.TestCase):
     def test_codex_locked_registry_retained_tools_and_positive_controls(self):
         with qualify.Canary() as canary:
             evidence = qualify.qualify_codex(self.cfg, canary)
-        self.assertEqual(evidence["registry"], list(init.CODEX_RETAINED))
+        self.assertEqual(evidence["registry"], sorted(init.CODEX_RETAINED))
         self.assertEqual(evidence["positive_controls"], {"file": "canary returned", "mcp": "canary returned"})
 
     @unittest.skipUnless(CLAUDE, "claude required")

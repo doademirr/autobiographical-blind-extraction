@@ -96,6 +96,24 @@ class CallTest(unittest.TestCase):
         with self.assertRaises(IsolationError):
             self.call(_req())
 
+    def test_a_record_copied_to_another_replicate_is_not_reused(self):
+        self.call(_req(run=1))
+        src, dst = invoke.record_path(self.ws, _req(run=1)), invoke.record_path(self.ws, _req(run=2))
+        dst.write_text(src.read_text())
+        self.call(_req(run=2))
+        self.assertEqual(len(self.fw.prompts_logged()), 2)
+        self.assertEqual(store.read_json(dst)["run"], 2)
+
+    def test_artifact_reached_through_a_symlink_is_refused(self):
+        era = self.ws.path("prepare/substrate/e1.md")
+        era.parent.mkdir(parents=True)
+        secret = self.ws.path("sealed/self-prediction.md")
+        secret.parent.mkdir(parents=True)
+        secret.write_text("P1: secret")
+        era.symlink_to(secret)
+        with self.assertRaises(UsageError):
+            artifacts.path_of(self.ws, "era:e1")
+
     def test_fingerprint_change_is_integrity_failure(self):
         with mock.patch.dict(os.environ, {"ABX_FAKE_VERSION": "claude-fake 9.9.9"}):
             with self.assertRaises(IntegrityError) as cm:
@@ -140,7 +158,7 @@ class AllowlistTest(unittest.TestCase):
 
     def test_artifact_ids_cannot_escape_their_directory(self):
         for bad in ("era:../../sealed/self-prediction", "era:e1:extra", "discovery:claude:1", "card:A",
-                    "ledger:claude:x:e1", "template:../x", "nokind:e1"):
+                    "ledger:claude:x:e1", "template:../x", "nokind:e1", "era:e1\n", "era:all", "run:1"):
             with self.subTest(bad=bad), self.assertRaises(UsageError):
                 artifacts.parse(bad)
         with self.assertRaises(UsageError):

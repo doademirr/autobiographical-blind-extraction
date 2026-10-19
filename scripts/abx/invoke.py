@@ -24,9 +24,9 @@ from .config import Config, Lineage
 from .errors import CallFailed, IntegrityError, IsolationError, UsageError
 from .roles import role as get_role
 
-__all__ = ["CallRequest", "Event", "Result", "audit_events", "call", "check_fingerprint", "claude_argv",
-           "codex_argv", "estimate_tokens", "execute", "live_fingerprint", "parse_claude", "parse_codex",
-           "record_path", "sandbox_profile"]
+__all__ = ["QUALIFICATION", "QUALIFICATION_A", "CallRequest", "Event", "Result", "audit_events", "call",
+           "check_fingerprint", "claude_argv", "codex_argv", "estimate_tokens", "execute", "live_fingerprint",
+           "parse_claude", "parse_codex", "qualified", "record_path", "run_probe", "sandbox_profile"]
 
 SYSTEM_READ_ROOTS = (
     "/System", "/usr/lib", "/usr/libexec", "/usr/bin", "/usr/sbin", "/usr/share", "/bin", "/sbin",
@@ -37,7 +37,9 @@ CLAUDE_TEXT_BLOCKS = {"text", "thinking", "redacted_thinking"}
 CODEX_ITEMS = {"agent_message", "reasoning", "error"}
 CODEX_LIFECYCLE = {"thread.started", "turn.started"}
 CODEX_PLAIN_LINE = re.compile(r"^(\d{4}-\d{2}-\d{2}T\S+\s|Reading additional input from stdin)")
-QUALIFICATION = "run/qualification.json"
+QUALIFICATION = "run/qualification.json"          # the current qualification, until generation A
+QUALIFICATION_A = "prereg/qualification-A.json"   # the frozen baseline every later call is held to
+FIRST_ERA_MARKER = "(none: this is the first era)"
 
 
 def sandbox_profile(allow: list[str]) -> str:
@@ -70,10 +72,11 @@ class Event:
 @dataclass
 class Result:
     status: str = "no_terminal"     # "success" | "failed" | "no_terminal"
-    text: str | None = None
+    text: str | None = None         # the final message, the only one parsed as output
     model: str | None = None
     detail: str = ""
     events: list[Event] = field(default_factory=list)
+    messages: list[str] = field(default_factory=list)   # every assistant text seen, for leak scans only
 
 
 def audit_events(lineage: str, events: list[Event], allowed: frozenset[str] = frozenset()) -> list[str]:
@@ -101,6 +104,10 @@ def audit_events(lineage: str, events: list[Event], allowed: frozenset[str] = fr
     return found
 
 
+def _strings(value) -> tuple[str, ...] | None:
+    return tuple(str(v) for v in value) if isinstance(value, list) else None
+
+
 def parse_claude(lines: list[str]) -> Result:
     out = Result()
     for line in lines:
@@ -109,25 +116,29 @@ def parse_claude(lines: list[str]) -> Result:
         try:
             ev = json.loads(line)
         except ValueError:
-            out.events.append(Event("unparseable"))
-            continue
+            ev = None
         if not isinstance(ev, dict):
             out.events.append(Event("unparseable"))
             continue
         etype, sub = str(ev.get("type")), ev.get("subtype")
         if etype == "system" and sub == "init":
-            out.model = ev.get("model")
-            out.events.append(Event("system", "init", tuple(map(str, ev.get("tools") or [])),
-                                    tuple(map(str, ev.get("mcp_servers") or [])),
-                                    registry_present="tools" in ev and "mcp_servers" in ev))
+            out.model = ev.get("model") if isinstance(ev.get("model"), str) else None
+            tools, servers = _strings(ev.get("tools")), _strings(ev.get("mcp_servers"))
+            out.events.append(Event("system", "init", tools or (), servers or (),
+                                    registry_present=tools is not None and servers is not None))
         elif etype == "assistant":
-            blocks = (ev.get("message") or {}).get("content") or []
-            out.events.append(Event("assistant", ",".join(str(b.get("type")) for b in blocks if isinstance(b, dict))))
+            message = ev.get("message")
+            blocks = message.get("content") if isinstance(message, dict) else None
+            if not isinstance(blocks, list) or not all(isinstance(b, dict) for b in blocks):
+                out.events.append(Event("unparseable"))
+                continue
+            out.events.append(Event("assistant", ",".join(str(b.get("type")) for b in blocks)))
+            out.messages += [b["text"] for b in blocks if isinstance(b.get("text"), str)]
         elif etype == "result":
             out.events.append(Event("result", str(sub)))
-            ok = sub == "success" and ev.get("is_error") is False
+            ok = sub == "success" and ev.get("is_error") is False and isinstance(ev.get("result"), str)
             out.status = "success" if ok else "failed"
-            out.text = ev.get("result") if ok else None
+            out.text = ev["result"] if ok else None
             out.detail = "" if ok else f"result {sub}"
         else:
             out.events.append(Event(etype, str(sub or "")))
@@ -143,17 +154,18 @@ def parse_codex(lines: list[str]) -> Result:
         try:
             ev = json.loads(stripped)
         except ValueError:
-            if stripped[0] in "{[":
-                out.events.append(Event("unparseable"))
-            continue
+            ev = None
         if not isinstance(ev, dict):
             out.events.append(Event("unparseable"))
             continue
         etype = str(ev.get("type"))
         item = ev.get("item") if isinstance(ev.get("item"), dict) else {}
         out.events.append(Event(etype, str(item.get("type", ""))))
+        text = item.get("text")
+        if etype == "item.completed" and item.get("type") in {"agent_message", "reasoning"} and isinstance(text, str):
+            out.messages.append(text)
         if etype == "item.completed" and item.get("type") == "agent_message":
-            out.text = item.get("text")
+            out.text = text if isinstance(text, str) else None
         elif etype == "turn.completed":
             out.status = "success"
         elif etype == "turn.failed":
@@ -197,15 +209,16 @@ def live_fingerprint(cfg: Config, lineage: str) -> dict:
         "cli": lin.cli,
         "cli_version": cli_version(lin.cli),
         "invocation_hash": store.sha256_text(store.canonical(_pinned_argv(lin))),
-        "config_hash": store.sha256_text(store.canonical(lin.raw)),
+        "config_hash": store.sha256_text(lin.raw_json),
     }
 
 
 def qualified(ws: store.Workspace) -> dict:
-    path = ws.path(QUALIFICATION)
-    if not path.exists():
-        raise UsageError("no qualification on record; run `prepare` first")
-    return store.read_json(path)
+    """The qualification calls are held to: the frozen baseline once generation A exists."""
+    for rel in (QUALIFICATION_A, QUALIFICATION):
+        if ws.path(rel).exists():
+            return store.read_json(ws.path(rel))
+    raise UsageError("no qualification on record; run `prepare` first")
 
 
 def check_fingerprint(cfg: Config, lineage: str, qualified_fp: dict) -> dict:
@@ -235,11 +248,13 @@ def _run(argv: list[str], prompt: str, cwd: Path, env: dict[str, str], timeout: 
 
 
 def execute(cfg: Config, lineage: str, prompt_text: str, schema: str | None, argv: list[str] | None = None,
-            extra_args: list[str] | None = None, env_extra: dict[str, str] | None = None) -> tuple[int | None, Result]:
+            extra_args: list[str] | None = None, env_extra: dict[str, str] | None = None,
+            cwd_files: dict[str, str] | None = None) -> tuple[int | None, Result]:
     """One isolated CLI process; returns its exit code (None on timeout) and parsed stream.
 
-    Qualification alone passes `argv` (an unlocked variant) or `extra_args` (provider overrides,
-    inserted before Codex's trailing stdin marker); model calls always use the pinned argv.
+    Qualification alone passes `argv` (an unlocked variant), `extra_args` (provider overrides,
+    inserted before Codex's trailing stdin marker) or `cwd_files` (the leak probe's own control);
+    model calls always use the pinned argv in an empty directory.
     """
     lin = cfg.lineage(lineage)
     argv = list(argv or _pinned_argv(lin))
@@ -249,6 +264,8 @@ def execute(cfg: Config, lineage: str, prompt_text: str, schema: str | None, arg
     try:
         cwd = tmp / "cwd"
         cwd.mkdir()
+        for name, body in (cwd_files or {}).items():
+            (cwd / name).write_text(body)
         env = _env(cfg, env_extra or {})
         if lineage == "claude":
             code, lines = _run(argv, prompt_text, cwd, env, cfg.timeout_s)
@@ -281,9 +298,7 @@ class CallRequest:
     era: str | None
     generation: str
     slots: dict[str, str]
-    params: dict[str, str] = field(default_factory=dict)
     validate: Callable[[object], list[str]] | None = None
-    after_blind_results: bool = False
 
     @property
     def identity(self) -> str:
@@ -294,9 +309,26 @@ def record_path(ws: store.Workspace, req: CallRequest) -> Path:
     return ws.path(f"run/calls/{req.identity}.json")
 
 
-def _era_order(ws: store.Workspace) -> list[str]:
+def _eras(ws: store.Workspace) -> list[dict]:
     path = ws.path("prepare/eras.json")
-    return [e["id"] for e in store.read_json(path)["eras"]] if path.exists() else []
+    return store.read_json(path)["eras"] if path.exists() else []
+
+
+def _labels(ws: store.Workspace, req: CallRequest) -> dict[str, str]:
+    """The labels a role's template takes, derived from the workspace, never from the caller."""
+    policy = get_role(req.role)
+    eras = _eras(ws)
+    labels = {}
+    if "era_label" in policy.params:
+        era = next((e for e in eras if e["id"] == req.era), None)
+        if era is None:
+            raise UsageError(f"{req.role} call names an unknown era")
+        labels["era_label"] = era["label"] or era["id"]
+    if "hypotheses" in policy.params and "hypotheses" not in req.slots:
+        if not eras or eras[0]["id"] != req.era:
+            raise IsolationError(f"{req.role} for a later era must carry its own earlier hypotheses")
+        labels["hypotheses"] = FIRST_ERA_MARKER
+    return labels
 
 
 def parse_output(text: str | None, schema: dict, validate) -> tuple[object, list[str]]:
@@ -321,13 +353,19 @@ def _incident(ws: store.Workspace, req: CallRequest, kind: str, detail: list[str
 
 
 def _reusable(ws: store.Workspace, req: CallRequest, expect: dict, schema: dict) -> object:
+    """A record is reused only when it is this call's, succeeded, matches every input and re-audits clean."""
     path = record_path(ws, req)
     if not path.exists():
         return None
     rec = store.read_json(path)
-    if any(rec.get(k) != v for k, v in expect.items()):
+    identity = {"identity": req.identity, "stage": req.stage, "role": req.role, "lineage": req.lineage,
+                "run": req.run, "era": req.era, "status": "success"}
+    if not isinstance(rec, dict) or any(rec.get(k) != v for k, v in {**identity, **expect}.items()):
         return None
-    events = [Event(**e) for e in rec.get("events", [])]
+    try:
+        events = [Event(**e) for e in rec["events"]]
+    except (KeyError, TypeError):
+        return None
     if audit_events(req.lineage, events):
         raise IsolationError(f"{req.identity}: its record holds a tool event; it cannot be reused")
     _, problems = parse_output(store.canonical(rec["output"]), schema, req.validate)
@@ -338,9 +376,9 @@ def call(ws: store.Workspace, cfg: Config, req: CallRequest) -> object:
     """Assemble, audit, run (or reuse) one model call and return its validated output."""
     rater = (req.lineage, req.run) if req.run is not None else None
     slots = {**req.slots, "schema": f"schema:{get_role(req.role).schema}"}
-    prompt = prompts.assemble(req.role, slots, artifacts.resolver(ws), req.params, rater=rater, era=req.era,
-                              era_order=_era_order(ws))
-    prompts.audit(prompt, withheld.load(ws), after_blind_results=req.after_blind_results)
+    prompt = prompts.assemble(req.role, slots, artifacts.resolver(ws), _labels(ws, req), rater=rater, era=req.era,
+                              era_order=[e["id"] for e in _eras(ws)])
+    prompts.audit(prompt, withheld.load(ws), after_blind_results="C" in store.frozen_generations(ws))
     fingerprint = check_fingerprint(cfg, req.lineage, qualified(ws)[req.lineage])
     lin = cfg.lineage(req.lineage)
     need = estimate_tokens(prompt.text) + lin.reserve_output_tokens
@@ -374,8 +412,19 @@ def call(ws: store.Workspace, cfg: Config, req: CallRequest) -> object:
         raise CallFailed(f"{req.identity}: invalid output ({problems[0]})")
     store.write_json(record_path(ws, req), {
         "attempt_id": store.sha256_text(store.canonical(expect))[:16], "identity": req.identity,
-        "stage": req.stage, "role": req.role, "lineage": req.lineage, "run": req.run, "era": req.era, **expect,
+        "stage": req.stage, "role": req.role, "lineage": req.lineage, "run": req.run, "era": req.era,
+        "status": "success", **expect,
         "output": output, "events": [asdict(e) for e in result.events],
     })
     return output
 
+
+def run_probe(ws: store.Workspace, cfg: Config, lineage: str, argv: list[str] | None = None,
+              cwd_files: dict[str, str] | None = None) -> tuple[int | None, Result, dict]:
+    """The leak probe: the frozen probe template, one process, and a record with no reply content."""
+    prompt = prompts.assemble("probe", {"schema": "schema:probe"}, artifacts.resolver(ws))
+    code, result = execute(cfg, lineage, prompt.text, artifacts.resolver(ws)("schema:probe"), argv=argv,
+                           cwd_files=cwd_files)
+    record = {"prompt_hash": store.sha256_text(prompt.text), "exit": code, "status": result.status,
+              "events": [f"{e.type}:{e.detail}" for e in result.events]}
+    return code, result, record
