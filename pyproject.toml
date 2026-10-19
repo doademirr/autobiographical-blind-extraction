@@ -11,3 +11,4 @@ line-length = 120
 
 [tool.ruff.lint]
 select = ["E", "F", "W", "I", "UP", "B", "C4", "PLW", "RUF"]
+ignore = ["RUF001"]  # report text uses α, en dashes and the removal mark on purpose
