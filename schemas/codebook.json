@@ -1,0 +1,84 @@
+{
+ "type": "object",
+ "properties": {
+  "constructs": {
+   "type": "array",
+   "items": {
+    "type": "object",
+    "properties": {
+     "id": {
+      "type": "string",
+      "pattern": "^C[0-9]{2}$"
+     },
+     "name": {
+      "type": "string",
+      "minLength": 3,
+      "maxLength": 80
+     },
+     "definition": {
+      "type": "string",
+      "minLength": 10,
+      "maxLength": 400
+     },
+     "sufficiency_rule": {
+      "type": "string",
+      "minLength": 10,
+      "maxLength": 300
+     },
+     "trace": {
+      "type": "array",
+      "items": {
+       "type": "string",
+       "pattern": "^c[0-9]{3,4}$"
+      }
+     }
+    },
+    "required": [
+     "id",
+     "name",
+     "definition",
+     "sufficiency_rule",
+     "trace"
+    ],
+    "additionalProperties": false
+   },
+   "minItems": 1,
+   "maxItems": 80
+  },
+  "appendix": {
+   "type": "array",
+   "items": {
+    "type": "object",
+    "properties": {
+     "candidate_ref": {
+      "type": "string",
+      "pattern": "^c[0-9]{3,4}$"
+     },
+     "disposition": {
+      "type": "string",
+      "enum": [
+       "merged",
+       "split",
+       "excluded"
+      ]
+     },
+     "reason": {
+      "type": "string",
+      "maxLength": 300
+     }
+    },
+    "required": [
+     "candidate_ref",
+     "disposition",
+     "reason"
+    ],
+    "additionalProperties": false
+   }
+  }
+ },
+ "required": [
+  "constructs",
+  "appendix"
+ ],
+ "additionalProperties": false
+}

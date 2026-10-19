@@ -12,6 +12,7 @@ _LAYOUT = {
     "era": "prepare/substrate/{0}.md",
     "discovery": "run/discovery/{0}-r{1}-{2}.json",
     "hypotheses": "run/discovery/{0}-r{1}-{2}.hypotheses.md",
+    "pool": "run/discovery/pool.md",
     "card": "run/codebook/card.md",
     "ledger": "run/deductive/ledger-{0}-r{1}-{2}.json",
     "constructs": "run/crosswalk/constructs.md",

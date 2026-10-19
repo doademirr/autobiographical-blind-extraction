@@ -1,0 +1,80 @@
+{
+ "type": "object",
+ "properties": {
+  "bias_memo": {
+   "type": "string",
+   "maxLength": 1200
+  },
+  "traits": {
+   "type": "array",
+   "items": {
+    "type": "object",
+    "properties": {
+     "trait": {
+      "type": "string",
+      "minLength": 3,
+      "maxLength": 160
+     },
+     "alexander_id": {
+      "type": "string",
+      "enum": [
+       "primacy",
+       "frequency",
+       "uniqueness",
+       "negation",
+       "emphasis",
+       "omission",
+       "error",
+       "isolation",
+       "incompletion"
+      ]
+     },
+     "occurrences": {
+      "type": "array",
+      "items": {
+       "type": "object",
+       "properties": {
+        "sentence_ids": {
+         "type": "array",
+         "items": {
+          "type": "string",
+          "pattern": "^s[0-9]{5}$"
+         },
+         "minItems": 1,
+         "maxItems": 12
+        }
+       },
+       "required": [
+        "sentence_ids"
+       ],
+       "additionalProperties": false
+      },
+      "minItems": 1,
+      "maxItems": 8
+     }
+    },
+    "required": [
+     "trait",
+     "alexander_id",
+     "occurrences"
+    ],
+    "additionalProperties": false
+   },
+   "maxItems": 25
+  },
+  "hypotheses": {
+   "type": "array",
+   "items": {
+    "type": "string",
+    "maxLength": 300
+   },
+   "maxItems": 40
+  }
+ },
+ "required": [
+  "bias_memo",
+  "traits",
+  "hypotheses"
+ ],
+ "additionalProperties": false
+}

@@ -15,7 +15,7 @@ from .errors import IsolationError, UsageError
 ROLE_KINDS: dict[str, set[str]] = {
     "zoner": {"chunk"},
     "discovery": {"era", "hypotheses"},
-    "codebook_author": {"discovery"},
+    "codebook_author": {"pool"},
     "recode": {"card", "era"},
     "deductive_ledger": {"era"},
     "deductive_scorer": {"ledger"},

@@ -1,0 +1,61 @@
+{
+ "type": "object",
+ "properties": {
+  "facets": {
+   "type": "array",
+   "items": {
+    "type": "object",
+    "properties": {
+     "facet": {
+      "type": "string",
+      "pattern": "^[NEOAC][1-6]$"
+     },
+     "evidence": {
+      "type": "array",
+      "items": {
+       "type": "object",
+       "properties": {
+        "sentence_ids": {
+         "type": "array",
+         "items": {
+          "type": "string",
+          "pattern": "^s[0-9]{5}$"
+         },
+         "minItems": 1,
+         "maxItems": 12
+        },
+        "pole": {
+         "type": "string",
+         "enum": [
+          "high",
+          "low"
+         ]
+        },
+        "note": {
+         "type": "string",
+         "maxLength": 200
+        }
+       },
+       "required": [
+        "sentence_ids",
+        "pole",
+        "note"
+       ],
+       "additionalProperties": false
+      },
+      "maxItems": 8
+     }
+    },
+    "required": [
+     "facet",
+     "evidence"
+    ],
+    "additionalProperties": false
+   }
+  }
+ },
+ "required": [
+  "facets"
+ ],
+ "additionalProperties": false
+}

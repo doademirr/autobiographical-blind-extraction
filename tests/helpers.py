@@ -61,3 +61,27 @@ class FakeWorkspace:
     def close(self):
         self._env.stop()
         self._tmp.cleanup()
+
+
+FIXTURE = REPO / "fixtures" / "franklin"
+
+
+def build(fw: FakeWorkspace, until: str = "extract") -> store.Workspace:
+    """Run the pipeline on the Franklin fixture with fakes, up to and including `until`."""
+    from abx import extract, freeze, prepare, seal
+
+    root = fw.ws.root.parent / "w"
+    ws = init.init(root, [FIXTURE / "autobiography.txt"], [], False, config=fw.cfg)
+    for name in ("redactions.json", "eras.json"):
+        store.write_json(ws.path(f"prepare/{name}"), store.read_json(FIXTURE / name))
+    prepare.prepare(ws)
+    if until == "prepare":
+        return ws
+    for name in ("self-prediction.md", "ipip-120.csv"):
+        ws.path(f"sealed/{name}").write_text((FIXTURE / name).read_text())
+    seal.seal(ws)
+    freeze.freeze(ws)
+    if until == "freeze":
+        return ws
+    extract.extract(ws)
+    return ws

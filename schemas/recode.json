@@ -1,0 +1,71 @@
+{
+ "type": "object",
+ "properties": {
+  "verdicts": {
+   "type": "array",
+   "items": {
+    "type": "object",
+    "properties": {
+     "item_id": {
+      "type": "string",
+      "pattern": "^K[0-9a-f]{6}$"
+     },
+     "verdict": {
+      "type": "string",
+      "enum": [
+       "present",
+       "absent",
+       "insufficient"
+      ]
+     },
+     "occurrences": {
+      "type": "array",
+      "items": {
+       "type": "object",
+       "properties": {
+        "sentence_ids": {
+         "type": "array",
+         "items": {
+          "type": "string",
+          "pattern": "^s[0-9]{5}$"
+         },
+         "minItems": 1,
+         "maxItems": 12
+        },
+        "event": {
+         "type": "string",
+         "maxLength": 200
+        }
+       },
+       "required": [
+        "sentence_ids",
+        "event"
+       ],
+       "additionalProperties": false
+      },
+      "maxItems": 6
+     },
+     "counter_sentence_ids": {
+      "type": "array",
+      "items": {
+       "type": "string",
+       "pattern": "^s[0-9]{5}$"
+      },
+      "maxItems": 6
+     }
+    },
+    "required": [
+     "item_id",
+     "verdict",
+     "occurrences",
+     "counter_sentence_ids"
+    ],
+    "additionalProperties": false
+   }
+  }
+ },
+ "required": [
+  "verdicts"
+ ],
+ "additionalProperties": false
+}

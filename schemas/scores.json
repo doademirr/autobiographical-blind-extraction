@@ -1,0 +1,43 @@
+{
+ "type": "object",
+ "properties": {
+  "scores": {
+   "type": "array",
+   "items": {
+    "type": "object",
+    "properties": {
+     "facet": {
+      "type": "string",
+      "pattern": "^[NEOAC][1-6]$"
+     },
+     "score": {
+      "type": [
+       "integer",
+       "null"
+      ],
+      "minimum": 1,
+      "maximum": 7
+     },
+     "cited_sentence_ids": {
+      "type": "array",
+      "items": {
+       "type": "string",
+       "pattern": "^s[0-9]{5}$"
+      },
+      "maxItems": 12
+     }
+    },
+    "required": [
+     "facet",
+     "score",
+     "cited_sentence_ids"
+    ],
+    "additionalProperties": false
+   }
+  }
+ },
+ "required": [
+  "scores"
+ ],
+ "additionalProperties": false
+}
