@@ -35,8 +35,18 @@ class Traffic(NamedTuple):
 
 @dataclass(frozen=True)
 class Evidence:
-    requests: tuple[dict, ...]
+    """A detached snapshot: requests are kept as JSON text and parsed afresh on every read."""
+
+    requests_json: tuple[str, ...]
     traffic: tuple[Traffic, ...]
+
+    @classmethod
+    def of(cls, requests, traffic) -> "Evidence":
+        return cls(tuple(json.dumps(r) for r in requests), tuple(traffic))
+
+    @property
+    def requests(self) -> tuple[dict, ...]:
+        return tuple(json.loads(r) for r in self.requests_json)
 
 
 class _Recorder:
@@ -59,7 +69,7 @@ class _Recorder:
 
     def finish(self) -> Evidence:
         with self._lock:
-            return Evidence(tuple(self._requests), tuple(self._traffic))
+            return Evidence.of(self._requests, self._traffic)
 
 
 def _sse(events: list[dict]) -> bytes:
@@ -93,6 +103,13 @@ def messages_stream(n: int, model: str, tool: tuple[str, dict] | None) -> bytes:
                  {"type": "message_delta", "delta": {"stop_reason": stop, "stop_sequence": None},
                   "usage": {"output_tokens": 1}},
                  {"type": "message_stop"}])
+
+
+class _Server(http.server.ThreadingHTTPServer):
+    """Handler threads are joined on close, so the evidence snapshot is taken after every handler finished."""
+
+    daemon_threads = False
+    block_on_close = True
 
 
 class Capture:
@@ -164,7 +181,7 @@ class Capture:
             def log_message(self, *args):
                 pass
 
-        self._server = http.server.ThreadingHTTPServer(("127.0.0.1", 0), Handler)
+        self._server = _Server(("127.0.0.1", 0), Handler)
         self.port = self._server.server_address[1]
         self._thread = threading.Thread(target=self._server.serve_forever, daemon=True)
         self._thread.start()

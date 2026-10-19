@@ -7,7 +7,13 @@ from . import artifacts, config, invoke, ipip, lifecycle, qualify, store, text, 
 from .errors import UsageError
 from .roles import ROLES
 
-__all__ = ["estimate", "prepare"]
+__all__ = ["RECEIPT", "estimate", "prepare", "receipt_problems"]
+
+RECEIPT = "prepare/receipt.json"
+RECEIPT_INPUTS = ("text/original.txt", "config.json", "prepare/redactions.json", "prepare/eras.json",
+                  "prereg/prompts/zoner.md", "prereg/schemas/zoner.json")
+RECEIPT_OUTPUT_GLOBS = ("prepare/redacted.txt", "prepare/segments.json", "prepare/sentences.json", "prepare/stats.json",
+                        "prepare/substrate/*.md", "prepare/chunks/*.txt", "prepare/zoning/*.json")
 
 REPO = Path(__file__).resolve().parents[2]
 THIN, STOP = 0.50, 0.25
@@ -24,6 +30,15 @@ def _stage_method(ws: store.Workspace) -> None:
         shutil.copy(ipip.INSTRUMENT, ws.path(ipip.FROZEN_COPY))
     facets = ipip.load_instrument(ws)["facets"]
     store.write_text_atomic(artifacts.path_of(ws, "facets:all"), "".join(f"- {c} {n}\n" for c, n in facets.items()))
+    for name, path in (("ledger", ("facets", "items", "properties", "facet")),
+                       ("scores", ("scores", "items", "properties", "facet"))):
+        schema_path = ws.path(f"prereg/schemas/{name}.json")
+        schema = store.read_json(schema_path)
+        node = schema["properties"]
+        for key in path[:-1]:
+            node = node[key]
+        node[path[-1]] = {"type": "string", "enum": sorted(facets)}
+        store.write_json(schema_path, schema)
 
 
 def _review_files(ws: store.Workspace, original: str) -> bool:
@@ -123,4 +138,22 @@ def _substrate(ws, cfg: config.Config, eras, sents, redacted, labels) -> dict:
                 if need + lin.reserve_output_tokens > lin.input_budget_tokens:
                     raise UsageError(f"era {era['id']} is too large for {policy.name} on {lin.name}")
     store.write_json(ws.path("prepare/stats.json"), stats)
+    store.write_json(ws.path(RECEIPT), _receipt(ws))
     return {"status": "done", "stats": stats}
+
+
+def _receipt(ws: store.Workspace) -> dict:
+    """Hashes of what this preparation read and wrote, so a later edit to either is caught at `freeze`."""
+    outputs = [ws.rel(p) for g in RECEIPT_OUTPUT_GLOBS for p in sorted(ws.root.glob(g))]
+    return {rel: store.sha256_file(ws.path(rel)) for rel in (*RECEIPT_INPUTS, *outputs)}
+
+
+def receipt_problems(ws: store.Workspace) -> list[str]:
+    """Inputs or outputs that changed since `prepare` last finished; empty when preparation is current."""
+    if not ws.path(RECEIPT).exists():
+        return ["`prepare` has not finished"]
+    recorded, current = store.read_json(ws.path(RECEIPT)), _receipt(ws)
+    return sorted(rel for rel in set(recorded) | set(current) if recorded.get(rel) != current.get(rel))
+
+
+STAGE = lifecycle.Stage("prepare", 1, "redaction and eras review, qualification, zoning", prepare, estimate)

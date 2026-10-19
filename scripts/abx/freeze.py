@@ -6,7 +6,7 @@ IPIP instrument copy, the qualification snapshot, and the zoning calls' records.
 
 import shutil
 
-from . import config, invoke, ipip, lifecycle, qualify, store
+from . import config, invoke, ipip, lifecycle, prepare, qualify, store
 from .errors import IntegrityError, UsageError
 
 __all__ = ["estimate", "freeze"]
@@ -14,7 +14,7 @@ __all__ = ["estimate", "freeze"]
 GEN_A_FILES = ("config.json", lifecycle.HASHES, ipip.FROZEN_COPY, invoke.QUALIFICATION_A, "prereg/facets.md",
                "prepare/redacted.txt",
                "prepare/segments.json", "prepare/sentences.json", "prepare/eras.json", "prepare/redactions.json",
-               "prepare/stats.json")
+               "prepare/stats.json", "prepare/receipt.json")
 GEN_A_GLOBS = ("prereg/prompts/*.md", "prereg/schemas/*.json", "prepare/substrate/*.md", "prepare/chunks/*.txt",
                "prepare/zoning/*.json", "run/calls/prepare/**/*.json")
 
@@ -26,8 +26,9 @@ def estimate(ws: store.Workspace) -> lifecycle.Preflight:
 
 def freeze(ws: store.Workspace) -> dict:
     lifecycle.enter(ws, "freeze")
-    if not ws.path("prepare/stats.json").exists():
-        raise UsageError("run `prepare` to the end first")
+    stale = prepare.receipt_problems(ws)
+    if stale:
+        raise UsageError(f"preparation is not current ({', '.join(stale[:3])}); rerun `prepare`")
     cfg = config.load(ws)
     requalified = False
     try:
@@ -40,3 +41,6 @@ def freeze(ws: store.Workspace) -> dict:
     paths = [*GEN_A_FILES, *(ws.rel(p) for g in GEN_A_GLOBS for p in sorted(ws.root.glob(g)))]
     entry = store.append_generation(ws, "A", paths)
     return {"generation": "A", "artifacts": len(entry["artifacts"]), "requalified": requalified}
+
+
+STAGE = lifecycle.Stage("freeze", 3, "pre-register generation A", freeze, estimate)

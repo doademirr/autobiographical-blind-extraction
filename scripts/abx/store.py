@@ -51,7 +51,7 @@ def _reject_constant(name):
 def _no_duplicate_keys(pairs):
     keys = [k for k, _ in pairs]
     if len(keys) != len(set(keys)):
-        raise ValueError(f"duplicate key in JSON object: {min(k for k in keys if keys.count(k) > 1)}")
+        raise ValueError("duplicate key in a JSON object")
     return dict(pairs)
 
 

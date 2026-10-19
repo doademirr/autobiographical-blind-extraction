@@ -12,7 +12,7 @@ from dataclasses import dataclass
 from typing import NamedTuple
 
 from . import agreement, artifacts, config, invoke, ipip, lifecycle, prompts, qualify, store
-from .errors import AbxError, CallFailed, IntegrityError
+from .errors import AbxError, IntegrityError
 
 __all__ = [
     "RaterKey",
@@ -174,14 +174,19 @@ def item_id(construct_id: str, salt: str) -> str:
 
 
 def _codebook(c: Context, candidates: dict[str, dict]) -> dict:
+    salt = store.sha256_file(c.ws.path("prepare/redacted.txt"))
+
+    def validate(o):
+        problems = validate_codebook(o, set(candidates))
+        ids = [item_id(con["id"], salt) for con in o["constructs"]]
+        return problems + (["card item ids collide; the author must rename a construct"]
+                           if len(set(ids)) != len(ids) else [])
+
     out = invoke.call(c.ws, c.cfg, invoke.CallRequest(
         stage="extract", role="codebook_author", lineage=c.cfg.codebook_author, run=None, era=None, generation="B",
-        slots={"pool": "pool:all"}, validate=lambda o: validate_codebook(o, set(candidates))))
-    salt = store.sha256_file(c.ws.path("prepare/redacted.txt"))
+        slots={"pool": "pool:all"}, validate=validate))
     constructs = [{**con, "lineages": sorted({candidates[ref]["lineage"] for ref in con["trace"]}),
                    "item_id": item_id(con["id"], salt)} for con in out["constructs"]]
-    if len({con["item_id"] for con in constructs}) != len(constructs):
-        raise CallFailed("card item ids collide; rerun the codebook author")
     book = {"constructs": constructs, "appendix": out["appendix"]}
     store.write_json(c.ws.path("run/codebook/codebook.json"), book)
     store.write_text_atomic(artifacts.path_of(c.ws, "card:B"), "".join(
@@ -238,7 +243,7 @@ def _deductive(c: Context) -> None:
     facets = sorted(c.facets)
     for lineage in c.cfg.lineages:
         for run in c.runs:
-            ledgers, cited = [], set()
+            ledgers, cited = [], {f: set() for f in facets}
             for era in c.era_ids:
                 allowed = c.kept[era]
 
@@ -252,16 +257,25 @@ def _deductive(c: Context) -> None:
                     slots={"era": f"era:{era}", "facets": "facets:all"}, validate=validate))
                 store.write_json(artifacts.path_of(c.ws, f"ledger:{lineage}:{run}:{era}"), out)
                 ledgers.append({"era": era, **out})
-                cited |= set(_cited(out, ("sentence_ids",)))
+                for entry in out["facets"]:
+                    cited[entry["facet"]] |= set(_cited(entry, ("sentence_ids",)))
             store.write_json(artifacts.path_of(c.ws, f"ledgers:{lineage}:{run}"), ledgers)
 
-            def validate_scores(o, cited=frozenset(cited)):
+            evidence = {f: frozenset(ids) for f, ids in cited.items()}
+
+            def validate_scores(o, cited=evidence):
+                """Each score rests on its own facet's ledger evidence; a facet with none must be insufficient."""
                 if sorted(s["facet"] for s in o["scores"]) != facets:
                     return ["scores must cover all 30 facets once"]
-                problems = [f"{s['facet']}: a score needs at least one citation" for s in o["scores"]
-                            if s["score"] is not None and not s["cited_sentence_ids"]]
-                stray = [i for s in o["scores"] for i in s["cited_sentence_ids"] if i not in cited]
-                return problems + ([f"{len(stray)} citation(s) not in this rater's ledgers"] if stray else [])
+                problems = []
+                for s in o["scores"]:
+                    if s["score"] is None:
+                        continue
+                    if not cited[s["facet"]]:
+                        problems.append(f"{s['facet']}: scored without ledger evidence for that facet")
+                    elif not s["cited_sentence_ids"] or not set(s["cited_sentence_ids"]) <= cited[s["facet"]]:
+                        problems.append(f"{s['facet']}: citations must come from that facet's ledger evidence")
+                return problems
 
             out = invoke.call(c.ws, c.cfg, invoke.CallRequest(
                 stage="extract", role="deductive_scorer", lineage=lineage, run=run, era=None, generation="C",
@@ -341,6 +355,7 @@ def _agree(c: Context, book: dict) -> dict:
 def integrity_audit(c: Context) -> dict:
     """Requalify, then re-audit every call record's events and inputs, and the manifest chain."""
     records = sorted(c.ws.root.glob("run/calls/**/*.json"))
+    Check = agreement.Check
 
     def requalify():
         fresh = qualify.qualify(c.ws, c.cfg, out=REQUALIFICATION_AUDIT)
@@ -348,30 +363,41 @@ def integrity_audit(c: Context) -> dict:
         moved = [lin for lin, q in fresh.items()
                  if any(q[k] != baseline[lin].get(k) for k in ("cli_version", "invocation_hash", "config_hash",
                                                               "resolved_model"))]
-        return not moved, "both lineages requalified" + (f"; fingerprint moved for {moved}" if moved else "")
+        return Check(not moved, "fingerprint_moved" if moved else "requalified", {"lineages_moved": len(moved)})
 
     def events():
-        hits = [p for p in records if invoke.audit_events(
-            store.read_json(p)["lineage"], [invoke.Event(**e) for e in store.read_json(p)["events"]])]
-        incidents = [p for p in sorted(c.ws.root.glob("run/incidents/**/*.json"))
-                     if store.read_json(p)["kind"] == "tool_event"]
-        detail = f"{len(records)} call records audited, {len(hits)} with tool events, {len(incidents)} incidents"
-        return not hits and not incidents, detail
+        def tool_events(path):
+            rec = store.read_json(path)
+            try:
+                evs = [invoke.Event(str(e["type"]), str(e["detail"]), tuple(e["tools"]), tuple(e["mcp_servers"]),
+                                    bool(e["registry_present"])) for e in rec["events"]]
+            except (KeyError, TypeError):
+                return ["unreadable"]
+            return invoke.audit_events(rec["lineage"], evs) or ([] if invoke.succeeded(rec["lineage"], evs)
+                                                               else ["no_terminal_success"])
+
+        hits = sum(1 for p in records if tool_events(p))
+        incidents = sum(1 for p in sorted(c.ws.root.glob("run/incidents/**/*.json"))
+                        if store.read_json(p)["kind"] == "tool_event")
+        ok = not hits and not incidents
+        return Check(ok, "clean" if ok else "tool_events",
+                     {"records": len(records), "records_with_tool_events": hits, "tool_event_incidents": incidents})
 
     def allowlists():
+        outside = 0
         for path in records:
             rec = store.read_json(path)
             rater = (rec["lineage"], rec["run"]) if rec["run"] is not None else None
             try:
                 prompts.check_allowlist(rec["role"], list(rec["input_artifacts"]), rater=rater, era=rec["era"],
                                         era_order=c.era_ids)
-            except AbxError as exc:
-                return False, f"{c.ws.rel(path)}: {exc}"
-        return True, f"{len(records)} call records within their roles' allowlists"
+            except AbxError:
+                outside += 1
+        return Check(not outside, "within_allowlists" if not outside else "outside_allowlist",
+                     {"records": len(records), "outside": outside})
 
     def manifest():
-        store.verify_manifest(c.ws)
-        return True, "manifest chain verified"
+        return Check(True, "verified", {"generations": len(store.verify_manifest(c.ws))})
 
     return agreement.integrity_audit({"requalify": requalify, "events": events, "allowlist": allowlists,
                                       "manifest": manifest})
@@ -400,3 +426,6 @@ def extract(ws: store.Workspace) -> dict:
                for p in sorted(ws.root.glob(g))]
     store.append_generation(ws, "C", ["run/agreement.json", *outputs])
     return result
+
+
+STAGE = lifecycle.Stage("extract", 4, "the blind engine, to generation C", extract, estimate)

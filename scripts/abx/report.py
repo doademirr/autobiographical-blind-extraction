@@ -20,6 +20,21 @@ def pct(value) -> str:
     return "n/a" if value is None else f"{value:.0%}"
 
 
+AUDIT_TEXT = {"requalified": "both lineages requalified with unchanged fingerprints",
+              "fingerprint_moved": "a fingerprint moved since the frozen baseline",
+              "clean": "{records} call records audited, none with a tool event",
+              "tool_events": "{records_with_tool_events} call record(s) and {tool_event_incidents} incident(s) "
+                             "with tool events",
+              "within_allowlists": "{records} call records within their roles' allowlists",
+              "outside_allowlist": "{outside} of {records} call records outside their role's allowlist",
+              "verified": "manifest chain verified across {generations} generations"}
+
+
+def _check_text(check: dict) -> str:
+    template = AUDIT_TEXT.get(check["code"], "could not complete ({code})")
+    return template.format(code=check["code"], **check["counts"])
+
+
 def _arm(name: str, arm: dict) -> list[str]:
     stab = ", ".join(f"{lin} {num(v)}" for lin, v in sorted(arm["stability"].items()))
     lines = [f"- **{name}** ({arm['metric']}, {arm['units']} units): α = {num(arm['alpha'])}, "
@@ -55,7 +70,7 @@ def render(r: dict) -> str:
     audit = r["agreement"]["integrity_audit"]
     if audit:
         verdict = "every check passed" if all(c["ok"] for c in audit.values()) else "a check failed"
-        checks = "; ".join(f"{name}: {check['detail']}" for name, check in audit.items())
+        checks = "; ".join(f"{name}: {_check_text(check)}" for name, check in audit.items())
         out.append(f"- Very high agreement triggered the integrity audit: {verdict} ({checks}). High agreement is "
                    "reported with the caveat that both lineages share a method and may share training data.")
     eras = list(r["corpus"])

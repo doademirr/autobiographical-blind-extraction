@@ -12,7 +12,8 @@ from .lifecycle import HASHES, SEALED
 
 __all__ = ["HASHES", "SEALED", "predictions", "seal"]
 PREDICTION = re.compile(r"(P[0-9]{1,3}):[ \t]*(.*)")
-LOOKS_LIKE_PREDICTION = re.compile(r"\s*[Pp]\s*[0-9]")
+# Anything a person might have meant as a prediction line: list markers, numbering, any digit script.
+LOOKS_LIKE_PREDICTION = re.compile(r"\s*(?:[-*+>]\s*|\d+[.)]\s*)*[Pp]\s*\d")
 
 
 def predictions(text: str) -> dict[str, str]:
@@ -49,3 +50,6 @@ def seal(ws: store.Workspace) -> dict:
         raise UsageError(f"ipip-120.csv: only {answered} of 120 items answered; at least 90 are needed")
     store.write_json(ws.path(HASHES), {rel: store.sha256_file(ws.path(rel)) for rel in SEALED})
     return {"predictions": count, "ipip_answered": answered}
+
+
+STAGE = lifecycle.Stage("seal", 2, "check and hash sealed/", seal)

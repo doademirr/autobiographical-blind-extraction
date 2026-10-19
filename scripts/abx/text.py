@@ -131,8 +131,11 @@ def validate_eras(eras: list[dict], segments: list[Segment]) -> None:
         for key in ("id", "label", "date_range", "segment_ids"):
             if key not in era:
                 raise UsageError(f"eras.json: era missing {key!r}")
-        if not isinstance(era["id"], str) or not ERA_ID.match(era["id"]):
+        if not isinstance(era["id"], str) or not ERA_ID.fullmatch(era["id"]):
             raise UsageError("eras.json: era ids are 1-32 letters, digits, '-' or '_', starting with a letter or digit")
+        if not isinstance(era["label"], str) or not isinstance(era["date_range"], str) or \
+                not isinstance(era["segment_ids"], list) or not all(isinstance(x, str) for x in era["segment_ids"]):
+            raise UsageError("eras.json: label and date_range are text, segment_ids a list of segment ids")
         if era["id"] in ids:
             raise UsageError(f"eras.json: duplicate era id {era['id']!r}")
         ids.add(era["id"])

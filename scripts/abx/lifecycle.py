@@ -5,12 +5,13 @@ refuses a stage the lifecycle has closed: nothing before generation A can be red
 and a workspace is unmasked once.
 """
 
+from collections.abc import Callable
 from typing import NamedTuple
 
 from . import store
 from .errors import IntegrityError, UsageError
 
-__all__ = ["HASHES", "SEALED", "Preflight", "enter", "verify_sealed"]
+__all__ = ["HASHES", "SEALED", "Preflight", "Stage", "enter", "verify_sealed"]
 
 
 class Preflight(NamedTuple):
@@ -19,6 +20,16 @@ class Preflight(NamedTuple):
     model_calls: int
     conditional_calls: int
     note: str
+
+
+class Stage(NamedTuple):
+    """A workspace command, declared by the module that implements it; `run.py` discovers these."""
+
+    name: str
+    order: int
+    help: str
+    run: Callable
+    estimate: Callable | None = None
 
 SEALED = ("sealed/self-prediction.md", "sealed/ipip-120.csv")
 HASHES = "prereg/sealed-hashes.json"

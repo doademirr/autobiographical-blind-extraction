@@ -8,7 +8,7 @@
     "properties": {
      "facet": {
       "type": "string",
-      "pattern": "^[NEOAC][1-6]$"
+      "description": "a facet code; the allowed codes are filled in from the frozen instrument at prepare"
      },
      "score": {
       "type": [

@@ -28,10 +28,13 @@ class Prompt:
 
 
 def check_allowlist(role: str, ids: list[str], rater: tuple[str, int] | None = None,
-                    era: str | None = None, era_order: list[str] | None = None) -> None:
+                    era: str | None = None, era_order: list[str] | None = None, revealed: bool = False) -> None:
+    """`revealed`: generation C is frozen, so sealed comparators may reach the roles allowed them."""
     policy = get_role(role)
     for aid in ids:
         ref = artifacts.parse(aid)
+        if ref.kind == "self_prediction" and not revealed:
+            raise IsolationError(f"{role} call may not receive the sealed self-prediction before generation C")
         if ref.kind in FRAME_KINDS:
             if ref.kind == "template" and ref.role != role:
                 raise IsolationError(f"{role} call may not use another role's template {aid}")

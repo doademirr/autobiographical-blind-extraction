@@ -7,7 +7,7 @@ import unittest
 from pathlib import Path
 from unittest import mock
 
-from abx import artifacts, invoke, prompts, store
+from abx import artifacts, config, invoke, prompts, store
 from abx.errors import CallFailed, IntegrityError, IsolationError, UsageError
 from abx.withheld import Withheld
 
@@ -19,8 +19,8 @@ def _req(run=1, lineage="claude"):
     return invoke.CallRequest(stage="test", role="probe", lineage=lineage, run=run, era=None, generation="A", slots={})
 
 
-def _with(cfg: invoke.Config, **changes) -> invoke.Config:
-    return invoke.Config(**{**cfg.__dict__, **changes})
+def _with(cfg: config.Config, **changes) -> config.Config:
+    return config.Config(**{**cfg.__dict__, **changes})
 
 
 class CallTest(unittest.TestCase):
@@ -131,7 +131,7 @@ class CallTest(unittest.TestCase):
     def test_over_budget_is_refused_before_transmission(self):
         lin = self.cfg.lineage("claude")
         small = _with(self.cfg, lineages={**self.cfg.lineages,
-                                          "claude": invoke.Lineage(**{**lin.__dict__, "input_budget_tokens": 100})})
+                                          "claude": config.Lineage(**{**lin.__dict__, "input_budget_tokens": 100})})
         with self.assertRaises(UsageError):
             self.call(_req(), small)
         self.assertEqual(self.fw.prompts_logged(), [])

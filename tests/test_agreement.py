@@ -2,6 +2,7 @@ import random
 import unittest
 
 from abx import agreement as ag
+from abx.errors import IntegrityError
 
 N = None
 
@@ -122,7 +123,7 @@ class IntegrityAuditTest(unittest.TestCase):
         def check(name, ok):
             def run():
                 ran.append(name)
-                return ok, name
+                return ag.Check(ok, name, {"n": 1})
             return run
 
         res = ag.integrity_audit({"requalify": check("requalify", True), "events": check("events", True),
@@ -132,14 +133,19 @@ class IntegrityAuditTest(unittest.TestCase):
         res = ag.integrity_audit({"events": check("events", False)})
         self.assertFalse(res["events"]["ok"])
 
-        def broken():
-            raise RuntimeError("cannot read records")
+        def broken_manifest():
+            raise IntegrityError("manifest chain broken at generation B")
 
-        res = ag.integrity_audit({"requalify": broken, "manifest": check("manifest", True)})
-        self.assertFalse(res["requalify"]["ok"])
-        self.assertIn("RuntimeError", res["requalify"]["detail"])
-        self.assertNotIn("cannot read records", res["requalify"]["detail"])
-        self.assertTrue(res["manifest"]["ok"])
+        res = ag.integrity_audit({"manifest": broken_manifest, "events": check("events", True)})
+        self.assertEqual(res["manifest"], {"ok": False, "code": "error_IntegrityError", "counts": {}})
+        self.assertTrue(res["events"]["ok"])
+
+    def test_a_defect_in_a_check_propagates(self):
+        def defect():
+            raise KeyError("records")
+
+        with self.assertRaises(KeyError):
+            ag.integrity_audit({"events": defect})
 
 
 if __name__ == "__main__":

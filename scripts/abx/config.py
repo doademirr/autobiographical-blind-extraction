@@ -1,14 +1,25 @@
 """`config.json`, parsed once at the boundary into typed records. Malformed config is a usage error."""
 
 import json
+from collections.abc import Mapping
 from dataclasses import dataclass, field
+from types import MappingProxyType
+from typing import NamedTuple
 
 from . import store
 from .errors import UsageError
 
-__all__ = ["LINEAGES", "Config", "Lineage", "load", "parse", "retained"]
+__all__ = ["LINEAGES", "Config", "Lineage", "RetainedTool", "load", "parse", "retained"]
 
 LINEAGES = ("claude", "codex")
+
+
+class RetainedTool(NamedTuple):
+    """A tool Codex lists even when locked: the scripted call that proves it inert, and its pinned result."""
+
+    tool: str
+    call_json: str
+    result: str
 
 
 @dataclass(frozen=True)
@@ -25,13 +36,13 @@ class Lineage:
     auth_file: str = ""
     disable: tuple[str, ...] = ()
     config: tuple[str, ...] = ()
-    retained_tools: tuple[tuple[str, str, str], ...] = ()   # (tool, scripted call as canonical JSON, pinned result)
+    retained_tools: tuple[RetainedTool, ...] = ()
     capture_forward: bool = False
 
 
 @dataclass(frozen=True)
 class Config:
-    lineages: dict[str, Lineage]
+    lineages: Mapping[str, Lineage]
     runs: int
     zoner: str
     codebook_author: str
@@ -46,7 +57,7 @@ class Config:
 
 def retained(lin: Lineage) -> dict[str, tuple[dict, str]]:
     """Codex's retained tools as {tool: (scripted call, pinned result)}; fresh objects every time."""
-    return {tool: (json.loads(call), result) for tool, call, result in lin.retained_tools}
+    return {t.tool: (json.loads(t.call_json), t.result) for t in lin.retained_tools}
 
 
 def _get(obj: dict, key: str, kind, where: str):
@@ -82,7 +93,7 @@ def _lineage(name: str, obj: dict) -> Lineage:
     return Lineage(**common, sandbox_exec=_get(obj, "sandbox_exec", str, where),
                    sandbox_allow=_strings(obj, "sandbox_allow", where), auth_file=_get(obj, "auth_file", str, where),
                    disable=_strings(obj, "disable", where), config=_strings(obj, "config", where),
-                   retained_tools=tuple((t, store.canonical(spec["call"]), spec["result"])
+                   retained_tools=tuple(RetainedTool(t, store.canonical(spec["call"]), spec["result"])
                                         for t, spec in retained.items()),
                    capture_forward=_get(obj, "capture_forward", bool, where))
 
@@ -93,7 +104,8 @@ def parse(obj: dict) -> Config:
         raise UsageError(f"config.json: lineages must be exactly {list(LINEAGES)}")
     roles = _get(obj, "roles", dict, "config")
     cfg = Config(
-        lineages={n: _lineage(n, lineages[n]) for n in LINEAGES}, runs=_get(obj, "runs", int, "config"),
+        lineages=MappingProxyType({n: _lineage(n, lineages[n]) for n in LINEAGES}),
+        runs=_get(obj, "runs", int, "config"),
         zoner=_get(roles, "zoner", str, "roles"), codebook_author=_get(roles, "codebook_author", str, "roles"),
         crosswalk_coders=_strings(roles, "crosswalk_coders", "roles"), canaries=_strings(obj, "canaries", "config"),
         env_passthrough=_strings(obj, "env_passthrough", "config"), timeout_s=_get(obj, "timeout_s", int, "config"))

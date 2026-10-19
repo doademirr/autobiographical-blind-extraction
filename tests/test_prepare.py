@@ -24,7 +24,8 @@ def approve_fixture(ws: store.Workspace) -> None:
 class SealTest(unittest.TestCase):
     def test_malformed_or_empty_prediction_lines_are_refused_with_their_line(self):
         self.assertEqual(seal.predictions("# head\nP1: one\nP2:   two\n"), {"P1": "one", "P2": "two"})
-        for text in ("P1: one\nP2 : two\n", "P1: one\nP2 - two\n", "P1:\nP2: two\n", "P1: a\nP1: b\n"):
+        for text in ("P1: one\nP2 : two\n", "P1: one\nP2 - two\n", "P1:\nP2: two\n", "P1: a\nP1: b\n",
+                     "P1: one\n- P2: two\n", "P1: one\n2. P2: two\n", "P1: one\nP\uff12: two\n"):
             with self.subTest(text=text), self.assertRaises(UsageError) as cm:
                 seal.predictions(text)
             self.assertTrue("line" in str(cm.exception) or "P1" in str(cm.exception))
@@ -152,6 +153,22 @@ class LifecycleTest(unittest.TestCase):
             with self.subTest(stage=stage.__module__), self.assertRaises(IntegrityError):
                 stage(self.ws)
 
+    def test_freeze_refuses_preparation_edited_after_prepare(self):
+        fw = FakeWorkspace()
+        try:
+            ws = build(fw, until="prepare")
+            eras = store.read_json(ws.path("prepare/eras.json"))
+            eras["eras"][1]["segment_ids"].insert(0, eras["eras"][0]["segment_ids"].pop())
+            store.write_json(ws.path("prepare/eras.json"), eras)
+            for name in ("self-prediction.md", "ipip-120.csv"):
+                ws.path(f"sealed/{name}").write_text((FIXTURE / name).read_text())
+            seal.seal(ws)
+            with self.assertRaises(UsageError) as cm:
+                freeze.freeze(ws)
+            self.assertIn("eras.json", str(cm.exception))
+        finally:
+            fw.close()
+
     def test_frozen_instrument_copy_is_protected(self):
         from abx import extract
 
@@ -206,16 +223,17 @@ class QualifyFailureTest(unittest.TestCase):
         with self.assertRaises(UsageError):
             self._qualify({"ABX_FAKE_SLEEP": "5"}, slow)
 
-    def _locked(self, traffic=(), forward=True, code=0, status="success", requests=None, scripted=None):
+    def _locked(self, traffic=(), forward=True, code=0, status="success", requests=None, scripted=None,
+                baseline=None):
         T = capture.Traffic
         requests = requests or ({"model": "fake-codex-1", "input": []},)
         lin = self.fw.config.lineage("codex")
         cfg = config.Config(**{**self.fw.config.__dict__, "lineages": {
             **self.fw.config.lineages, "codex": config.Lineage(**{**lin.__dict__, "capture_forward": forward})}})
-        run = qualify.Run(capture.Evidence(tuple(requests), tuple(T(*t) for t in traffic)), code,
+        run = qualify.Run(capture.Evidence.of(requests, [T(*t) for t in traffic]), code,
                           invoke.Result(status=status))
         with qualify.Canary() as canary:
-            return qualify._locked_problems("codex", cfg, run, canary, scripted)
+            return qualify._locked_problems("codex", cfg, run, canary, scripted, baseline=baseline)
 
     OK_TRAFFIC = (("GET", "/codex-up/models", "forwarded", 200), ("GET", "/codex-up/responses", "ws-refused"),
                   ("POST", "/backend-api/codex/analytics-events/events", "refused"))
@@ -243,6 +261,8 @@ class QualifyFailureTest(unittest.TestCase):
         self.assertEqual(self._locked(self.OK_TRAFFIC, requests=(clean, clean)), [])
         problems = self._locked(self.OK_TRAFFIC, requests=(clean, req("exec", "wait", "exec_command")))
         self.assertTrue(any("functions.exec_command" in p for p in problems))
+        later = self._locked(self.OK_TRAFFIC, requests=(clean,), baseline=("functions.exec",))
+        self.assertTrue(any("baseline" in p for p in later))
 
     def test_scripted_result_must_match_exactly_in_type(self):
         wrapped = [{"type": "file", "text": "code-mode host is disabled"}]
@@ -252,9 +272,20 @@ class QualifyFailureTest(unittest.TestCase):
         problems = self._locked(self.OK_TRAFFIC, requests=sent, scripted=("c1", "code-mode host is disabled"))
         self.assertTrue(any("pinned" in p for p in problems))
 
-    def test_canary_in_an_earlier_message_is_a_leak(self):
+    def test_canary_in_an_earlier_message_or_thinking_is_a_leak(self):
+        for env in ({"ABX_FAKE_PRELUDE": "I recall ABXPROFILECANARY."},
+                    {"ABX_FAKE_THINKING": "The profile says ABXPROFILECANARY."}):
+            with self.subTest(env=env), self.assertRaises(IsolationError):
+                self._qualify(env)
+
+    def test_probe_without_init_or_final_message_never_passes(self):
         with self.assertRaises(IsolationError):
-            self._qualify({"ABX_FAKE_PRELUDE": "I recall ABXPROFILECANARY."})
+            self._qualify({"ABX_FAKE_NO_INIT": "1"})
+        with self.assertRaises(UsageError):
+            self._qualify({"ABX_FAKE_NO_MESSAGE": "1"})
+        record = store.read_json(self.ws.path("run/probes/leak-codex.json"))
+        self.assertEqual(record["verdict"], "error")
+        self.assertNotIn("answer", json.dumps(record))
 
 if __name__ == "__main__":
     unittest.main()

@@ -13,6 +13,10 @@ failures:
   ABX_FAKE_SLEEP        after printing the stream, sleep this many seconds (timeouts)
   ABX_FAKE_STRAY_CITATION  the deductive scorer cites a sentence id no ledger holds
   ABX_FAKE_PRELUDE      emit this as an earlier assistant message before the final one
+  ABX_FAKE_THINKING     (claude) emit this as a thinking block
+  ABX_FAKE_NO_INIT      (claude) omit the init event
+  ABX_FAKE_NO_MESSAGE   finish successfully without a final message
+  ABX_FAKE_CROSS_FACET  the deductive scorer scores a facet with no evidence, citing another facet's
 """
 
 import hashlib
@@ -94,7 +98,11 @@ def main(lineage: str) -> int:
     events = []
     injected = os.environ.get("ABX_FAKE_TOOL_EVENT")
     if lineage == "claude":
-        events.append({"type": "system", "subtype": "init", "tools": [], "mcp_servers": [], "model": model})
+        if not os.environ.get("ABX_FAKE_NO_INIT"):
+            events.append({"type": "system", "subtype": "init", "tools": [], "mcp_servers": [], "model": model})
+        if os.environ.get("ABX_FAKE_THINKING"):
+            events.append({"type": "assistant", "message": {"content": [
+                {"type": "thinking", "thinking": os.environ["ABX_FAKE_THINKING"]}]}})
         if os.environ.get("ABX_FAKE_PRELUDE"):
             events.append({"type": "assistant", "message": {"content": [
                 {"type": "text", "text": os.environ["ABX_FAKE_PRELUDE"]}]}})
@@ -115,8 +123,9 @@ def main(lineage: str) -> int:
         if failing:
             events.append({"type": "turn.failed", "error": {"message": "fake failure"}})
         else:
-            events += [{"type": "item.completed", "item": {"id": "i1", "type": "agent_message", "text": text}},
-                       {"type": "turn.completed", "usage": {}}]
+            if not os.environ.get("ABX_FAKE_NO_MESSAGE"):
+                events.append({"type": "item.completed", "item": {"id": "i1", "type": "agent_message", "text": text}})
+            events.append({"type": "turn.completed", "usage": {}})
     for ev in events:
         print(json.dumps(ev), flush=True)
     if os.environ.get("ABX_FAKE_SLEEP"):

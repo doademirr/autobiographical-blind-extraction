@@ -4,7 +4,9 @@ SPEC § Approach, role input allowlists. Every consumer (prompt assembly, the su
 audit, the per-era budget check, the call boundary, the integrity audit) reads this table.
 """
 
+from collections.abc import Mapping
 from dataclasses import dataclass
+from types import MappingProxyType
 
 from .errors import UsageError
 
@@ -36,7 +38,7 @@ _ROLES = [
     Role("crosswalk", frozenset({"constructs", "self_prediction"}), "crosswalk", zoned_consumer=True),
     Role("probe", frozenset(), "probe"),
 ]
-ROLES: dict[str, Role] = {r.name: r for r in _ROLES}
+ROLES: Mapping[str, Role] = MappingProxyType({r.name: r for r in _ROLES})
 
 
 def role(name: str) -> Role:

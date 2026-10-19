@@ -6,16 +6,17 @@ Exit codes: 0 stage done · 1 a reliability gate fired · 2 usage or preflight f
 """
 
 import argparse
+import importlib
 import json
+import pkgutil
 import sys
 import traceback
-from collections.abc import Callable
-from dataclasses import dataclass
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
-from abx import extract, freeze, init, prepare, seal, status, store, unmask
+import abx
+from abx import init, lifecycle, store
 from abx.errors import AbxError
 
 UNEXPECTED = 70
@@ -50,25 +51,20 @@ def _show_unmask(_: dict) -> int:
     return 0
 
 
-@dataclass(frozen=True)
-class Stage:
-    """One workspace command: what it runs, what it spends, and how its result is shown."""
-
-    name: str
-    help: str
-    run: Callable[[store.Workspace], dict]
-    estimate: Callable | None = None
-    show: Callable[[dict], int] = _show
+SHOW = {"extract": _show_extract, "unmask": _show_unmask}
 
 
-STAGES = {s.name: s for s in (
-    Stage("prepare", "redaction and eras review, qualification, zoning", prepare.prepare, prepare.estimate),
-    Stage("seal", "check and hash sealed/", seal.seal),
-    Stage("freeze", "pre-register generation A", freeze.freeze, freeze.estimate),
-    Stage("extract", "the blind engine, to generation C", extract.extract, extract.estimate, _show_extract),
-    Stage("unmask", "crosswalk, IPIP reveal, report", unmask.unmask, unmask.estimate, _show_unmask),
-    Stage("status", "where the workspace stands", status.status),
-)}
+def _discover() -> dict[str, lifecycle.Stage]:
+    """Every workspace command a module of the package declares as `STAGE`, in lifecycle order."""
+    found = []
+    for info in pkgutil.iter_modules(abx.__path__):
+        stage = getattr(importlib.import_module(f"abx.{info.name}"), "STAGE", None)
+        if isinstance(stage, lifecycle.Stage):
+            found.append(stage)
+    return {s.name: s for s in sorted(found, key=lambda s: s.order)}
+
+
+STAGES = _discover()
 
 
 def _parser() -> argparse.ArgumentParser:
@@ -87,12 +83,12 @@ def _parser() -> argparse.ArgumentParser:
     return ap
 
 
-def _run_stage(stage: Stage, ws: store.Workspace) -> int:
+def _run_stage(stage: lifecycle.Stage, ws: store.Workspace) -> int:
     if stage.estimate and ws.path("prepare/eras.json").exists():
         pre = stage.estimate(ws)
         extra = f" (+{pre.conditional_calls} conditional)" if pre.conditional_calls else ""
         print(f"{stage.name}: about {pre.model_calls} model calls{extra}: {pre.note}", file=sys.stderr)
-    return stage.show(stage.run(ws))
+    return SHOW.get(stage.name, _show)(stage.run(ws))
 
 
 def main(argv: list[str] | None = None) -> int:

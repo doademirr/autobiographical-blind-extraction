@@ -10,6 +10,12 @@ import math
 from collections import Counter
 from collections.abc import Callable, Hashable
 from dataclasses import dataclass, field
+from typing import NamedTuple
+
+from .errors import AbxError
+
+__all__ = ["INTEGRITY_TRIGGER", "MIN_PAIRED", "REPORT", "TENTATIVE", "ArmResult", "Check", "alpha", "arm", "band",
+           "collapse_median", "collapse_mode", "integrity_audit", "status"]
 
 REPORT = 0.80
 TENTATIVE = 0.667
@@ -152,13 +158,25 @@ def status(values: list[object]) -> str:
     return "supported" if present[0] == "present" else "absent-supported"
 
 
-def integrity_audit(checks: dict[str, Callable[[], tuple[bool, str]]]) -> dict[str, dict]:
-    """Run every check, even after one fails or raises; high agreement alone never invalidates."""
+class Check(NamedTuple):
+    """One integrity check's outcome: a reason code and named counts, rendered by the report."""
+
+    ok: bool
+    code: str
+    counts: dict
+
+
+def integrity_audit(checks: dict[str, Callable[[], Check]]) -> dict[str, dict]:
+    """Run every check, even after one fails; high agreement alone never invalidates.
+
+    A check that fails on the harness's own typed errors (a broken manifest, a refused requalification)
+    is a failed check and the rest still run; any other exception is a defect and propagates.
+    """
     results = {}
     for name, check in checks.items():
         try:
-            ok, detail = check()
-        except Exception as exc:  # a check that cannot complete is a failed check, and the rest still run
-            ok, detail = False, f"the check could not complete ({type(exc).__name__})"
-        results[name] = {"ok": ok, "detail": detail}
+            outcome = check()
+        except AbxError as exc:
+            outcome = Check(False, f"error_{type(exc).__name__}", {})
+        results[name] = outcome._asdict()
     return results

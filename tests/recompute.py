@@ -91,10 +91,52 @@ def _diff(got, want, path="") -> list[str]:
     return [] if got == want else [f"{path}: reported {got!r}, recomputed {want!r}"]
 
 
+def _pct(v) -> str:
+    return "n/a" if v is None else f"{v:.0%}"
+
+
+def _num(v, digits=3) -> str:
+    return "n/a" if v is None else f"{v:.{digits}f}"
+
+
+def _rows(want: dict) -> list[str]:
+    """The lines report.md must contain, written here from the rebuilt values without the production renderer."""
+    rows = []
+    for era, st in want["corpus"].items():
+        rows.append(f"- Era {era}: {st['sentences']} sentences in {st['segments']} segments; zoning kept "
+                    f"{_pct(st['kept_ratio'])} of {st['words']} words ({st['band']}); {st['mixed']} mixed and "
+                    f"{st['removed']} reflective sentences removed.")
+    for label, key in (("Inductive constructs", "inductive"), ("Deductive facets (strict)", "deductive")):
+        a = want["agreement"][key]
+        rows.append(f"- **{label}** ({a['metric']}, {a['units']} units): α = {_num(a['alpha'])}, ")
+        rows.append(f"  - Units with both lineages: {_pct(a['paired_fraction'])}; raw agreement on them: "
+                    f"{_pct(a['raw_agreement'])}; missing: {_pct(a['missing_rate'])}; stability α within lineage: "
+                    + ", ".join(f"{lin} {_num(v)}" for lin, v in sorted(a["stability"].items())) + ".")
+    rows.append(f"rules: {want['agreement']['downgrades']}.")
+    eras = list(want["corpus"])
+    for c in want["constructs"]:
+        rows.append(f"| {c['id']} | {c['name']} | {', '.join(c['lineages'])} | "
+                    + " | ".join(c["status"][e] for e in eras) + " |")
+    p = want["predictions"]
+    rows.append(f"- Predictions matched: {len(p['matched'])} of {p['predictions_decided']} decided "
+                f"({_pct(p['predictions_matched_rate'])})")
+    rows.append(f"- Supported constructs matched to a prediction: {len(p['constructs_matched'])} of "
+                f"{p['supported_eligible']} ({_pct(p['supported_constructs_matched_rate'])}).")
+    rows.append(f"- Coder agreement on prediction-construct pairs: {_pct(p['coder_agreement'])}.")
+    d = want["deductive_vs_ipip"]
+    for dom, row in d["domains"].items():
+        same = "n/a" if row["same_band"] is None else ("yes" if row["same_band"] else "no")
+        rows.append(f"| {want['domain_names'][dom]} | {_num(row['observer'], 2)} | {row['observer_band'] or 'n/a'} | "
+                    f"{_num(row['ipip'], 2)} | {row['ipip_band'] or 'n/a'} | {same} |")
+    rows.append(f"Same band in {_pct(d['agreement_rate'])} of {d['compared']} domains compared.")
+    return rows
+
+
 def compare(results: dict, report_md: str, want: dict) -> list[str]:
-    """Field-by-field differences, then any line of report.md that differs from the rebuilt report."""
+    """Field-by-field differences; rows report.md must show; then any line differing from the rebuilt report."""
     plain = json.loads(json.dumps(want))
     out = _diff(results, plain)
+    out += [f"report.md lacks the row {row[:60]!r}…" for row in _rows(plain) if row not in report_md]
     rendered = report.render(plain).splitlines()
     actual = report_md.splitlines()
     out += [f"report.md line {i + 1} differs from its recomputation" for i in range(max(len(rendered), len(actual)))

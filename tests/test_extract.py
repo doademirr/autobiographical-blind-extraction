@@ -4,7 +4,7 @@ import unittest
 from unittest import mock
 
 from abx import extract, lifecycle, store
-from abx.errors import CallFailed, IntegrityError
+from abx.errors import CallFailed, IntegrityError, IsolationError
 
 from .helpers import FakeWorkspace, build
 
@@ -181,6 +181,19 @@ class IntegrityTest(unittest.TestCase):
         with mock.patch.dict(os.environ, {"ABX_FAKE_STRAY_CITATION": "1"}), self.assertRaises(CallFailed) as cm:
             extract.extract(self.ws)
         self.assertIn("deductive_scorer", str(cm.exception))
+
+    def test_scorer_may_not_borrow_another_facets_evidence(self):
+        with mock.patch.dict(os.environ, {"ABX_FAKE_CROSS_FACET": "1"}), self.assertRaises(CallFailed):
+            extract.extract(self.ws)
+
+    def test_sealed_prediction_cannot_reach_any_call_before_generation_c(self):
+        from abx import invoke
+
+        req = invoke.CallRequest(stage="unmask", role="crosswalk", lineage="claude", run=None, era=None,
+                                 generation="D", slots={"constructs": "constructs:all",
+                                                        "predictions": "self_prediction:sealed"})
+        with self.assertRaises(IsolationError):
+            invoke.call(self.ws, self.fw.config, req)
 
 
 class ResumeTest(unittest.TestCase):

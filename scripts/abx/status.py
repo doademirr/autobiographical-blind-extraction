@@ -19,3 +19,6 @@ def status(ws: store.Workspace) -> dict:
                    "done")
     return {"generations": gens, "calls": calls,
             "incidents": [ws.rel(p) for p in sorted(ws.root.glob("run/incidents/**/*.json"))], "next": nxt}
+
+
+STAGE = lifecycle.Stage("status", 6, "where the workspace stands", status)

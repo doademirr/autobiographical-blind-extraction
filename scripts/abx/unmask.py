@@ -145,3 +145,6 @@ def unmask(ws: store.Workspace) -> dict:
     store.write_text_atomic(ws.path("report/report.md"), report.render(results))
     store.append_generation(ws, "E", ["report/results.json", "report/report.md"])
     return results
+
+
+STAGE = lifecycle.Stage("unmask", 5, "crosswalk, IPIP reveal, report", unmask, estimate)
