@@ -337,6 +337,19 @@ class OutputParsingTest(unittest.TestCase):
         self.assertTrue(invoke.audit_events("codex", invoke.parse_codex(['["not", "an", "event"]']).events))
         self.assertTrue(invoke.audit_events("claude", invoke.parse_claude(["not json"]).events))
 
+    def test_claude_telemetry_events_pass_and_other_system_subtypes_do_not(self):
+        init = json.dumps({"type": "system", "subtype": "init", "tools": [], "mcp_servers": [], "model": "m"})
+        telemetry = [json.dumps({"type": "system", "subtype": "thinking_tokens", "estimated_tokens": 50}),
+                     json.dumps({"type": "rate_limit_event", "rate_limit_info": {"status": "allowed"}})]
+        result = json.dumps({"type": "result", "subtype": "success", "is_error": False, "result": "{}"})
+        out = invoke.parse_claude([init, *telemetry, result])
+        self.assertEqual(invoke.outcome("claude", 0, out.events), "success")
+        for extra in ({"type": "system", "subtype": "hook_started"}, {"type": "rate_limit_event", "subtype": "x"}):
+            with self.subTest(extra=extra):
+                out = invoke.parse_claude([init, json.dumps(extra), result])
+                self.assertEqual(invoke.audit_events("claude", out.events), ["event:system"]
+                                 if extra["type"] == "system" else ["event:rate_limit_event"])
+
     def test_claude_init_registry_must_be_present_and_empty(self):
         for init in ({"tools": ["Read"], "mcp_servers": []}, {"tools": [], "mcp_servers": ["x"]}, {}):
             with self.subTest(init=init):

@@ -115,7 +115,9 @@ def main(lineage: str) -> int:
                 {"type": "text", "text": os.environ["ABX_FAKE_PRELUDE"]}]}})
         if injected:
             events.append(TOOL_EVENTS["claude"][injected]())
+        events.append({"type": "system", "subtype": "thinking_tokens", "estimated_tokens": 50})
         events.append({"type": "assistant", "message": {"content": [{"type": "text", "text": text}]}})
+        events.append({"type": "rate_limit_event", "rate_limit_info": {"status": "allowed"}})
         events.append({"type": "result", "subtype": "error_during_execution" if failing else "success",
                        "is_error": failing, "result": "fake failure" if failing else text})
     else:

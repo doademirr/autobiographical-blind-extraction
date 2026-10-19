@@ -107,7 +107,10 @@ class Result:
 # CLI-supplied string reaches an incident, a record's audit or an error message.
 _CLAUDE_KNOWN_BLOCKS = frozenset({"tool_use", "server_tool_use", "web_search_tool_result", "mcp_tool_use",
                                   "mcp_tool_result", "image", "document"})
-_CLAUDE_KNOWN_EVENTS = frozenset({"user", "stream_event", "system", "unparseable"})
+_CLAUDE_KNOWN_EVENTS = frozenset({"user", "stream_event", "system", "rate_limit_event", "unparseable"})
+# Status events a real Claude stream carries on a tool-free call (`type:subtype`): the thinking-token
+# progress counter and the account's usage-window status. Any other system subtype is still a tool event.
+CLAUDE_TELEMETRY = frozenset({"system:thinking_tokens", "rate_limit_event:"})
 _CODEX_KNOWN_ITEMS = frozenset({"command_execution", "file_change", "mcp_tool_call", "web_search", "todo_list",
                                 "collab_tool_call", "image_view"})
 _CODEX_KNOWN_EVENTS = frozenset({"session.configured", "unparseable"})
@@ -122,7 +125,8 @@ def audit_events(lineage: str, events: list[Event], allowed: frozenset[str] = fr
     except `allowed` (qualification's scripted calls)."""
     found = []
     for ev in events:
-        if f"{ev.type}:{ev.detail}" in allowed:
+        kind = f"{ev.type}:{ev.detail}"
+        if kind in allowed or (lineage == "claude" and kind in CLAUDE_TELEMETRY):
             continue
         if lineage == "claude":
             if ev.type == "system" and ev.detail == "init":
@@ -233,7 +237,9 @@ def parse_claude(lines: list[str]) -> Result:
             out.text = ev["result"] if ok else None
             out.detail = "" if ok else "result_failed"
         else:
-            out.events.append(Event(etype if etype in _CLAUDE_KNOWN_EVENTS else "other", str(sub or "")[:0]))
+            kind = f"{etype}:{sub if isinstance(sub, str) else ''}"
+            detail = kind.partition(":")[2] if kind in CLAUDE_TELEMETRY else "other" if sub else ""
+            out.events.append(Event(etype if etype in _CLAUDE_KNOWN_EVENTS else "other", detail))
     return out
 
 
