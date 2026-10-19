@@ -146,7 +146,10 @@ class Capture:
                 self.send_header("content-type", ctype)
                 self.send_header("content-length", str(len(body)))
                 self.end_headers()
-                self.wfile.write(body)
+                try:
+                    self.wfile.write(body)
+                except (BrokenPipeError, ConnectionResetError):
+                    pass    # the CLI hung up first (it drops metadata fetches it no longer needs)
 
             def do_GET(self):
                 path = self.path.split("?")[0]

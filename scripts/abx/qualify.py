@@ -133,8 +133,10 @@ def _locked_problems(lineage: str, cfg: Config, run: Run, canary: Canary,
 
 
 def _codex_transport(cfg: Config, cap: capture.Capture) -> tuple[list[str], dict[str, str]]:
+    """Provider overrides for one capture run. Compression is off on every run, unlocked controls included:
+    on a ChatGPT login Codex zstd-compresses request bodies, which the capture cannot read."""
     if cfg.lineage("codex").capture_forward:
-        return ["-c", f'openai_base_url="{cap.base_url}/codex-up"',
+        return ["--disable", "enable_request_compression", "-c", f'openai_base_url="{cap.base_url}/codex-up"',
                 "-c", f'chatgpt_base_url="{cap.base_url}/backend-api/"'], {}
     provider = (f'model_providers.abxcapture={{name="abxcapture",base_url="{cap.base_url}/v1",'
                 f'env_key="{CAPTURE_KEY_ENV}",wire_api="responses"}}')

@@ -325,6 +325,14 @@ class QualifyFailureTest(unittest.TestCase):
     OK_TRAFFIC = (("GET", "/codex-up/models", "forwarded", 200), ("GET", "/codex-up/responses", "ws-refused"),
                   ("POST", "/backend-api/codex/analytics-events/events", "refused"))
 
+    def test_forwarded_transport_disables_compression_even_for_unlocked_controls(self):
+        lin = self.fw.config.lineage("codex")
+        cfg = config.Config(**{**self.fw.config.__dict__, "lineages": {
+            **self.fw.config.lineages, "codex": config.Lineage(**{**lin.__dict__, "capture_forward": True})}})
+        with capture.Capture("codex") as cap:
+            args, _ = qualify._codex_transport(cfg, cap)
+        self.assertIn("enable_request_compression", args[args.index("--disable") + 1:][:1])
+
     def test_every_locked_capture_checks_transport_and_cli_success(self):
         ok = self.OK_TRAFFIC
         self.assertEqual(self._locked(ok), [])
