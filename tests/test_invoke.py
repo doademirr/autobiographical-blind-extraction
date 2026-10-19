@@ -56,6 +56,26 @@ class CallTest(unittest.TestCase):
                     incident = store.read_json(self.ws.path(f"run/incidents/{req.identity}.json"))
                     self.assertEqual(incident["kind"], "tool_event")
 
+    def test_locked_claude_home_carries_the_login_without_identity(self):
+        with tempfile.TemporaryDirectory() as real, tempfile.TemporaryDirectory() as tmp, \
+                mock.patch.dict(os.environ, {"HOME": real}):
+            account = {"emailAddress": "a@example.com", "fullName": "A B", "displayName": "A",
+                       "organizationName": "A's org", "billingType": "stripe_subscription", "profileFetchedAt": 1}
+            Path(real, ".claude.json").write_text(json.dumps({"oauthAccount": account, "other": 1}))
+            home = invoke._claude_home(Path(tmp))
+            seeded = json.loads((home / ".claude.json").read_text())
+            self.assertEqual(set(seeded), {"oauthAccount"})
+            self.assertEqual({k: seeded["oauthAccount"][k] for k in invoke.CLAUDE_IDENTITY},
+                             dict.fromkeys(invoke.CLAUDE_IDENTITY, ""))
+            self.assertEqual(seeded["oauthAccount"]["billingType"], "stripe_subscription")
+            self.assertGreater(seeded["oauthAccount"]["profileFetchedAt"], 1)
+            self.assertFalse(invoke._identity_restored(home))
+
+    def test_profile_fetched_during_a_locked_claude_call_is_isolation(self):
+        with mock.patch.dict(os.environ, {"ABX_FAKE_PROFILE_FETCH": "1"}), self.assertRaises(IsolationError) as cm:
+            self.call(_req())
+        self.assertEqual(cm.exception.exit_code, 3)
+
     def test_tool_event_outranks_cli_failure_and_timeout(self):
         for env in ({"ABX_FAKE_FAIL": "1"}, {"ABX_FAKE_SLEEP": "5"}):
             with self.subTest(env=env), mock.patch.dict(os.environ, {"ABX_FAKE_TOOL_EVENT": "mcp_tool_call", **env}):

@@ -15,6 +15,7 @@ import secrets
 import shutil
 import subprocess
 import tempfile
+import time
 from collections.abc import Callable, Mapping
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
@@ -347,6 +348,40 @@ def _env(cfg: Config, extra: dict[str, str]) -> dict[str, str]:
     return {**{k: os.environ[k] for k in keys if k in os.environ}, **extra}
 
 
+# Claude Code puts the logged-in account's email into the model's context (from `oauthAccount` in
+# ~/.claude.json), whatever `--setting-sources` says. Locked Claude runs therefore get a HOME holding only the
+# login: the keychain, and the profile with these fields blank and marked fresh, so it is not fetched again.
+# The startup bootstrap fetch would also merge the email back in; essential-traffic mode skips it.
+CLAUDE_IDENTITY = ("emailAddress", "fullName", "displayName", "organizationName")
+CLAUDE_LOCKED_ENV = MappingProxyType({"CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC": "1"})
+
+
+def _claude_home(tmp: Path) -> Path:
+    home = tmp / "home"
+    (home / "Library").mkdir(parents=True)
+    keychains = Path(os.path.expanduser("~/Library/Keychains"))
+    if keychains.is_dir():
+        (home / "Library" / "Keychains").symlink_to(keychains)
+    try:
+        account = json.loads(Path(os.path.expanduser("~/.claude.json")).read_text()).get("oauthAccount")
+    except (OSError, ValueError, AttributeError):
+        account = None
+    profile = ({**account, **dict.fromkeys(CLAUDE_IDENTITY, ""), "profileFetchedAt": int(time.time() * 1000)}
+               if isinstance(account, dict) else None)
+    store.write_json(home / ".claude.json", {"oauthAccount": profile} if profile else {})
+    return home
+
+
+def _identity_restored(home: Path) -> bool:
+    """True if the CLI wrote an identity back during the run: the profile was fetched, so the email may have
+    reached the model. An unreadable profile fails closed."""
+    try:
+        account = json.loads((home / ".claude.json").read_text()).get("oauthAccount")
+    except (OSError, ValueError, AttributeError):
+        return True
+    return isinstance(account, dict) and any(account.get(k) for k in CLAUDE_IDENTITY)
+
+
 def _text(value) -> str:
     return value.decode(errors="replace") if isinstance(value, bytes) else (value or "")
 
@@ -381,6 +416,7 @@ def execute(cfg: Config, lineage: str, prompt_text: str, schema: str | None, arg
     model calls always use the pinned argv in an empty directory.
     """
     lin = cfg.lineage(lineage)
+    locked = argv is None
     argv = list(argv or _pinned_argv(lin))
     if extra_args:
         argv = [*argv[:-1], *extra_args, argv[-1]] if argv[-1] == "-" else [*argv, *extra_args]
@@ -391,8 +427,15 @@ def execute(cfg: Config, lineage: str, prompt_text: str, schema: str | None, arg
         for name, body in (cwd_files or {}).items():
             (cwd / name).write_text(body)
         env = _env(cfg, env_extra or {})
-        if lineage == "claude":
+        if lineage == "claude" and not locked:
             return _parsed(lineage, *_run(argv, prompt_text, cwd, env, cfg.timeout_s))
+        if lineage == "claude":
+            home = _claude_home(tmp)
+            ran = _run(argv, prompt_text, cwd, {**env, **CLAUDE_LOCKED_ENV, "HOME": str(home)}, cfg.timeout_s)
+            if _identity_restored(home):
+                raise IsolationError("Claude Code fetched the account profile during a locked call, so the "
+                                     "account email may have reached the model")
+            return _parsed(lineage, *ran)
         home = tmp / "home"
         home.mkdir()
         auth = Path(os.path.expanduser(lin.auth_file))

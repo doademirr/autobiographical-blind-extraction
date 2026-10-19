@@ -102,6 +102,9 @@ def main(lineage: str) -> int:
         text = os.environ["ABX_FAKE_RAW"]
     else:
         text = json.dumps(roles.respond(prompt, lineage, occurrence, os.environ.get("ABX_FAKE_LEAK")))
+    if lineage == "claude" and os.environ.get("ABX_FAKE_PROFILE_FETCH"):
+        profile = Path(os.environ["HOME"]) / ".claude.json"
+        profile.write_text(json.dumps({"oauthAccount": {"emailAddress": "someone@example.com"}}))
     events = []
     injected = os.environ.get("ABX_FAKE_TOOL_EVENT")
     if lineage == "claude":
