@@ -98,8 +98,8 @@ def _locked_problems(lineage: str, cfg: Config, run: Run, canary: Canary,
     requests, problems = run.evidence.requests, []
     if not requests:
         return ["the CLI never reached the capture provider"]
-    if any(t.outcome in {"incomplete", "unreadable"} for t in run.evidence.traffic):
-        problems.append("a request did not arrive whole")
+    if any(t.outcome in {"incomplete", "unreadable", "unhandled"} for t in run.evidence.traffic):
+        problems.append("a request did not arrive whole or was not one the capture handles")
     if lineage == "codex":
         allowed_tools = set(retained(lin))
         try:

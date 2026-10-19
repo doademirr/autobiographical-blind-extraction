@@ -109,9 +109,9 @@ _CLAUDE_KNOWN_BLOCKS = frozenset({"tool_use", "server_tool_use", "web_search_too
                                   "mcp_tool_result", "image", "document"})
 _CLAUDE_KNOWN_EVENTS = frozenset({"user", "stream_event", "system", "rate_limit_event", "identity_restored",
                                   "unparseable"})
-# Status events a real Claude stream carries on a tool-free call (`type:subtype`): the thinking-token
-# progress counter and the account's usage-window status. Any other system subtype is still a tool event.
-CLAUDE_TELEMETRY = frozenset({"system:thinking_tokens", "rate_limit_event:"})
+# Status events a real Claude stream carries on a tool-free call, as (type, detail): the thinking-token
+# progress counter and the account's usage-window status (which has no subtype). Anything else is a tool event.
+CLAUDE_TELEMETRY = frozenset({("system", "thinking_tokens"), ("rate_limit_event", "")})
 _CODEX_KNOWN_ITEMS = frozenset({"command_execution", "file_change", "mcp_tool_call", "web_search", "todo_list",
                                 "collab_tool_call", "image_view"})
 _CODEX_KNOWN_EVENTS = frozenset({"session.configured", "unparseable"})
@@ -126,8 +126,7 @@ def audit_events(lineage: str, events: list[Event], allowed: frozenset[str] = fr
     except `allowed` (qualification's scripted calls)."""
     found = []
     for ev in events:
-        kind = f"{ev.type}:{ev.detail}"
-        if kind in allowed or (lineage == "claude" and kind in CLAUDE_TELEMETRY):
+        if f"{ev.type}:{ev.detail}" in allowed or (lineage == "claude" and (ev.type, ev.detail) in CLAUDE_TELEMETRY):
             continue
         if lineage == "claude":
             if ev.type == "system" and ev.detail == "init":
@@ -234,10 +233,11 @@ def parse_claude(lines: list[str]) -> Result:
             out.text = ev["result"] if ok else None
             out.detail = "" if ok else "result_failed"
         else:
-            # Telemetry matches only an exact string subtype, or none at all; any other subtype value is "other".
-            kind = f"{etype}:{sub}" if isinstance(sub, str) and sub else (f"{etype}:" if "subtype" not in ev else None)
-            detail = kind.partition(":")[2] if kind in CLAUDE_TELEMETRY else ("other" if "subtype" in ev else "")
-            out.events.append(Event(etype if etype in _CLAUDE_KNOWN_EVENTS else "other", detail))
+            # Telemetry matches only an exact string subtype, or no subtype field at all; any other value is "other".
+            detail = "" if "subtype" not in ev else sub if isinstance(sub, str) and sub else None
+            telemetry = (etype, detail) in CLAUDE_TELEMETRY
+            out.events.append(Event(etype if etype in _CLAUDE_KNOWN_EVENTS else "other",
+                                    detail if telemetry else ("other" if "subtype" in ev else "")))
     return out
 
 
@@ -353,6 +353,10 @@ def _env(cfg: Config, extra: dict[str, str]) -> dict[str, str]:
 # profile written back, not what the CLI held in memory, and the leak probe is the end-to-end check.
 CLAUDE_IDENTITY = ("emailAddress", "fullName", "displayName", "organizationName")
 CLAUDE_CACHE_FIELDS = ("billingType", "accountCreatedAt", "subscriptionCreatedAt", "ccOnboardingFlags")
+# The only account fields copied into the locked profile: login and plan metadata, never identity.
+CLAUDE_ACCOUNT_FIELDS = (*CLAUDE_CACHE_FIELDS, "accountUuid", "organizationUuid", "organizationType", "seatTier",
+                         "organizationRateLimitTier", "userRateLimitTier", "hasExtraUsageEnabled",
+                         "claudeCodeTrialEndsAt", "claudeCodeTrialDurationDays")
 CLAUDE_LOCKED_ENV = MappingProxyType({"CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC": "1"})
 CLAUDE_PROFILE_ENV = frozenset({"CLAUDE_CONFIG_DIR", "CLAUDE_CODE_USER_EMAIL", "CLAUDE_CODE_ACCOUNT_UUID",
                                 "CLAUDE_CODE_ORGANIZATION_UUID", "ANTHROPIC_UNIX_SOCKET"})
@@ -375,18 +379,19 @@ def _claude_home(tmp: Path, lin: Lineage) -> Path:
     if keychains.is_dir():
         (home / "Library" / "Keychains").symlink_to(keychains)
     store.write_json(home / ".claude.json", {"oauthAccount": {
-        **account, **dict.fromkeys(CLAUDE_IDENTITY, ""), "profileFetchedAt": int(time.time() * 1000)}})
+        **{k: account[k] for k in CLAUDE_ACCOUNT_FIELDS if k in account}, **dict.fromkeys(CLAUDE_IDENTITY, ""),
+        "profileFetchedAt": int(time.time() * 1000)}})
     return home
 
 
 def _identity_restored(home: Path) -> bool:
-    """True unless the profile is still there with every identity field blank. Anything else (an identity written
-    back, a removed or malformed profile) means the CLI rewrote it during the run, and fails closed."""
+    """True unless the profile is still there with every identity field exactly "". Anything else (an identity
+    written back, a removed or malformed profile) means the CLI rewrote it during the run, and fails closed."""
     try:
         account = json.loads((home / ".claude.json").read_text()).get("oauthAccount")
     except (OSError, ValueError, AttributeError):
         return True
-    return not isinstance(account, dict) or any(account.get(k) for k in CLAUDE_IDENTITY)
+    return not isinstance(account, dict) or any(account.get(k, None) != "" for k in CLAUDE_IDENTITY)
 
 
 def _text(value) -> str:
@@ -420,9 +425,10 @@ def execute(cfg: Config, lineage: str, prompt_text: str, schema: str | None,
     """One isolated CLI process; returns its exit code (None on timeout) and parsed stream.
 
     Every call runs the pinned, locked argv in an empty directory. Only qualification's positive controls pass
-    `unlocked_argv`, and only they and the probe pass `extra_args` (provider overrides, inserted before Codex's
-    trailing stdin marker), `env_extra` or `cwd_files`. A locked Claude profile rewritten during the run is
-    reported as an `identity_restored` event, so every caller's audit and records see it.
+    `unlocked_argv`. Every capture run (locked or not) passes provider overrides: `extra_args`, inserted before
+    Codex's trailing stdin marker, and `env_extra`. Only the probe's own control passes `cwd_files`.
+    A locked Claude profile rewritten during the run is reported as an `identity_restored` event, so every
+    caller's audit and records see it.
     """
     lin = cfg.lineage(lineage)
     argv = list(unlocked_argv) if unlocked_argv is not None else _pinned_argv(lin)

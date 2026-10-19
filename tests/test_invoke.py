@@ -57,17 +57,23 @@ class CallTest(unittest.TestCase):
                     self.assertEqual(incident["kind"], "tool_event")
 
     def test_locked_claude_home_carries_the_login_without_identity(self):
+        source = Path(self.cfg.lineage("claude").profile_file)
+        profile = json.loads(source.read_text())
+        profile["oauthAccount"]["somethingNew"] = "unvetted"
+        source.write_text(json.dumps(profile))
         with tempfile.TemporaryDirectory() as tmp:
             home = invoke._claude_home(Path(tmp), self.cfg.lineage("claude"))
             seeded = json.loads((home / ".claude.json").read_text())
             self.assertEqual(set(seeded), {"oauthAccount"})
+            self.assertNotIn("somethingNew", seeded["oauthAccount"])
             self.assertEqual({k: seeded["oauthAccount"][k] for k in invoke.CLAUDE_IDENTITY},
                              dict.fromkeys(invoke.CLAUDE_IDENTITY, ""))
             self.assertEqual(seeded["oauthAccount"]["billingType"], "stripe_subscription")
             self.assertGreater(seeded["oauthAccount"]["profileFetchedAt"], 1)
             self.assertFalse(invoke._identity_restored(home))
             for rewritten in ({"oauthAccount": {"emailAddress": "x@example.com"}}, {"oauthAccount": None},
-                              {"oauthAccount": []}, {}):
+                              {"oauthAccount": []}, {}, {"oauthAccount": {}}, {"oauthAccount": {
+                                  **dict.fromkeys(invoke.CLAUDE_IDENTITY, ""), "emailAddress": None}}):
                 with self.subTest(rewritten=rewritten):
                     (home / ".claude.json").write_text(json.dumps(rewritten))
                     self.assertTrue(invoke._identity_restored(home))

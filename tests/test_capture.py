@@ -1,12 +1,16 @@
 import json
 import socket
 import struct
+import tempfile
 import time
 import unittest
 import urllib.error
 import urllib.request
+from pathlib import Path
 
-from abx import capture
+from abx import capture, config, invoke, qualify
+
+from .helpers import fake_config, write_logins
 
 
 def _post(url: str, body: dict) -> str:
@@ -36,6 +40,33 @@ class CaptureServerTest(unittest.TestCase):
             _reset(cap.port, b"")
         self.assertEqual([(t.method, t.path, t.outcome) for t in cap.evidence.traffic],
                          [("POST", "/v1/messages", "incomplete")])
+
+    def test_unhandled_methods_and_short_bodies_are_recorded(self):
+        with capture.Capture("claude") as cap:
+            with self.assertRaises(urllib.error.HTTPError) as cm:
+                urllib.request.urlopen(urllib.request.Request(f"{cap.base_url}/v1/x", method="PUT", data=b"{}"),
+                                       timeout=10)
+            cm.exception.close()
+            s = socket.create_connection(("127.0.0.1", cap.port))
+            s.sendall(b"POST /v1/messages HTTP/1.1\r\nHost: x\r\nContent-Length: 50\r\n\r\n{}")
+            s.shutdown(socket.SHUT_WR)
+            s.recv(1024)
+            s.close()
+        self.assertEqual(sorted((t.method, t.outcome) for t in cap.evidence.traffic),
+                         [("POST", "incomplete"), ("PUT", "unhandled")])
+        self.assertEqual(cap.evidence.requests, ())
+
+    def test_a_token_count_request_is_recorded_and_fails_a_claude_capture(self):
+        with capture.Capture("claude") as cap:
+            _post(f"{cap.base_url}/v1/messages/count_tokens", {"messages": [{"role": "user", "content": "x"}]})
+            _post(f"{cap.base_url}/v1/messages", {"model": "m", "messages": []})
+        self.assertEqual([t.outcome for t in cap.evidence.traffic], ["counted", "captured"])
+        events = [invoke.Event("system", "init"), invoke.Event("result", "success")]
+        run = qualify.Run(cap.evidence, 0, invoke.Result(status="success", events=events))
+        with tempfile.TemporaryDirectory() as tmp, qualify.Canary() as canary:
+            cfg = config.parse(fake_config(*write_logins(Path(tmp))))
+            self.assertIn("the CLI sent a request other than inference",
+                          qualify._locked_problems("claude", cfg, run, canary, None))
 
     def test_codex_scripted_call_then_message_and_result_lookup(self):
         item = {"type": "function_call", "id": "fc", "call_id": "call_w", "name": "wait", "arguments": "{}"}

@@ -32,6 +32,7 @@ class Traffic(NamedTuple):
     method: str
     path: str
     outcome: str            # "captured" | "forwarded" | "refused" | "ws-refused" | "unreadable" | "incomplete"
+    #                         | "counted" (a token-count request: answered, its body not kept) | "unhandled"
     status: int | None = None
 
 
@@ -148,6 +149,8 @@ class Capture:
             def handle_one_request(self):
                 self.command, self.recorded = None, False
                 super().handle_one_request()
+                if self.command and not self.recorded:  # a method or path no handler records (HEAD, PUT, ...)
+                    rec.traffic(Traffic(self.command, (self.path or "").split("?")[0], "unhandled"))
 
             def handle(self):
                 try:
@@ -190,8 +193,15 @@ class Capture:
                 self._send(code, body, ctype)
 
             def do_POST(self):
-                body = self.rfile.read(int(self.headers.get("content-length", 0)))
                 path = self.path.split("?")[0]
+                try:
+                    length = int(self.headers.get("content-length", 0))
+                except ValueError:
+                    length = -1
+                body = self.rfile.read(length) if length >= 0 else b""
+                if length < 0 or len(body) != length:  # a body cut short can still parse as JSON
+                    self._note(Traffic("POST", path, "incomplete"))
+                    return self._send(400)
                 if path.endswith("/responses") or (path.endswith("/messages") and "count_tokens" not in path):
                     try:
                         req = json.loads(body)
@@ -205,7 +215,7 @@ class Capture:
                                                    cap.tool_use))
                     return self._send(200, stream, "text/event-stream")
                 if path.endswith("count_tokens"):
-                    self.recorded = True
+                    self._note(Traffic("POST", path, "counted"))
                     return self._send(200, b'{"input_tokens": 1}')
                 self._note(Traffic("POST", path, "refused"))
                 self._send(404)
