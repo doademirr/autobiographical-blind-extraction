@@ -1,0 +1,19 @@
+{
+ "type": "object",
+ "properties": {
+  "labels": {
+   "type": "array",
+   "items": {
+    "type": "object",
+    "properties": {
+     "sentence_id": {"type": "string", "pattern": "^s[0-9]{5}$"},
+     "label": {"type": "string", "enum": ["keep", "remove", "mixed"]}
+    },
+    "required": ["sentence_id", "label"],
+    "additionalProperties": false
+   }
+  }
+ },
+ "required": ["labels"],
+ "additionalProperties": false
+}
