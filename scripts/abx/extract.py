@@ -367,8 +367,7 @@ def integrity_audit(c: Context) -> dict:
         fresh = qualify.qualify(c.ws, c.cfg, out=REQUALIFICATION_AUDIT)
         baseline = invoke.qualified(c.ws)
         moved = [lin for lin, q in fresh.items()
-                 if any(q[k] != baseline[lin].get(k) for k in ("cli_version", "invocation_hash", "config_hash",
-                                                              "resolved_model"))]
+                 if any(q.get(k) != baseline[lin].get(k) for k in invoke.FINGERPRINT_KEYS)]
         return Check(not moved, "fingerprint_moved" if moved else "requalified", {"lineages_moved": len(moved)})
 
     def events():

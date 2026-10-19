@@ -28,6 +28,8 @@ from .errors import CallFailed, IntegrityError, IsolationError, UsageError
 from .roles import role as get_role
 
 __all__ = [
+    "FINGERPRINT_KEYS",
+    "ISOLATION_POLICY",
     "QUALIFICATION",
     "QUALIFICATION_A",
     "CallRequest",
@@ -319,6 +321,8 @@ def cli_version(cli: str) -> str:
 # version 2). It is part of the fingerprint, so a qualification or call record made under an older policy is never
 # held to, or reused under, the current one.
 ISOLATION_POLICY = 2
+# What a requalification compares against the baseline: any change means the lineage moved.
+FINGERPRINT_KEYS = ("cli_version", "invocation_hash", "config_hash", "isolation_policy", "resolved_model")
 
 
 def live_fingerprint(cfg: Config, lineage: str) -> dict:

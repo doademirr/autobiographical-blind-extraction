@@ -58,8 +58,7 @@ def _audit(ws: store.Workspace, eras: list[str]) -> dict:
                     if store.read_json(p)["kind"] == "tool_event")
     fresh = store.read_json(ws.path(extract.REQUALIFICATION_AUDIT))
     baseline = store.read_json(ws.path(invoke.QUALIFICATION_A))
-    keys = ("cli_version", "invocation_hash", "config_hash", "resolved_model")
-    moved = sum(1 for lin, q in fresh.items() if any(q[k] != baseline[lin][k] for k in keys))
+    moved = sum(1 for lin, q in fresh.items() if any(q.get(k) != baseline[lin].get(k) for k in invoke.FINGERPRINT_KEYS))
     clean = not bad_events and not incidents
     return {
         "requalify": {"ok": not moved, "code": "fingerprint_moved" if moved else "requalified",
