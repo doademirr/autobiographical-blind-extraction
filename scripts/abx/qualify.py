@@ -69,20 +69,21 @@ ANALYTICS_PATH = "/backend-api/codex/analytics-events/events"
 
 
 def _transport_problems(evidence: capture.Evidence) -> list[str]:
-    """A registry built after failed or unexpected discovery traffic proves nothing.
-
-    Allowed: inference requests (captured), forwarded reads that succeed (2xx), the inference
-    websocket upgrade refused (Codex falls back to HTTP), and the analytics POST refused.
-    """
+    """A registry built after failed or unexpected discovery traffic proves nothing. An allowlist: inference
+    POSTs captured, metadata GETs forwarded with a 2xx, the inference websocket upgrade refused (Codex falls back
+    to HTTP) and the analytics POST refused. Every other method, path or outcome is a problem."""
     bad = []
     for t in evidence.traffic:
         if "/ps/" in t.path or "/plugins" in t.path or "/mcp" in t.path:
             bad.append("app_mcp_or_plugin_request")
-        elif t.outcome == "forwarded" and not (t.status is not None and 200 <= t.status < 300):
-            bad.append("discovery_read_failed")
-        elif t.outcome == "ws-refused" and t.path != INFERENCE_PATH:
-            bad.append("unexpected_websocket")
-        elif t.outcome in {"refused", "unreadable"} and not (t.method == "POST" and t.path == ANALYTICS_PATH):
+        elif t.outcome == "forwarded" and t.method == "GET":
+            if not (t.status is not None and 200 <= t.status < 300):
+                bad.append("discovery_read_failed")
+        elif t.outcome == "ws-refused":
+            if not (t.method == "GET" and t.path == INFERENCE_PATH):
+                bad.append("unexpected_websocket")
+        elif (t.outcome, t.method, t.path) not in {("captured", "POST", INFERENCE_PATH),
+                                                    ("refused", "POST", ANALYTICS_PATH)}:
             bad.append("unexpected_request")
     return bad
 
@@ -98,8 +99,8 @@ def _locked_problems(lineage: str, cfg: Config, run: Run, canary: Canary,
     requests, problems = run.evidence.requests, []
     if not requests:
         return ["the CLI never reached the capture provider"]
-    if any(t.outcome in {"incomplete", "unreadable", "unhandled"} for t in run.evidence.traffic):
-        problems.append("a request did not arrive whole or was not one the capture handles")
+    if any(t.outcome in {"incomplete", "unreadable", "unhandled", "counted"} for t in run.evidence.traffic):
+        problems.append("a request the capture does not accept: cut short, unreadable, unhandled or a token count")
     if lineage == "codex":
         allowed_tools = set(retained(lin))
         try:

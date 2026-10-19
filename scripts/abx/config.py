@@ -9,7 +9,8 @@ from typing import NamedTuple
 from . import store
 from .errors import UsageError
 
-__all__ = ["LINEAGES", "Config", "Lineage", "RetainedSpec", "RetainedTool", "load", "parse", "retained"]
+__all__ = ["CLAUDE_PROFILE_DEFAULT", "LINEAGES", "Config", "Lineage", "RetainedSpec", "RetainedTool", "load", "parse",
+           "retained"]
 
 LINEAGES = ("claude", "codex")
 

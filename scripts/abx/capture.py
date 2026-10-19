@@ -150,15 +150,14 @@ class Capture:
 
             def handle_one_request(self):
                 self.command, self.recorded = None, False
-                outcome = "unhandled"
+                completed = False
                 try:
                     super().handle_one_request()
-                except BaseException:
-                    outcome = "incomplete"
-                    raise
+                    completed = True
                 finally:
                     if self.command and not self.recorded:
-                        rec.traffic(Traffic(self.command, (self.path or "").split("?")[0], outcome))
+                        rec.traffic(Traffic(self.command, (self.path or "").split("?")[0],
+                                            "unhandled" if completed else "incomplete"))
 
             def handle(self):
                 try:

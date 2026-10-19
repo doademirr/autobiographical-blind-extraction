@@ -187,6 +187,16 @@ class CallTest(unittest.TestCase):
         self.assertEqual(len(self.fw.prompts_logged()), 2)
         self.assertEqual(store.read_json(dst)["run"], 2)
 
+    def test_a_qualification_from_an_older_isolation_policy_is_never_held_to(self):
+        q = store.read_json(self.ws.path(invoke.QUALIFICATION))
+        for lin in q.values():
+            del lin["isolation_policy"]
+        store.write_json(self.ws.path(invoke.QUALIFICATION), q)
+        with self.assertRaises(IntegrityError) as cm:
+            self.call(_req())
+        self.assertEqual(cm.exception.exit_code, 4)
+        self.assertEqual(self.fw.prompts_logged(), [])
+
     def test_artifact_reached_through_a_symlink_is_refused(self):
         era = self.ws.path("prepare/substrate/e1.md")
         era.parent.mkdir(parents=True)

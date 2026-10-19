@@ -315,6 +315,12 @@ def cli_version(cli: str) -> str:
     return p.stdout.strip()
 
 
+# Bumped whenever how a locked call is isolated changes outside its argv and config (the Claude identity guard is
+# version 2). It is part of the fingerprint, so a qualification or call record made under an older policy is never
+# held to, or reused under, the current one.
+ISOLATION_POLICY = 2
+
+
 def live_fingerprint(cfg: Config, lineage: str) -> dict:
     lin = cfg.lineage(lineage)
     return {
@@ -322,6 +328,7 @@ def live_fingerprint(cfg: Config, lineage: str) -> dict:
         "cli_version": cli_version(lin.cli),
         "invocation_hash": store.sha256_text(store.canonical(_pinned_argv(lin))),
         "config_hash": store.sha256_text(lin.raw_json),
+        "isolation_policy": ISOLATION_POLICY,
     }
 
 

@@ -351,7 +351,11 @@ class QualifyFailureTest(unittest.TestCase):
                     (("GET", "/codex-up/models", "forwarded", 500),),
                     (("GET", "/codex-up/models", "forwarded", 304),),
                     (("GET", "/backend-api/wham/x", "ws-refused"),),
-                    (("POST", "/backend-api/other", "refused"),)):
+                    (("POST", "/backend-api/other", "refused"),),
+                    (*ok, ("POST", "/codex-up/count_tokens", "counted")),
+                    (*ok, ("POST", "/codex-up/other", "captured")),
+                    (*ok, ("GET", "/codex-up/models", "mystery")),
+                    (*ok, ("POST", "/codex-up/models", "forwarded", 200))):
             with self.subTest(bad=bad):
                 self.assertTrue(self._locked(bad))
         self.assertTrue(self._locked(ok, code=1))
