@@ -1,0 +1,6 @@
+{
+ "type": "object",
+ "properties": {"answer": {"type": "string", "maxLength": 4000}},
+ "required": ["answer"],
+ "additionalProperties": false
+}
