@@ -15,9 +15,9 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from abx import agreement, extract, ipip, store, unmask
+from abx import store
 
-from . import REPO
+from . import REPO, recompute
 from .helpers import FAKE_ENV, FAKES, FIXTURE
 
 RUN = REPO / "scripts" / "run.py"
@@ -85,45 +85,8 @@ class EndToEndTest(unittest.TestCase):
         self.assertGreater(self.results["deductive_vs_ipip"]["compared"], 0)
         self.assertGreater(self.results["agreement"]["downgrades"], 0)
 
-    def test_agreement_figures_recompute_from_run_files(self):
-        r = extract.Run(self.ws)
-        book = store.read_json(self.ws.path("run/codebook/codebook.json"))
-        verdicts = {}
-        for path in sorted(self.ws.root.glob("run/recode/*.json")):
-            lineage, run, era = path.stem.split("-")
-            verdicts[f"{lineage}|{run[1:]}|{era}"] = store.read_json(path)
-        scores = {}
-        for path in sorted(self.ws.root.glob("run/deductive/scores-*.json")):
-            _, lineage, run = path.stem.split("-")
-            scores[f"{lineage}|{run[1:]}"] = {s["facet"]: s["score"] for s in store.read_json(path)["scores"]}
-        units = [f"{c['item_id']}@{e}" for c in book["constructs"] for e in r.era_ids]
-        runs = {lin: {str(n): {} for n in r.runs} for lin in r.lineages}
-        for key, rows in verdicts.items():
-            lin, run, era = key.split("|")
-            for v in rows:
-                runs[lin][run][f"{v['item_id']}@{era}"] = None if v["verdict"] == "insufficient" else v["verdict"]
-        ind = agreement.arm(runs, units, "nominal")
-        ded = agreement.arm({lin: {str(n): scores[f"{lin}|{n}"] for n in r.runs} for lin in r.lineages},
-                            extract.FACETS, "ordinal")
-        reported = self.results["agreement"]
-        self.assertEqual(reported["inductive"]["alpha"], ind.alpha)
-        self.assertEqual(reported["deductive"]["alpha"], ded.alpha)
-        self.assertEqual(reported["downgrades"], sum(1 for rows in verdicts.values() for v in rows if v["downgrade"]))
-        for value in (ind.alpha, ded.alpha):
-            self.assertIn(f"{value:.3f}", self.report)
-
-    def test_comparison_figures_recompute_from_frozen_inputs(self):
-        inst = ipip.load_instrument()
-        self_report = ipip.score(ipip.parse_responses(self.ws.path("sealed/ipip-120.csv").read_text(), inst), inst)
-        agree = store.read_json(self.ws.path("run/agreement.json"))
-        observer = unmask.deductive_domains(agree["deductive_collapsed"], inst)
-        self.assertEqual(self.results["deductive_vs_ipip"]["domains"],
-                         json.loads(json.dumps(unmask.domain_comparison(observer, self_report)["domains"])))
-        codes = {c: store.read_json(self.ws.path(f"run/crosswalk/codes-{c}.json")) for c in ("claude", "codex")}
-        supported = {cid for cid, eras in agree["construct_status"].items() if "supported" in eras.values()}
-        rates = unmask.prediction_rates(codes, ["P1", "P2", "P3", "P4"], supported)
-        self.assertEqual(self.results["predictions"]["predictions_matched_rate"], rates["predictions_matched_rate"])
-        self.assertIn(f"{rates['predictions_matched_rate']:.0%}", self.report)
+    def test_every_report_figure_recomputes_from_frozen_files(self):
+        self.assertEqual(recompute.problems(self.ws), [])
 
     def test_sealed_content_reaches_crosswalk_prompts_only_and_ipip_none(self):
         predictions = [line.split(":", 1)[1].strip() for line in
