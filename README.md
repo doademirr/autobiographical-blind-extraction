@@ -28,13 +28,15 @@ From the [Franklin demo report](examples/franklin/report.md):
 
 ## Why
 
-Ask a model what your writing says about you and you get a confident read with nothing behind it. The model knows who's asking, it sees your other files, it does its own arithmetic and nobody can check any of it. This tool runs the same question as a small study instead.
+Run a blind analysis over a body of text about you. Diaries, an autobiography project, even years of scattered writing about different events in your life.
 
-- **Blind.** Raters are clean-room CLI processes with no tools, no instruction files and no account identity. Each role sees only what its allowlist names (a rater, one era of your redacted text). Before any of your text leaves the machine, each CLI is qualified against a local capture of what it sends, and every run is checked again by a leak probe.
-- **Two lineages.** Claude and Codex rate independently, so agreement means two different model families saw the same thing.
-- **Pre-registered.** The method, the text the raters see and the codebook are hash-frozen before the results exist. A frozen file that changes stops the run.
-- **Scripts do the maths.** Krippendorff's α, the gates and every figure in the report are computed by script and recompute from the run files. No model does arithmetic the report states.
-- **Sealed comparators.** You write down your predictions and answer the IPIP-NEO-120 before the run. Neither is opened until the blind results are frozen.
+Why blind? Ask your own agent to run the analysis and its memory, AGENTS.md files and other context colour its judgement.
+
+This tool does three things:
+
+1. **Strips hindsight.** A zoner removes sentences where the author interprets their past self ("looking back, I was…"). Raters judge what the person did, not how they later explained it.
+2. **Uses two blind raters, Claude and Codex.** Each runs as a clean-room CLI process with no tools, instruction files or account identity. It never sees who you are, your sealed self-prediction or any later era of your life.
+3. **Counts a trait only if both model families find it in separate episodes.** Claude and Codex rate independently across repeated runs, with identical prompts. The method and codebook are frozen before any results exist, and scripts compute every number.
 
 The claim ceiling is agreement between raters, never objectivity.
 
