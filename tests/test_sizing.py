@@ -33,11 +33,12 @@ class EraSizeTest(unittest.TestCase):
                 for k in range(n_eras)]
         return original, eras, text.sentences(original, segs)
 
-    def need(self, role: str, position: int, body: str, card: bool = True) -> int:
-        fixed = sizing._fixed(self.ws, role, position, "e1")
+    def need(self, role: str, position: int, body: str, card: bool = True, n_eras: int = 8) -> int:
+        era_ids = [f"e{k + 1}" for k in range(n_eras)]
+        prompt = sizing._prompt(self.ws, role, era_ids, position, era_ids[position], body)
         if not card:
-            fixed = fixed.replace(sizing._largest_card(self.ws), "")
-        return invoke.estimate_tokens(fixed + body)
+            prompt = prompt.replace(sizing._largest_card(self.ws), "")
+        return invoke.estimate_tokens(prompt)
 
     def era_texts(self, original, era, sents):
         mine = [s for s in sents if s.segment_id in set(era["segment_ids"])]
@@ -81,6 +82,18 @@ class EraSizeTest(unittest.TestCase):
             sizing.check_eras(self.ws, _budget(self.cfg, budget), eras, sents, original)
         self.assertIn("era e8 has", str(cm.exception))
         self.assertIn("discovery", str(cm.exception))
+
+    def test_a_placeholder_used_twice_is_counted_twice(self):
+        original, eras, sents = self.corpus(1)
+        _, full, _ = self.era_texts(original, eras[0], sents)
+        budget = max(self.need(r, 0, full) for r in ("discovery", "recode", "deductive_ledger"))
+        sizing.check_eras(self.ws, _budget(self.cfg, budget), eras, sents, original)
+        template = self.ws.path("prereg/prompts/recode.md")
+        template.write_text(template.read_text() + "\nThe era again:\n{{era}}\n")
+        self.assertEqual(sizing._prompt(self.ws, "recode", ["e1"], 0, "e1", full).count(full), 2)
+        with self.assertRaises(UsageError) as cm:
+            sizing.check_eras(self.ws, _budget(self.cfg, budget), eras, sents, original)
+        self.assertIn("recode", str(cm.exception))
 
     def test_an_oversize_era_stops_prepare_before_any_model_call(self):
         ws = init.init(self.fw.ws.root.parent / "w", [FIXTURE / "autobiography.txt"], [], False,
