@@ -170,7 +170,7 @@ def zoning_chunks(sents: list[Sentence], limit: int | None = None) -> list[list[
 
 def render_numbered(text: str, sents: list[Sentence]) -> str:
     """The zoner's view: every sentence of a chunk, one per line, prefixed by its id."""
-    return "\n".join(f"[{s.id}] {text[s.start:s.end]}" for s in sents)
+    return "".join(f"[{s.id}] {text[s.start:s.end]}\n" for s in sents)
 
 
 def render_zoned(text: str, segment_ids: list[str], sents: list[Sentence], kept: set[str]) -> str:

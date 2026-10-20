@@ -29,6 +29,7 @@ from .roles import role as get_role
 
 __all__ = [
     "FINGERPRINT_KEYS",
+    "FIRST_ERA_MARKER",
     "ISOLATION_POLICY",
     "MAX_ATTEMPTS",
     "METHOD_VERSION",

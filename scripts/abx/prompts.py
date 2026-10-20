@@ -14,7 +14,7 @@ from .errors import IsolationError, UsageError
 from .roles import role as get_role
 from .withheld import MIN_REMOVED_LEN, Withheld
 
-__all__ = ["Prompt", "assemble", "audit", "check_allowlist"]
+__all__ = ["MAX_PARAM_LEN", "Prompt", "assemble", "audit", "check_allowlist"]
 
 FRAME_KINDS = {"template", "schema"}
 MAX_PARAM_LEN = 200

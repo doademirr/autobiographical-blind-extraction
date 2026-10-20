@@ -110,7 +110,7 @@ def _zone(ws: store.Workspace, cfg: config.Config, era: dict, sents: list[text.S
     labels: dict[str, str] = {}
     for part, chunk in enumerate(text.zoning_chunks(sents), start=1):
         aid = f"chunk:{era['id']}:{part}"
-        store.write_text_atomic(artifacts.path_of(ws, aid), text.render_numbered(redacted, chunk) + "\n")
+        store.write_text_atomic(artifacts.path_of(ws, aid), text.render_numbered(redacted, chunk))
         expected = {s.id for s in chunk}
 
         def validate(out, expected=expected) -> list[str]:

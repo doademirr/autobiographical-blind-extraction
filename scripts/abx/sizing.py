@@ -34,19 +34,29 @@ def _prompt(ws: store.Workspace, role: str, era_ids: list[str], position: int, l
     texts = {f"template:{role}": ws.path(f"prereg/prompts/{role}.md").read_text(),
              slots["schema"]: ws.path(f"prereg/schemas/{policy.schema}.json").read_text()}
     for kind in sorted(policy.kinds):
-        aid = {"chunk": f"chunk:{era}:1", "era": f"era:{era}", "card": "card:B", "facets": "facets:all",
-               "hypotheses": f"hypotheses:x:1:{era_ids[position - 1]}"}[kind]
         if kind == "hypotheses" and position == 0:
             continue
-        slots[kind] = aid
-        texts[aid] = {"chunk": body, "era": body, "card": _largest_card(ws),
-                      "facets": ws.path("prereg/facets.md").read_text(),
-                      "hypotheses": "x" * (MAX_HYPOTHESES_CHARS * position)}[kind]
+        aid, value = _largest_input(ws, kind, era_ids, position, body)
+        slots[kind], texts[aid] = aid, value
     params = {"era_label": label} if "era_label" in policy.params else {}
     if "hypotheses" in policy.params and position == 0:
         params["hypotheses"] = invoke.FIRST_ERA_MARKER
     return prompts.assemble(role, slots, texts.__getitem__, params, rater=("x", 1), era=era,
                             era_order=era_ids).text
+
+
+def _largest_input(ws: store.Workspace, kind: str, era_ids: list[str], position: int, body: str) -> tuple[str, str]:
+    """(artifact id, text) for one input kind of the call at `position`, at its largest."""
+    era = era_ids[position]
+    if kind in {"chunk", "era"}:
+        return (f"chunk:{era}:1" if kind == "chunk" else f"era:{era}"), body
+    if kind == "card":
+        return "card:B", _largest_card(ws)
+    if kind == "facets":
+        return "facets:all", ws.path("prereg/facets.md").read_text()
+    if kind == "hypotheses":
+        return f"hypotheses:x:1:{era_ids[position - 1]}", "x" * (MAX_HYPOTHESES_CHARS * position)
+    raise UsageError(f"no size rule for a per-era {kind} input")
 
 
 def _lineages(cfg: config.Config, role: str) -> list[config.Lineage]:

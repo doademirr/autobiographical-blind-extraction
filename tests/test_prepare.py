@@ -6,7 +6,7 @@ import unittest
 from pathlib import Path
 from unittest import mock
 
-from abx import capture, config, freeze, init, invoke, prepare, prompts, qualify, seal, store
+from abx import capture, config, freeze, init, invoke, prepare, prompts, qualify, seal, sizing, store
 from abx import text as abx_text
 from abx.errors import IntegrityError, IsolationError, UsageError
 
@@ -115,6 +115,15 @@ class PrepareTest(unittest.TestCase):
                 labelled = sorted(lab["sentence_id"] for p in parts for lab in store.read_json(p)["output"]["labels"])
                 self.assertEqual(labelled, mine)
                 self.assertEqual(sorted(store.read_json(self.ws.path(f"prepare/zoning/{era['id']}.json"))), mine)
+            # Preflight sizes exactly the prompt the zoner is sent.
+            first = json.loads(self.fw.prompts_logged()[-len(records)])["prompt"]
+            redacted = self.ws.path("prepare/redacted.txt").read_text()
+            era = store.read_json(self.ws.path("prepare/eras.json"))["eras"][0]
+            mine = [abx_text.Sentence(s["id"], s["segment_id"], s["start"], s["end"]) for s in sentences
+                    if s["segment_id"] in set(era["segment_ids"])]
+            chunk = abx_text.render_numbered(redacted, abx_text.zoning_chunks(mine)[0])
+            era_ids = [e["id"] for e in store.read_json(self.ws.path("prepare/eras.json"))["eras"]]
+            self.assertEqual(sizing._prompt(self.ws, "zoner", era_ids, 0, era["label"] or era["id"], chunk), first)
             sent = len(self.fw.prompts_logged())
             records[-1].unlink()
             prepare.prepare(self.ws)

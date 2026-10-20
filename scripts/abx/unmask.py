@@ -124,12 +124,13 @@ def compute(ws: store.Workspace, cfg: config.Config) -> dict:
                                                   instrument), instrument)
     observer = deductive_domains(agree["deductive_collapsed"], instrument)
     qualification = store.read_json(ws.path(invoke.QUALIFICATION_A))
+    invalid = invoke.invalid_outputs(ws)
     return {
         "corpus": store.read_json(ws.path("prepare/stats.json")),
         "fingerprints": {lin: {k: v for k, v in q.items() if k != "evidence"} for lin, q in qualification.items()},
         "agreement": {k: agree[k] for k in ("inductive", "deductive", "downgrades")}
         | {"integrity_audit": agree.get("integrity_audit")},
-        "invalid_outputs": invoke.invalid_outputs(ws),
+        "invalid_outputs": {"by_stage": invalid, "total": sum(invalid.values()), "max_attempts": invoke.MAX_ATTEMPTS},
         "constructs": [{"id": c["id"], "name": c["name"], "definition": c["definition"], "lineages": c["lineages"],
                         "status": agree["construct_status"][c["id"]]} for c in book["constructs"]],
         "predictions": prediction_rates(codes, preds, supported if inductive_ok else set())

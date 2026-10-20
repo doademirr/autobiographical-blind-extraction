@@ -75,7 +75,7 @@ class EndToEndTest(unittest.TestCase):
         self.assertEqual([e["gen"] for e in store.verify_manifest(self.ws)], ["A", "B", "C", "D", "E"])
 
     def test_invalid_outputs_are_counted_from_frozen_incidents_only(self):
-        n = self.results["invalid_outputs"]
+        n = self.results["invalid_outputs"]["by_stage"]
         # Replicate runs send the same prompt, and the fake fails each distinct prompt once: 2 lineages x 2 eras.
         self.assertEqual((n["prepare"], n["extract"], n["unmask"]), (0, 4, 2))
         self.assertIn("Invalid outputs (failed their schema or validator; each call gets up to 3 attempts): 6 "

@@ -69,8 +69,8 @@ def render(r: dict) -> str:
     out.append(f"- Verdicts downgraded to insufficient by the recurrence and counter-evidence rules: "
                f"{r['agreement']['downgrades']}.")
     n = r["invalid_outputs"]
-    out.append(f"- Invalid outputs (failed their schema or validator; each call gets up to 3 attempts): "
-               f"{sum(n.values())} ({', '.join(f'{stage} {count}' for stage, count in n.items())}).")
+    out.append(f"- Invalid outputs (failed their schema or validator; each call gets up to {n['max_attempts']} "
+               f"attempts): {n['total']} ({', '.join(f'{stage} {count}' for stage, count in n['by_stage'].items())}).")
     audit = r["agreement"]["integrity_audit"]
     if audit:
         verdict = "every check passed" if all(c["ok"] for c in audit.values()) else "a check failed"

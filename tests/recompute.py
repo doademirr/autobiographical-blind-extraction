@@ -108,6 +108,7 @@ def expected(ws: store.Workspace) -> dict:
     codes = {c: store.read_json(ws.path(f"run/crosswalk/codes-{c}.json"))["codes"] for c in cfg.crosswalk_coders}
     preds = list(seal.predictions(ws.path("sealed/self-prediction.md").read_text()))
     audit = _audit(ws, eras) if inductive.integrity_audit_due or deductive_arm.integrity_audit_due else None
+    invalid = _invalid_outputs(ws)
     return {
         "corpus": _corpus(ws),
         "fingerprints": {lin: {k: v for k, v in q.items() if k != "evidence"}
@@ -122,7 +123,7 @@ def expected(ws: store.Workspace) -> dict:
         "deductive_vs_ipip": unmask.domain_comparison(unmask.deductive_domains(collapsed, instrument), self_report)
         | {"deductive_reportable": deductive_arm.verdict in unmask.REPORTABLE},
         "domain_names": instrument["domains"],
-        "invalid_outputs": _invalid_outputs(ws),
+        "invalid_outputs": {"by_stage": invalid, "total": sum(invalid.values()), "max_attempts": 3},
     }
 
 
@@ -158,7 +159,7 @@ def _rows(want: dict) -> list[str]:
                     f"{_pct(a['raw_agreement'])}; missing: {_pct(a['missing_rate'])}; stability α within lineage: "
                     + ", ".join(f"{lin} {_num(v)}" for lin, v in sorted(a["stability"].items())) + ".")
     rows.append(f"rules: {want['agreement']['downgrades']}.")
-    n = want["invalid_outputs"]
+    n = want["invalid_outputs"]["by_stage"]
     rows.append(f"up to 3 attempts): {n['prepare'] + n['extract'] + n['unmask']} (prepare {n['prepare']}, "
                 f"extract {n['extract']}, unmask {n['unmask']}).")
     audit = want["agreement"]["integrity_audit"]
