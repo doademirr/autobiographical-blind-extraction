@@ -6,7 +6,8 @@ import unittest
 from pathlib import Path
 from unittest import mock
 
-from abx import capture, config, freeze, init, invoke, prepare, qualify, seal, store
+from abx import capture, config, freeze, init, invoke, prepare, prompts, qualify, seal, store
+from abx import text as abx_text
 from abx.errors import IntegrityError, IsolationError, UsageError
 
 from .helpers import FIXTURE, FakeWorkspace, build
@@ -94,6 +95,26 @@ class PrepareTest(unittest.TestCase):
         self.assertTrue(self.ws.path("prepare/segments-preview.txt").exists())
         self.assertEqual(self.fw.prompts_logged(), [])
         self.assertFalse(self.ws.path(invoke.QUALIFICATION).exists())
+
+    def test_eras_zone_in_chunks_through_real_calls_and_resume_per_chunk(self):
+        approve_fixture(self.ws)
+        with mock.patch.object(abx_text, "ZONING_CHUNK", 60):
+            prepare.prepare(self.ws)
+            sentences = store.read_json(self.ws.path("prepare/sentences.json"))
+            records = sorted(self.ws.root.glob("run/calls/prepare/zoner/*.json"))
+            for era in store.read_json(self.ws.path("prepare/eras.json"))["eras"]:
+                mine = sorted(s["id"] for s in sentences if s["segment_id"] in set(era["segment_ids"]))
+                parts = [p for p in records if p.name.startswith(f"{self.fw.config.zoner}-r0-{era['id']}.")]
+                self.assertGreater(len(parts), 1, era["id"])
+                labelled = sorted(lab["sentence_id"] for p in parts for lab in store.read_json(p)["output"]["labels"])
+                self.assertEqual(labelled, mine)
+                self.assertEqual(sorted(store.read_json(self.ws.path(f"prepare/zoning/{era['id']}.json"))), mine)
+            sent = len(self.fw.prompts_logged())
+            records[-1].unlink()
+            prepare.prepare(self.ws)
+            self.assertEqual(len(self.fw.prompts_logged()), sent + 1)
+        with self.assertRaises(IsolationError):
+            prompts.check_allowlist("zoner", ["chunk:e2:1"], era="e1")
 
     def test_malformed_review_files_are_usage_errors(self):
         prepare.prepare(self.ws)
@@ -202,6 +223,19 @@ class LifecycleTest(unittest.TestCase):
         for stage in (prepare.prepare, seal.seal, freeze.freeze):
             with self.subTest(stage=stage.__module__), self.assertRaises(IntegrityError):
                 stage(self.ws)
+
+    def test_generation_a_freezes_every_zoning_chunk(self):
+        fw = FakeWorkspace()
+        try:
+            with mock.patch.object(abx_text, "ZONING_CHUNK", 60):
+                ws = build(fw, until="freeze")
+            frozen = {path for e in store.verify_manifest(ws) for path in e["artifacts"]}
+            chunks = {ws.rel(p) for g in ("prepare/chunks/*/*.txt", "run/calls/prepare/zoner/*.json")
+                      for p in ws.root.glob(g)}
+            self.assertGreater(len(chunks), 4)
+            self.assertLessEqual(chunks, frozen)
+        finally:
+            fw.close()
 
     def test_freeze_refuses_preparation_edited_after_prepare(self):
         fw = FakeWorkspace()

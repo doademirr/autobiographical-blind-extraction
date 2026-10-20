@@ -149,6 +149,25 @@ def validate_eras(eras: list[dict], segments: list[Segment]) -> None:
         raise UsageError("eras.json: eras must cover every segment exactly once, in text order")
 
 
+# The most sentences one zoning call labels, so every label list stays small and checkable.
+ZONING_CHUNK = 300
+
+
+def zoning_chunks(sents: list[Sentence], limit: int | None = None) -> list[list[Sentence]]:
+    """An era's sentences in consecutive chunks of at most `limit`, breaking between segments where it can and
+    inside a segment longer than `limit` only at sentence boundaries. Deterministic: estimate, preflight and
+    zoning all use this one partition."""
+    limit = limit or ZONING_CHUNK
+    chunks: list[list[Sentence]] = []
+    for seg_id in dict.fromkeys(s.segment_id for s in sents):
+        seg = [s for s in sents if s.segment_id == seg_id]
+        if chunks and len(chunks[-1]) + len(seg) <= limit:
+            chunks[-1] += seg
+            continue
+        chunks += [seg[i:i + limit] for i in range(0, len(seg), limit)]
+    return chunks
+
+
 def render_numbered(text: str, sents: list[Sentence]) -> str:
     """The zoner's view: every sentence of a chunk, one per line, prefixed by its id."""
     return "\n".join(f"[{s.id}] {text[s.start:s.end]}" for s in sents)

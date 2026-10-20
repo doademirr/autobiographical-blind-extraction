@@ -15,7 +15,7 @@ GEN_A_FILES = ("config.json", lifecycle.HASHES, ipip.FROZEN_COPY, invoke.QUALIFI
                "prepare/redacted.txt", "prepare/offsets.json", "prepare/removed-sentences.json",
                "prepare/segments.json", "prepare/sentences.json", "prepare/eras.json", "prepare/redactions.json",
                "prepare/stats.json", "prepare/receipt.json")
-GEN_A_GLOBS = ("prereg/prompts/*.md", "prereg/schemas/*.json", "prepare/substrate/*.md", "prepare/chunks/*.txt",
+GEN_A_GLOBS = ("prereg/prompts/*.md", "prereg/schemas/*.json", "prepare/substrate/*.md", "prepare/chunks/*/*.txt",
                "prepare/zoning/*.json", "run/calls/prepare/**/*.json")
 
 

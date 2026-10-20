@@ -93,6 +93,27 @@ class ZonedRenderingTest(unittest.TestCase):
         self.assertEqual(sum(1 for line in rendered.splitlines() if line.startswith("[s")), len(kept))
 
 
+class ZoningChunkTest(unittest.TestCase):
+    def sents(self, sizes):
+        """Segments p1, p2, … with the given sentence counts."""
+        return [text.Sentence(f"s{seg}{i:03d}", f"p{seg}", 0, 0) for seg, n in enumerate(sizes, start=1)
+                for i in range(n)]
+
+    def test_chunks_break_between_segments_and_keep_order(self):
+        sents = self.sents([4, 3, 5, 2])
+        chunks = text.zoning_chunks(sents, limit=7)
+        self.assertEqual([[s.segment_id for s in c] for c in chunks],
+                         [["p1"] * 4 + ["p2"] * 3, ["p3"] * 5 + ["p4"] * 2])
+        self.assertEqual([s for c in chunks for s in c], sents)
+
+    def test_a_segment_over_the_limit_splits_at_sentence_boundaries(self):
+        sents = self.sents([2, 9, 1])
+        chunks = text.zoning_chunks(sents, limit=4)
+        self.assertTrue(all(len(c) <= 4 for c in chunks))
+        self.assertEqual([len(c) for c in chunks], [2, 4, 4, 2])  # p3 joins the tail of split p2
+        self.assertEqual([s for c in chunks for s in c], sents)
+
+
 class ZonerSchemaTest(unittest.TestCase):
     def setUp(self):
         self.schema = json.loads((REPO / "schemas" / "zoner.json").read_text())

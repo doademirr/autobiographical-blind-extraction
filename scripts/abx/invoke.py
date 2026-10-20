@@ -520,13 +520,16 @@ class CallRequest:
     generation: str
     slots: Mapping[str, str]
     validate: Callable[[object], list[str]] | None = None
+    part: int | None = None  # a zoning chunk's number within its era
 
     def __post_init__(self):
         object.__setattr__(self, "slots", MappingProxyType(dict(self.slots)))
 
     @property
     def identity(self) -> str:
-        return f"{self.stage}/{self.role}/{self.lineage}-r{self.run or 0}-{self.era or 'all'}"
+        # "." cannot occur in an era id, so a chunk's identity never collides with another era's.
+        part = f".{self.part}" if self.part is not None else ""
+        return f"{self.stage}/{self.role}/{self.lineage}-r{self.run or 0}-{self.era or 'all'}{part}"
 
 
 def record_path(ws: store.Workspace, req: CallRequest) -> Path:

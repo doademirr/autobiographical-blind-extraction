@@ -20,6 +20,7 @@ _PART = {
     "name": re.compile(r"[a-z_]{1,32}"),
     "lineage": re.compile(r"[a-z]{1,16}"),
     "run": re.compile(r"[1-9][0-9]?"),
+    "part": re.compile(r"[1-9][0-9]{0,3}"),
     "era": ERA_ID,
 }
 # kind -> (named parts, file pattern relative to the workspace)
@@ -27,7 +28,7 @@ _KINDS: dict[str, tuple[tuple[str, ...], str]] = {
     "template": (("role",), "prereg/prompts/{role}.md"),
     "schema": (("name",), "prereg/schemas/{name}.json"),
     "facets": (("=all",), "prereg/facets.md"),
-    "chunk": (("era",), "prepare/chunks/{era}.txt"),
+    "chunk": (("era", "part"), "prepare/chunks/{era}/{part}.txt"),
     "era": (("era",), "prepare/substrate/{era}.md"),
     "discovery": (("lineage", "run", "era"), "run/discovery/{lineage}-r{run}-{era}.json"),
     "hypotheses": (("lineage", "run", "era"), "run/discovery/{lineage}-r{run}-{era}.hypotheses.md"),
@@ -50,6 +51,7 @@ class Ref:
     lineage: str | None = None
     run: int | None = None
     era: str | None = None
+    part: int | None = None
     literal: str | None = None
 
     def __str__(self) -> str:
@@ -74,14 +76,14 @@ def parse(artifact_id: str) -> Ref:
         elif not _PART[field].fullmatch(part):
             raise UsageError(f"{kind} artifact id has a malformed {field}")
         else:
-            named[field] = int(part) if field == "run" else part
+            named[field] = int(part) if field in {"run", "part"} else part
     return Ref(kind, **named)
 
 
 def path_of(ws: store.Workspace, artifact_id: str) -> Path:
     ref = parse(artifact_id)
     pattern = _KINDS[ref.kind][1]
-    rel = pattern.format(**{f: getattr(ref, f) for f in ("role", "name", "lineage", "run", "era")})
+    rel = pattern.format(**{f: getattr(ref, f) for f in ("role", "name", "lineage", "run", "era", "part")})
     path = ws.path(rel)
     root = ws.root.resolve()
     if path.exists() and path.resolve() != root / rel:

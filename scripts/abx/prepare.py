@@ -14,7 +14,7 @@ RECEIPT_INPUTS = ("text/original.txt", "config.json", "prepare/redactions.json",
                   "prereg/prompts/zoner.md", "prereg/schemas/zoner.json")
 RECEIPT_OUTPUT_GLOBS = ("prepare/redacted.txt", "prepare/offsets.json", "prepare/segments.json",
                         "prepare/sentences.json", "prepare/stats.json", "prepare/removed-sentences.json",
-                        "prepare/substrate/*.md", "prepare/chunks/*.txt", "prepare/zoning/*.json")
+                        "prepare/substrate/*.md", "prepare/chunks/*/*.txt", "prepare/zoning/*.json")
 
 REPO = Path(__file__).resolve().parents[2]
 THIN, STOP = 0.50, 0.25
@@ -82,25 +82,33 @@ def _parse_review(name: str, raw: bytes) -> dict:
 
 
 def estimate(ws: store.Workspace) -> lifecycle.Preflight:
-    n = len(review_doc(ws, "eras.json")["eras"]) if ws.path("prepare/eras.json").exists() else 0
-    return lifecycle.Preflight(n + 2, 0, "one zoning call per era plus one leak probe per lineage")
+    eras = review_doc(ws, "eras.json")["eras"] if ws.path("prepare/eras.json").exists() else []
+    original = ws.path("text/original.txt").read_text(encoding="utf-8")
+    sents = text.sentences(original, text.segment(original))
+    chunks = sum(len(text.zoning_chunks([s for s in sents if s.segment_id in set(e.get("segment_ids", []))]))
+                 for e in eras if isinstance(e, dict))
+    return lifecycle.Preflight(chunks + 2, 0, f"one zoning call per chunk of up to {text.ZONING_CHUNK} sentences "
+                                              "plus one leak probe per lineage")
 
 
 def _zone(ws: store.Workspace, cfg: config.Config, era: dict, sents: list[text.Sentence],
           redacted: str) -> dict[str, str]:
-    store.write_text_atomic(artifacts.path_of(ws, f"chunk:{era['id']}"), text.render_numbered(redacted, sents) + "\n")
-    expected = {s.id for s in sents}
+    labels: dict[str, str] = {}
+    for part, chunk in enumerate(text.zoning_chunks(sents), start=1):
+        aid = f"chunk:{era['id']}:{part}"
+        store.write_text_atomic(artifacts.path_of(ws, aid), text.render_numbered(redacted, chunk) + "\n")
+        expected = {s.id for s in chunk}
 
-    def validate(out) -> list[str]:
-        got = [lab["sentence_id"] for lab in out["labels"]]
-        if len(got) != len(set(got)) or set(got) != expected:
-            return [f"labels must cover the chunk's {len(expected)} sentence ids exactly once"]
-        return []
+        def validate(out, expected=expected) -> list[str]:
+            got = [lab["sentence_id"] for lab in out["labels"]]
+            if len(got) != len(set(got)) or set(got) != expected:
+                return [f"labels must cover the chunk's {len(expected)} sentence ids exactly once"]
+            return []
 
-    req = invoke.CallRequest(stage="prepare", role="zoner", lineage=cfg.zoner, run=None, era=era["id"],
-                             generation="A", slots={"chunk": f"chunk:{era['id']}"}, validate=validate)
-    out = invoke.call(ws, cfg, req)
-    return {lab["sentence_id"]: lab["label"] for lab in out["labels"]}
+        req = invoke.CallRequest(stage="prepare", role="zoner", lineage=cfg.zoner, run=None, era=era["id"],
+                                 generation="A", slots={"chunk": aid}, validate=validate, part=part)
+        labels |= {lab["sentence_id"]: lab["label"] for lab in invoke.call(ws, cfg, req)["labels"]}
+    return labels
 
 
 def prepare(ws: store.Workspace) -> dict:
