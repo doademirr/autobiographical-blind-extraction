@@ -409,6 +409,7 @@ def integrity_audit(c: Context) -> dict:
 
 def extract(ws: store.Workspace) -> dict:
     gens = lifecycle.enter(ws, STAGE)
+    invoke.check_method(ws)
     c = _context(ws)
     if "B" not in gens:
         _discovery(c)

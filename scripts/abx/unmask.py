@@ -141,6 +141,7 @@ def compute(ws: store.Workspace, cfg: config.Config) -> dict:
 
 def unmask(ws: store.Workspace) -> dict:
     gens = lifecycle.enter(ws, STAGE)
+    invoke.check_method(ws)
     cfg = config.load(ws)
     if "D" not in gens:
         book = store.read_json(ws.path("run/codebook/codebook.json"))

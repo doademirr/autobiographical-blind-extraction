@@ -219,23 +219,25 @@ class LifecycleTest(unittest.TestCase):
         finally:
             fw.close()
 
-    def test_freeze_refuses_preparation_from_an_older_isolation_policy(self):
-        fw = FakeWorkspace()
-        try:
-            ws = build(fw, until="prepare")
-            q = store.read_json(ws.path(invoke.QUALIFICATION))
-            for lin in q.values():
-                del lin["isolation_policy"]
-            store.write_json(ws.path(invoke.QUALIFICATION), q)
-            for name in ("self-prediction.md", "ipip-120.csv"):
-                ws.path(f"sealed/{name}").write_text((FIXTURE / name).read_text())
-            seal.seal(ws)
-            with self.assertRaises(IntegrityError) as cm:
-                freeze.freeze(ws)
-            self.assertEqual(cm.exception.exit_code, 4)
-            self.assertFalse(ws.path(invoke.QUALIFICATION_A).exists())
-        finally:
-            fw.close()
+    def test_freeze_refuses_preparation_from_an_older_isolation_policy_or_method(self):
+        for key in ("isolation_policy", "method_version"):
+            with self.subTest(key=key):
+                fw = FakeWorkspace()
+                try:
+                    ws = build(fw, until="prepare")
+                    q = store.read_json(ws.path(invoke.QUALIFICATION))
+                    for lin in q.values():
+                        del lin[key]
+                    store.write_json(ws.path(invoke.QUALIFICATION), q)
+                    for name in ("self-prediction.md", "ipip-120.csv"):
+                        ws.path(f"sealed/{name}").write_text((FIXTURE / name).read_text())
+                    seal.seal(ws)
+                    with self.assertRaises(IntegrityError) as cm:
+                        freeze.freeze(ws)
+                    self.assertEqual(cm.exception.exit_code, 4)
+                    self.assertFalse(ws.path(invoke.QUALIFICATION_A).exists())
+                finally:
+                    fw.close()
 
     def test_cli_reports_a_removed_frozen_config_as_integrity(self):
         import contextlib

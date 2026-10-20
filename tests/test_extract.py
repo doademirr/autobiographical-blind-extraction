@@ -3,7 +3,7 @@ import os
 import unittest
 from unittest import mock
 
-from abx import extract, lifecycle, store
+from abx import extract, invoke, lifecycle, store, unmask
 from abx.errors import CallFailed, IntegrityError, IsolationError
 
 from .helpers import FakeWorkspace, build
@@ -209,6 +209,32 @@ class IntegrityTest(unittest.TestCase):
                                                         "predictions": "self_prediction:sealed"})
         with self.assertRaises(IsolationError):
             invoke.call(self.ws, self.fw.config, req)
+
+
+class MethodVersionTest(unittest.TestCase):
+    """A workspace made under an older method version is refused before any stage writes, the model-free
+    report path included."""
+
+    def test_extract_and_a_resumed_unmask_refuse_an_older_method(self):
+        fw = FakeWorkspace()
+        newer = mock.patch.object(invoke, "METHOD_VERSION", invoke.METHOD_VERSION + 1)
+        try:
+            ws = build(fw, until="freeze")
+            calls = len(fw.prompts_logged())
+            with newer, self.assertRaises(IntegrityError):
+                extract.extract(ws)
+            self.assertEqual(len(fw.prompts_logged()), calls)
+            self.assertFalse(ws.path("run/discovery").exists())
+            extract.extract(ws)
+            with mock.patch.object(unmask.report, "render", side_effect=RuntimeError("stop")):
+                with self.assertRaises(RuntimeError):
+                    unmask.unmask(ws)
+            self.assertIn("D", store.frozen_generations(ws))
+            with newer, self.assertRaises(IntegrityError):
+                unmask.unmask(ws)
+            self.assertFalse(ws.path("report/report.md").exists())
+        finally:
+            fw.close()
 
 
 class ResumeTest(unittest.TestCase):

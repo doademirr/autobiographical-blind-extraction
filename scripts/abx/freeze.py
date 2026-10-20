@@ -30,9 +30,7 @@ def freeze(ws: store.Workspace) -> dict:
     if stale:
         raise UsageError(f"preparation is not current ({', '.join(stale[:3])}); rerun `prepare`")
     cfg = config.load(ws)
-    if any(q.get("isolation_policy") != invoke.ISOLATION_POLICY for q in invoke.qualified(ws).values()):
-        raise IntegrityError("this workspace was prepared under an older isolation policy, so its zoning calls were "
-                             "too; start a new workspace")
+    invoke.check_method(ws)
     requalified = False
     try:
         for lineage in cfg.lineages:

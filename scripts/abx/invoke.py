@@ -30,6 +30,7 @@ from .roles import role as get_role
 __all__ = [
     "FINGERPRINT_KEYS",
     "ISOLATION_POLICY",
+    "METHOD_VERSION",
     "QUALIFICATION",
     "QUALIFICATION_A",
     "CallRequest",
@@ -39,6 +40,7 @@ __all__ = [
     "audit_events",
     "call",
     "check_fingerprint",
+    "check_method",
     "claude_argv",
     "codex_argv",
     "decode_events",
@@ -321,8 +323,12 @@ def cli_version(cli: str) -> str:
 # version 2). It is part of the fingerprint, so a qualification or call record made under an older policy is never
 # held to, or reused under, the current one.
 ISOLATION_POLICY = 2
+# Bumped whenever how verdicts are coded, resampled or counted changes (binary inductive reading and bounded resample
+# are version 2), so a workspace prepared under older rules can never be finished under these.
+METHOD_VERSION = 2
 # What a requalification compares against the baseline: any change means the lineage moved.
-FINGERPRINT_KEYS = ("cli", "cli_version", "invocation_hash", "config_hash", "isolation_policy", "resolved_model")
+FINGERPRINT_KEYS = ("cli", "cli_version", "invocation_hash", "config_hash", "isolation_policy", "method_version",
+                    "resolved_model")
 
 
 def live_fingerprint(cfg: Config, lineage: str) -> dict:
@@ -333,7 +339,17 @@ def live_fingerprint(cfg: Config, lineage: str) -> dict:
         "invocation_hash": store.sha256_text(store.canonical(_pinned_argv(lin))),
         "config_hash": store.sha256_text(lin.raw_json),
         "isolation_policy": ISOLATION_POLICY,
+        "method_version": METHOD_VERSION,
     }
+
+
+def check_method(ws: store.Workspace) -> None:
+    """A workspace prepared under an older isolation policy or method version is never continued: its earlier calls
+    and records were made under other rules. Stages that write artifacts call this before writing any."""
+    current = {"isolation_policy": ISOLATION_POLICY, "method_version": METHOD_VERSION}
+    if any(q.get(k) != v for q in qualified(ws).values() for k, v in current.items()):
+        raise IntegrityError("this workspace was prepared under an older isolation policy or method version; "
+                             "start a new workspace")
 
 
 def qualified(ws: store.Workspace) -> dict:
