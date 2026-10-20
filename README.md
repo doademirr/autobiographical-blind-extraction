@@ -74,7 +74,7 @@ python3 scripts/run.py status  ~/abx/me   # where a workspace stands and what's 
 
 Three review points are yours:
 
-1. **Names and eras.** `prepare` writes `prepare/segments-preview.txt` (your record split into numbered paragraphs) and two templates. You list the third parties to replace in `prepare/redactions.json` (this version has no name scanner; you find them yourself), split the record into eras in `prepare/eras.json`, and approve both. Nothing is sent before that.
+1. **Names and eras.** `prepare` writes `prepare/segments-preview.txt` (each numbered paragraph's first 100 characters) and two templates. You list the third parties to replace in `prepare/redactions.json` (this version has no name scanner; you find them yourself), split the record into eras in `prepare/eras.json`, and approve both. Nothing is sent before that.
 2. **Zoning.** A zoner removes sentences written in hindsight ("looking back, I was…") so raters judge what happened, not your later reading of it. Skim `prepare/retrospective.md` for what went and `prepare/substrate/` for what raters will see.
 3. **Sealed comparators.** Write your predictions in `sealed/self-prediction.md` and answer `sealed/ipip-120.csv` in your own editor, before `seal`.
 

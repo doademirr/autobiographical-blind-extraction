@@ -322,7 +322,7 @@ def cli_version(cli: str) -> str:
 # held to, or reused under, the current one.
 ISOLATION_POLICY = 2
 # What a requalification compares against the baseline: any change means the lineage moved.
-FINGERPRINT_KEYS = ("cli_version", "invocation_hash", "config_hash", "isolation_policy", "resolved_model")
+FINGERPRINT_KEYS = ("cli", "cli_version", "invocation_hash", "config_hash", "isolation_policy", "resolved_model")
 
 
 def live_fingerprint(cfg: Config, lineage: str) -> dict:
