@@ -2,7 +2,7 @@ import os
 import unittest
 from unittest import mock
 
-from abx import config, evidence, foils, freeze, invoke, schema, seal, store
+from abx import config, evidence, extract, foils, freeze, invoke, schema, seal, store
 from abx.errors import CallFailed, IntegrityError, UsageError
 
 from .helpers import FIXTURE, FakeWorkspace, build
@@ -62,6 +62,53 @@ class FoilEvidenceTest(unittest.TestCase):
         self.addCleanup(fw.close)
         with self.assertRaises(UsageError):
             config.parse({**fw.cfg, "roles": {**fw.cfg["roles"], "auditor": fw.cfg["roles"]["foil_author"]}})
+
+
+def _ratings(rows: dict) -> extract.Ratings:
+    """{(lineage, run, era): {item_id: verdict}} as named ratings."""
+    return extract.Ratings({extract.RaterKey(*k): tuple({"item_id": i, "verdict": v} for i, v in items.items())
+                            for k, items in rows.items()}, {})
+
+
+class FoilRatesTest(unittest.TestCase):
+    def test_rates_are_hand_computed_per_type_and_lineage(self):
+        kept = [{"type": "clear", "era": "e1", "item_id": "Ka"}, {"type": "anchored", "era": "e2", "item_id": "Kb"}]
+        verdicts = _ratings({
+            ("claude", 1, "e1"): {"Ka": "present", "Kb": "present"},   # Kb outside its era: ignored
+            ("claude", 2, "e1"): {"Ka": "insufficient", "Kb": "present"},  # e.g. a present downgraded by the bar
+            ("claude", 1, "e2"): {"Ka": "present", "Kb": "present"},   # Ka outside its era: ignored
+            ("claude", 2, "e2"): {"Ka": "present", "Kb": "absent"},
+            ("codex", 1, "e1"): {"Ka": "absent", "Kb": "absent"},
+            ("codex", 1, "e2"): {"Ka": "absent", "Kb": "present"},
+        }).verdicts
+        got = foils.endorsement(verdicts, kept, ["claude", "codex"])
+        self.assertEqual(got["clear"], {"items": 1, "by_lineage": {
+            "claude": {"verdicts": 2, "present": 1, "rate": 0.5},
+            "codex": {"verdicts": 1, "present": 0, "rate": 0.0}}})
+        self.assertEqual(got["anchored"]["by_lineage"]["claude"], {"verdicts": 2, "present": 1, "rate": 0.5})
+        self.assertEqual(got["near_miss"], {"items": 0, "by_lineage": {
+            "claude": {"verdicts": 0, "present": 0, "rate": None},
+            "codex": {"verdicts": 0, "present": 0, "rate": None}}})
+
+    def test_all_foils_dropped_leaves_every_rate_unavailable(self):
+        got = foils.endorsement(_ratings({("claude", 1, "e1"): {"K1": "present"}}).verdicts, [], ["claude"])
+        self.assertTrue(all(t["by_lineage"]["claude"]["rate"] is None for t in got.values()))
+
+    def test_the_gate_uses_constructs_only(self):
+        """Acceptance: constructs-only alpha fails while constructs plus foils passes; the arm is not reportable."""
+        constructs = {"K1": ("present", "not"), "K2": ("not", "present"), "K3": ("present", "present")}
+        foil_items = {f"F{i}": ("present", "present") if i % 2 else ("not", "not") for i in range(30)}
+        rows = {}
+        for run in (1, 2):
+            for lin, side in (("claude", 0), ("codex", 1)):
+                rows[(lin, run, "e1")] = {i: ("present" if v[side] == "present" else "absent")
+                                          for i, v in {**constructs, **foil_items}.items()}
+        ratings = _ratings(rows)
+        book = {"constructs": [{"item_id": i} for i in constructs]}
+        gate, _ = extract.arms(ratings, book, ["e1"], [])
+        pooled = extract.with_foils(ratings, book, [{"item_id": i} for i in foil_items], ["e1"])
+        self.assertEqual(gate.verdict, "not_reportable")
+        self.assertGreaterEqual(pooled.alpha, 0.8)
 
 
 class FreezeAuthorsFoilsTest(unittest.TestCase):

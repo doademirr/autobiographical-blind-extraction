@@ -48,6 +48,31 @@ def _arm(name: str, arm: dict) -> list[str]:
     return lines
 
 
+FOIL_TYPES = (("clear", "Clear foils", "false-positive rate"), ("near_miss", "Near-miss foils", "false-positive rate"),
+              ("anchored", "Anchored foils", "recovery rate"))
+
+
+def _foils(r: dict) -> list[str]:
+    f = r["foils"]
+    dropped = ", ".join(f"{d['era']} {d['id']}" for d in f["dropped"]) or "none"
+    out = ["## Foils and the blind audit", "",
+           "Foils are test items written from one era with an answer set in advance (absent for clear and near-miss "
+           "foils, present for anchored ones), and mixed into the card so raters cannot tell them from constructs. "
+           "The rates count every rater run's verdict in the foil's own era. They are descriptive: replicate runs are "
+           "not independent samples, and the audit lineage chose which foils stayed, so they do not rank the "
+           "lineages.", "",
+           f"- Foils written: {f['authored']}; dropped by the audit as unclear: {len(f['dropped'])} ({dropped})."]
+    for key, label, rate in FOIL_TYPES:
+        t = f["endorsement"][key]
+        cells = "; ".join(f"{lin} {pct(c['rate'])} ({c['present']} of {c['verdicts']} verdicts)"
+                          for lin, c in sorted(t["by_lineage"].items()))
+        out.append(f"- {label} ({rate}, {t['items']} kept): {cells}.")
+    flagged = ", ".join(f"{cid} ({', '.join(eras)})" for cid, eras in r["audit_flags"].items()) or "none"
+    out += [f"- Constructs the audit flagged with counter-evidence their definition does not account for: {flagged}. "
+            "Flags are reported, not acted on; the construct table shows what raters found.", ""]
+    return out
+
+
 def render(r: dict) -> str:
     out = ["# Blind extraction report", "",
            "## This is not a clinical assessment", "",
@@ -66,6 +91,9 @@ def render(r: dict) -> str:
     out += ["", "## Agreement (computed by script)", ""]
     out += _arm("Inductive constructs", r["agreement"]["inductive"])
     out += _arm("Deductive facets (strict)", r["agreement"]["deductive"])
+    d = r["agreement"]["inductive_with_foils"]
+    out.append(f"- Constructs plus foils (diagnostic, not a gate; {d['units']} units): α = {num(d['alpha'])}; units "
+               f"with both lineages: {pct(d['paired_fraction'])}; raw agreement on them: {pct(d['raw_agreement'])}.")
     out.append(f"- Verdicts downgraded to insufficient by the recurrence and counter-evidence rules: "
                f"{r['agreement']['downgrades']}.")
     n = r["invalid_outputs"]
@@ -78,7 +106,7 @@ def render(r: dict) -> str:
         out.append(f"- Very high agreement triggered the integrity audit: {verdict} ({checks}). High agreement is "
                    "reported with the caveat that both lineages share a method and may share training data.")
     eras = list(r["corpus"])
-    out += ["", "## Constructs", "", f"| Id | Construct | Found by | {' | '.join(eras)} |",
+    out += ["", *_foils(r), "## Constructs", "", f"| Id | Construct | Found by | {' | '.join(eras)} |",
             "|---|---|---|" + "---|" * len(eras)]
     for c in r["constructs"]:
         out.append(f"| {c['id']} | {c['name']} | {', '.join(c['lineages'])} | "

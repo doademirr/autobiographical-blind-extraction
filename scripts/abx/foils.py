@@ -6,11 +6,12 @@ era only; on the card it looks like a construct (`card`). The auditor's view of 
 is rendered here from the frozen JSON, so the two can never disagree.
 """
 
+from collections.abc import Mapping
 from pathlib import Path
 
 from . import artifacts, card, config, evidence, invoke, store
 
-__all__ = ["EXPECTED", "MAX_FOILS", "author", "load", "path", "render_for_audit", "validate"]
+__all__ = ["EXPECTED", "MAX_FOILS", "author", "endorsement", "load", "path", "render_for_audit", "validate"]
 
 # What each type expects in its own era.
 EXPECTED = {"clear": "absent", "near_miss": "absent", "anchored": "present"}
@@ -48,6 +49,27 @@ def validate(out: dict, ix: evidence.Index, era: str) -> list[str]:
     problems = ["foil ids repeat"] if len(ids) != len(set(ids)) else []
     problems += [f"{f['id']}: name is not atomic" for f in foils if card.COMPOUND_NAME.search(f["name"])]
     return problems + [p for f in foils for p in _evidence_problems(f, ix)]
+
+
+def endorsement(verdicts: Mapping, kept: list[dict], lineages: list[str]) -> dict:
+    """Per type and lineage, the share of rater-run verdicts (after the citation rules) in each kept foil's own era
+    that are present: the recovery rate for anchored foils, the false-positive rate for the others. `verdicts` maps
+    rater keys (with `lineage` and `era`) to verdict rows. A type with no verdicts has rate None; types never blend."""
+    out = {t: {"items": 0, "by_lineage": {lin: {"verdicts": 0, "present": 0} for lin in lineages}} for t in EXPECTED}
+    for f in kept:
+        out[f["type"]]["items"] += 1
+        for key, rows in verdicts.items():
+            if key.era != f["era"]:
+                continue
+            cell = out[f["type"]]["by_lineage"][key.lineage]
+            for v in rows:
+                if v["item_id"] == f["item_id"]:
+                    cell["verdicts"] += 1
+                    cell["present"] += v["verdict"] == "present"
+    for t in out.values():
+        for cell in t["by_lineage"].values():
+            cell["rate"] = cell["present"] / cell["verdicts"] if cell["verdicts"] else None
+    return out
 
 
 def render_for_audit(foils: list[dict], era: str) -> str:

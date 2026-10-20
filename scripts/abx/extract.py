@@ -39,6 +39,7 @@ __all__ = [
     "extract",
     "load_ratings",
     "validate_codebook",
+    "with_foils",
 ]
 
 REQUALIFICATION_AUDIT = "run/requalification-audit.json"
@@ -295,15 +296,25 @@ def arms(ratings: Ratings, book: dict, era_ids: list[str],
     whether the era shows the construct: absent and insufficient verdicts, after the citation rules, are both
     not_present."""
     units = [Unit(con["item_id"], era) for con in book["constructs"] for era in era_ids]
+    druns: dict = {}
+    for key, by_facet in ratings.scores.items():
+        druns.setdefault(key.lineage, {})[key.run] = by_facet
+    return agreement.arm(_binary_runs(ratings), units, "nominal"), agreement.arm(druns, facets, "ordinal")
+
+
+def with_foils(ratings: Ratings, book: dict, kept: list[dict], era_ids: list[str]) -> agreement.ArmResult:
+    """The diagnostic arm: the inductive reading over constructs and kept foils in every era. Never a gate."""
+    units = [Unit(item["item_id"], era) for item in [*book["constructs"], *kept] for era in era_ids]
+    return agreement.arm(_binary_runs(ratings), units, "nominal")
+
+
+def _binary_runs(ratings: Ratings) -> dict:
     runs: dict = {}
     for key, rows in ratings.verdicts.items():
         cell = runs.setdefault(key.lineage, {}).setdefault(key.run, {})
         for v in rows:
             cell[Unit(v["item_id"], key.era)] = "present" if v["verdict"] == "present" else "not_present"
-    druns: dict = {}
-    for key, by_facet in ratings.scores.items():
-        druns.setdefault(key.lineage, {})[key.run] = by_facet
-    return agreement.arm(runs, units, "nominal"), agreement.arm(druns, facets, "ordinal")
+    return runs
 
 
 def _arm_json(arm: agreement.ArmResult) -> dict:
@@ -327,6 +338,7 @@ def _agree(c: Context, book: dict) -> dict:
         "deductive_collapsed": [{"lineage": lin, "facet": f, "value": v} for lin in sorted(deductive_arm.collapsed)
                                 for f, v in deductive_arm.collapsed[lin].items()],
         "downgrades": sum(1 for rows in ratings.verdicts.values() for v in rows if v["downgrade"]),
+        **_diagnostics(c, book, ratings, lineages),
     }
     if inductive.integrity_audit_due or deductive_arm.integrity_audit_due:
         result["integrity_audit"] = integrity_audit(c)
@@ -335,6 +347,20 @@ def _agree(c: Context, book: dict) -> dict:
             raise IntegrityError("integrity audit failed after very high agreement; results invalidated")
     store.write_json(c.ws.path("run/agreement.json"), result)
     return result
+
+
+def _diagnostics(c: Context, book: dict, ratings: Ratings, lineages: list[str]) -> dict:
+    """Foil and audit figures: reported, never part of a gate."""
+    audited = store.read_json(c.ws.path(audit.FOILS))
+    diag = with_foils(ratings, book, audited["kept"], c.era_ids)
+    return {
+        "inductive_with_foils": {"metric": diag.metric, "alpha": diag.alpha, "units": len(diag.units),
+                                 "paired_fraction": diag.paired_fraction, "raw_agreement": diag.raw_agreement,
+                                 "missing_rate": diag.missing_rate},
+        "foils": {"authored": sum(len(foils.load(c.ws, era)) for era in c.era_ids), "dropped": audited["dropped"],
+                  "endorsement": foils.endorsement(ratings.verdicts, audited["kept"], lineages)},
+        "audit_flags": audit.flags(c.ws, c.era_ids),
+    }
 
 
 def integrity_audit(c: Context) -> dict:

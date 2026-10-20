@@ -10,7 +10,7 @@ from collections.abc import Mapping
 
 from . import artifacts, config, evidence, foils, invoke, store
 
-__all__ = ["FOILS", "render_codebook", "run", "validate"]
+__all__ = ["FOILS", "flags", "render_codebook", "run", "validate"]
 
 FOILS = "run/codebook/foils.json"  # the foils that reach the card, and those the audit dropped
 
@@ -31,6 +31,15 @@ def validate(out: dict, ix: evidence.Index, era: str, foil_ids: list[str], const
     if len(flagged) != len(set(flagged)):
         problems.append("a construct is flagged more than once")
     return problems + ix.outside(era, evidence.cited(out, ("counter_sentence_ids",)))
+
+
+def flags(ws: store.Workspace, era_ids: list[str]) -> dict[str, list[str]]:
+    """Each flagged construct and the eras whose audit flagged it, in era order."""
+    out: dict[str, list[str]] = {}
+    for era in era_ids:
+        for f in store.read_json(ws.path(f"run/audit/{era}.json"))["flags"]:
+            out.setdefault(f["construct_id"], []).append(era)
+    return dict(sorted(out.items()))
 
 
 def run(ws: store.Workspace, cfg: config.Config, ix: evidence.Index, constructs: list[Mapping]) -> dict:

@@ -94,6 +94,33 @@ def _invalid_outputs(ws: store.Workspace) -> dict[str, int]:
             for stage, rels in stages.items()}
 
 
+def _foils(ws: store.Workspace, eras: list[str], ratings: extract.Ratings, lineages: list[str]) -> dict:
+    """Kept foils re-derived from the authored foils and each era's audit, then their endorsement counted."""
+    authored = {e: store.read_json(ws.path(f"prereg/foils/{e}.json"))["foils"] for e in eras}
+    audits = {e: store.read_json(ws.path(f"run/audit/{e}.json")) for e in eras}
+    drops = {e: {d["foil_id"]: d["reason"] for d in audits[e]["foils"] if d["decision"] == "drop"} for e in eras}
+    kept = [{**f, "era": e} for e in eras for f in authored[e] if f["id"] not in drops[e]]
+    endorsement = {}
+    for kind in ("clear", "near_miss", "anchored"):
+        mine = [f for f in kept if f["type"] == kind]
+        by = {}
+        for lin in lineages:
+            got = [v["verdict"] for key, rows in ratings.verdicts.items() if key.lineage == lin
+                   for f in mine if key.era == f["era"] for v in rows if v["item_id"] == f["item_id"]]
+            present = got.count("present")
+            by[lin] = {"verdicts": len(got), "present": present, "rate": present / len(got) if got else None}
+        endorsement[kind] = {"items": len(mine), "by_lineage": by}
+    flags: dict[str, list[str]] = {}
+    for e in eras:
+        for f in audits[e]["flags"]:
+            flags.setdefault(f["construct_id"], []).append(e)
+    return {"kept": kept, "foils": {"authored": sum(map(len, authored.values())),
+                                    "dropped": [{"era": e, "id": i, "reason": r} for e in eras
+                                                for i, r in sorted(drops[e].items())],
+                                    "endorsement": endorsement},
+            "audit_flags": dict(sorted(flags.items()))}
+
+
 def expected(ws: store.Workspace) -> dict:
     """The results `unmask` must have produced, rebuilt from raw ratings and sealed inputs."""
     cfg = config.load(ws)
@@ -114,13 +141,20 @@ def expected(ws: store.Workspace) -> dict:
     preds = list(seal.predictions(ws.path("sealed/self-prediction.md").read_text()))
     audit = _audit(ws, eras) if inductive.integrity_audit_due or deductive_arm.integrity_audit_due else None
     invalid = _invalid_outputs(ws)
+    foiled = _foils(ws, eras, ratings, lineages)
+    diag = extract.with_foils(ratings, book, foiled["kept"], eras)
     return {
         "corpus": _corpus(ws),
         "fingerprints": {lin: {k: v for k, v in q.items() if k != "evidence"}
                          for lin, q in store.read_json(ws.path(invoke.QUALIFICATION_A)).items()},
         "agreement": {"inductive": _arm(inductive), "deductive": _arm(deductive_arm),
                       "downgrades": sum(1 for rows in ratings.verdicts.values() for v in rows if v["downgrade"]),
-                      "integrity_audit": audit},
+                      "integrity_audit": audit,
+                      "inductive_with_foils": {"metric": diag.metric, "alpha": diag.alpha, "units": len(diag.units),
+                                               "paired_fraction": diag.paired_fraction,
+                                               "raw_agreement": diag.raw_agreement, "missing_rate": diag.missing_rate}},
+        "foils": foiled["foils"],
+        "audit_flags": foiled["audit_flags"],
         "constructs": [{"id": c["id"], "name": c["name"], "definition": c["definition"], "lineages": c["lineages"],
                         "status": status[c["id"]]} for c in book["constructs"]],
         "predictions": unmask.prediction_rates(codes, preds, supported if inductive_ok else set())
@@ -176,6 +210,20 @@ def _rows(want: dict) -> list[str]:
                     if audit["allowlist"]["ok"] else f"allowlist: {al['outside']} of {al['records']} call records")
         generations = audit["manifest"]["counts"]["generations"]
         rows.append(f"manifest: manifest chain verified across {generations} generations")
+    d = want["agreement"]["inductive_with_foils"]
+    rows.append(f"- Constructs plus foils (diagnostic, not a gate; {d['units']} units): α = {_num(d['alpha'])}; units "
+                f"with both lineages: {_pct(d['paired_fraction'])}; raw agreement on them: {_pct(d['raw_agreement'])}.")
+    f = want["foils"]
+    rows.append(f"- Foils written: {f['authored']}; dropped by the audit as unclear: {len(f['dropped'])} (")
+    for kind, label, rate in (("clear", "Clear foils", "false-positive"), ("near_miss", "Near-miss foils",
+                                                                          "false-positive"),
+                              ("anchored", "Anchored foils", "recovery")):
+        t = f["endorsement"][kind]
+        rows.append(f"- {label} ({rate} rate, {t['items']} kept): " + "; ".join(
+            f"{lin} {_pct(c['rate'])} ({c['present']} of {c['verdicts']} verdicts)"
+            for lin, c in sorted(t["by_lineage"].items())) + ".")
+    rows.append("the audit flagged with counter-evidence their definition does not account for: "
+                + (", ".join(f"{cid} ({', '.join(e)})" for cid, e in want["audit_flags"].items()) or "none") + ".")
     eras = list(want["corpus"])
     for c in want["constructs"]:
         rows.append(f"| {c['id']} | {c['name']} | {', '.join(c['lineages'])} | "

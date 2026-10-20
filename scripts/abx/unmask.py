@@ -128,8 +128,10 @@ def compute(ws: store.Workspace, cfg: config.Config) -> dict:
     return {
         "corpus": store.read_json(ws.path("prepare/stats.json")),
         "fingerprints": {lin: {k: v for k, v in q.items() if k != "evidence"} for lin, q in qualification.items()},
-        "agreement": {k: agree[k] for k in ("inductive", "deductive", "downgrades")}
+        "agreement": {k: agree[k] for k in ("inductive", "deductive", "downgrades", "inductive_with_foils")}
         | {"integrity_audit": agree.get("integrity_audit")},
+        "foils": agree["foils"],
+        "audit_flags": agree["audit_flags"],
         "invalid_outputs": {"by_stage": invalid, "total": sum(invalid.values()), "max_attempts": invoke.MAX_ATTEMPTS},
         "constructs": [{"id": c["id"], "name": c["name"], "definition": c["definition"], "lineages": c["lineages"],
                         "status": agree["construct_status"][c["id"]]} for c in book["constructs"]],
