@@ -30,8 +30,13 @@ synced folder.
 2. `python3 scripts/run.py prepare <ws>` — the first run writes `prepare/redactions.json`, `prepare/eras.json` and
    `prepare/segments-preview.txt`, then stops. **Review point 1:** the user lists third-party names to replace
    (`"names": {"Full Name": "First L."}`), splits the record into eras by segment id, and sets `"approved": true` in
-   both files. Nothing leaves the machine before that. Run `prepare` again: it qualifies both CLIs, zones the text
-   and prints per-era kept ratios. **Review point 2:** ask the user to skim `prepare/retrospective.md` (what was
+   both files. The user decides the eras, not you: help them find the breaks, never choose for them. The `"note"` in
+   `eras.json` states the rule (at least 5-6 eras of at least 10k words each, under the estimated maximum; in order,
+   back to back, every segment in exactly one; cut at life events such as a move, a new school or job, a
+   relationship, a birth or death, a gap in the writing; never around traits the user expects), and the preview
+   gives each paragraph's word count. Nothing leaves the machine before that. Run `prepare` again: it checks every
+   era's size before any model call (exit 2 names an era that is too big and its maximum; split it), then qualifies
+   both CLIs, zones the text and prints per-era kept ratios. **Review point 2:** ask the user to skim `prepare/retrospective.md` (what was
    removed) and a few eras of `prepare/substrate/` (what raters will see).
 3. **Review point 3:** the user fills in `sealed/self-prediction.md` and answers `sealed/ipip-120.csv` (items are
    in `sealed/ipip-120-items.md`) in their own editor. Then `python3 scripts/run.py seal <ws>`.
