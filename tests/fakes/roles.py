@@ -65,6 +65,26 @@ def codebook_author(prompt, lineage, occurrence):
             "appendix": []}
 
 
+def foil_author(prompt, lineage, occurrence):
+    """A clear and a near-miss foil, plus an anchored one when the era has paragraphs far enough apart."""
+    segs = segments(prompt)
+    era = era_label(prompt)
+    out = [{"id": "F1", "type": "clear", "name": f"Love of solitude {era}", "definition": "Seeks time alone.",
+            "sufficiency_rule": "Two separate retreats from company.", "support": [],
+            "counter_sentence_ids": [segs[0][0]]},
+           {"id": "F2", "type": "near_miss", "name": f"Fondness for gambling {era}",
+            "definition": "Stakes money on chance.", "sufficiency_rule": "Two separate wagers.",
+            "support": [{"sentence_ids": [segs[0][0]], "event": "a risky bargain"}],
+            "counter_sentence_ids": [segs[-1][0]]}]
+    if len(segs) >= 3:
+        out.append({"id": "F3", "type": "anchored", "name": f"Habit of early rising {era}",
+                    "definition": "Starts the day early.", "sufficiency_rule": "Two separate early starts.",
+                    "support": [{"sentence_ids": [segs[0][0]], "event": "one morning"},
+                                {"sentence_ids": [segs[-1][0]], "event": "another morning"}],
+                    "counter_sentence_ids": []})
+    return {"foils": out}
+
+
 def recode(prompt, lineage, occurrence):
     segs = segments(prompt)
     era = era_label(prompt)
@@ -142,8 +162,8 @@ def crosswalk(prompt, lineage, occurrence):
     return {"codes": codes}
 
 
-ROLES = {"discovery": discovery, "codebook_author": codebook_author, "recode": recode, "deductive_ledger": ledger,
-         "deductive_scorer": scorer, "crosswalk": crosswalk}
+ROLES = {"foil_author": foil_author, "discovery": discovery, "codebook_author": codebook_author, "recode": recode,
+         "deductive_ledger": ledger, "deductive_scorer": scorer, "crosswalk": crosswalk}
 
 
 def respond(prompt: str, lineage: str, occurrence: int, leak: str | None):

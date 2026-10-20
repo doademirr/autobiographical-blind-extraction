@@ -31,7 +31,8 @@ def real_config(logins: Logins) -> config.Config:
                   "disable": list(init.CODEX_DISABLE), "config": list(init.CODEX_CONFIG),
                   "retained_tools": init.CODEX_RETAINED, "capture_forward": False},
     }
-    roles = {"zoner": "claude", "codebook_author": "claude", "crosswalk_coders": ["claude", "codex"]}
+    roles = {"zoner": "claude", "codebook_author": "claude", "foil_author": "claude", "auditor": "codex",
+             "crosswalk_coders": ["claude", "codex"]}
     return config.parse({"runs": 3, "roles": roles, "lineages": lineages, "canaries": ["ABXPROFILECANARY"],
                          "env_passthrough": [], "timeout_s": 120})
 

@@ -327,8 +327,9 @@ def cli_version(cli: str) -> str:
 # held to, or reused under, the current one.
 ISOLATION_POLICY = 2
 # Bumped whenever how verdicts are coded, resampled or counted changes (binary inductive reading and bounded resample
-# are version 2), so a workspace prepared under older rules can never be finished under these.
-METHOD_VERSION = 2
+# are version 2; foils on the card version 3), so a workspace prepared under older rules can never be finished under
+# these.
+METHOD_VERSION = 3
 # What a requalification compares against the baseline: any change means the lineage moved.
 FINGERPRINT_KEYS = ("cli", "cli_version", "invocation_hash", "config_hash", "isolation_policy", "method_version",
                     "resolved_model")
@@ -577,7 +578,7 @@ def parse_output(text: str | None, schema: dict, validate) -> tuple[object, list
 
 # An output failing its schema or validator is resampled with the same prompt up to this many attempts in all.
 MAX_ATTEMPTS = 3
-RESAMPLED_STAGES = ("prepare", "extract", "unmask")
+RESAMPLED_STAGES = ("prepare", "freeze", "extract", "unmask")
 
 
 def _incident(ws: store.Workspace, req: CallRequest, kind: str, detail: list[str]) -> None:
@@ -591,7 +592,8 @@ def _incident(ws: store.Workspace, req: CallRequest, kind: str, detail: list[str
 
 def invalid_outputs(ws: store.Workspace) -> dict[str, int]:
     """Invalid outputs per stage, each resampled or the last of its call's attempts, counted only from the incidents
-    the manifest froze (generation C for prepare and extract, D for unmask): an incident added later counts nothing."""
+    the manifest froze (generation C for prepare, freeze and extract, D for unmask): an incident added later counts
+    nothing."""
     frozen = [rel for e in store.read_manifest(ws) for rel in e["artifacts"] if rel.startswith("run/incidents/")]
     return {stage: sum(1 for rel in frozen if rel.startswith(f"run/incidents/{stage}/")
                        and store.read_json(ws.path(rel))["kind"] == "invalid_output") for stage in RESAMPLED_STAGES}

@@ -6,34 +6,27 @@ scoring -> agreement by script -> integrity audit when agreement is very high
 (generation C). Every model call is a `CallRequest` through `invoke.call`.
 """
 
-import hashlib
-import re
 from collections.abc import Mapping
 from dataclasses import dataclass
 from types import MappingProxyType
 from typing import NamedTuple
 
-from . import agreement, artifacts, config, evidence, invoke, ipip, lifecycle, prompts, qualify, store
+from . import agreement, artifacts, card, config, evidence, invoke, ipip, lifecycle, prompts, qualify, store
 from .errors import AbxError, IntegrityError
 
-__all__ = ["MAX_CONSTRUCTS",
+__all__ = [
     "REQUALIFICATION_AUDIT",
     "STAGE",
     "RaterKey",
     "Ratings",
     "Unit",
     "arms",
-    "card_line",
     "estimate",
     "extract",
     "load_ratings",
     "validate_codebook",
 ]
 
-# Markers that always join two claims. "and", "or" and commas are left to the author's instruction: in a live run
-# they mostly joined two objects or near-synonyms of one trait, and a lexical gate on them failed good codebooks.
-COMPOUND_NAME = re.compile(r"[/&+;]|\bvs\.?\b|\bthen\b|\bfollowed by\b", re.I)
-MAX_CONSTRUCTS = 80
 REQUALIFICATION_AUDIT = "run/requalification-audit.json"
 
 
@@ -136,9 +129,9 @@ def validate_codebook(out: dict, refs: set[str]) -> list[str]:
     ids = [c["id"] for c in cons]
     if len(ids) != len(set(ids)):
         problems.append("duplicate construct ids")
-    if len(cons) > MAX_CONSTRUCTS:
-        problems.append(f"more than {MAX_CONSTRUCTS} constructs")
-    problems += [f"{c['id']}: name is not atomic" for c in cons if COMPOUND_NAME.search(c["name"])]
+    if len(cons) > card.MAX_CONSTRUCTS:
+        problems.append(f"more than {card.MAX_CONSTRUCTS} constructs")
+    problems += [f"{c['id']}: name is not atomic" for c in cons if card.COMPOUND_NAME.search(c["name"])]
     problems += [f"{c['id']}: traces no candidate" for c in cons if not c["trace"]]
     problems += [f"{c['id']}: a candidate repeats in its trace" for c in cons
                  if len(c["trace"]) != len(set(c["trace"]))]
@@ -162,16 +155,12 @@ def validate_codebook(out: dict, refs: set[str]) -> list[str]:
     return problems
 
 
-def item_id(construct_id: str, salt: str) -> str:
-    return "K" + hashlib.sha256(f"{construct_id}|{salt}".encode()).hexdigest()[:6]
-
-
 def _codebook(c: Context, candidates: dict[str, dict]) -> dict:
     salt = store.sha256_file(c.ws.path("prepare/redacted.txt"))
 
     def validate(o):
         problems = validate_codebook(o, set(candidates))
-        ids = [item_id(con["id"], salt) for con in o["constructs"]]
+        ids = [card.item_id(con["id"], salt) for con in o["constructs"]]
         return problems + (["card item ids collide; the author must rename a construct"]
                            if len(set(ids)) != len(ids) else [])
 
@@ -179,18 +168,11 @@ def _codebook(c: Context, candidates: dict[str, dict]) -> dict:
         stage="extract", role="codebook_author", lineage=c.cfg.codebook_author, run=None, era=None, generation="B",
         slots={"pool": "pool:all"}, validate=validate))
     constructs = [{**con, "lineages": sorted({candidates[ref]["lineage"] for ref in con["trace"]}),
-                   "item_id": item_id(con["id"], salt)} for con in out["constructs"]]
+                   "item_id": card.item_id(con["id"], salt)} for con in out["constructs"]]
     book = {"constructs": constructs, "appendix": out["appendix"]}
     store.write_json(c.ws.path("run/codebook/codebook.json"), book)
-    store.write_text_atomic(artifacts.path_of(c.ws, "card:B"), "".join(
-        card_line(con) for con in sorted(constructs, key=lambda x: x["item_id"])))
+    store.write_text_atomic(artifacts.path_of(c.ws, "card:B"), card.render(constructs))
     return book
-
-
-def card_line(construct: Mapping) -> str:
-    """One card item as raters see it; the size check builds its largest possible card from this too."""
-    return (f"- {construct['item_id']}: {construct['name']}. {construct['definition']} "
-            f"Present when: {construct['sufficiency_rule']}\n")
 
 
 # --- recode ------------------------------------------------------------------------------------------------------
@@ -403,7 +385,8 @@ def extract(ws: store.Workspace) -> dict:
     result = _agree(c, book)
     outputs = [ws.rel(p) for g in ("run/recode/*.json", "run/deductive/*.json", "run/calls/extract/recode/*.json",
                                    "run/calls/extract/deductive_*/*.json", REQUALIFICATION_AUDIT,
-                                   "run/incidents/prepare/**/*.json", "run/incidents/extract/**/*.json")
+                                   "run/incidents/prepare/**/*.json", "run/incidents/freeze/**/*.json",
+                                   "run/incidents/extract/**/*.json")
                for p in sorted(ws.root.glob(g))]
     store.append_generation(ws, "C", ["run/agreement.json", *outputs])
     return result

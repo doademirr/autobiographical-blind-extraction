@@ -28,6 +28,8 @@ _ROLES = [
     Role("zoner", frozenset({"chunk"}), "zoner", per_era=True, params=frozenset({"era_label"})),
     Role("discovery", frozenset({"era", "hypotheses"}), "discovery", zoned_consumer=True, per_era=True,
          params=frozenset({"era_label", "hypotheses"}), rater_bound=frozenset({"hypotheses"})),
+    Role("foil_author", frozenset({"era"}), "foils", zoned_consumer=True, per_era=True,
+         params=frozenset({"era_label"})),
     Role("codebook_author", frozenset({"pool"}), "codebook", zoned_consumer=True),
     Role("recode", frozenset({"card", "era"}), "recode", zoned_consumer=True, per_era=True,
          params=frozenset({"era_label"})),

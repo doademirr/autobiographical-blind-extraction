@@ -1,0 +1,95 @@
+{
+ "type": "object",
+ "properties": {
+  "foils": {
+   "type": "array",
+   "items": {
+    "type": "object",
+    "properties": {
+     "id": {
+      "type": "string",
+      "enum": [
+       "F1",
+       "F2",
+       "F3"
+      ]
+     },
+     "type": {
+      "type": "string",
+      "enum": [
+       "clear",
+       "near_miss",
+       "anchored"
+      ]
+     },
+     "name": {
+      "type": "string",
+      "minLength": 3,
+      "maxLength": 80
+     },
+     "definition": {
+      "type": "string",
+      "minLength": 10,
+      "maxLength": 400
+     },
+     "sufficiency_rule": {
+      "type": "string",
+      "minLength": 10,
+      "maxLength": 300
+     },
+     "support": {
+      "type": "array",
+      "items": {
+       "type": "object",
+       "properties": {
+        "sentence_ids": {
+         "type": "array",
+         "items": {
+          "type": "string",
+          "pattern": "^s[0-9]{5}$"
+         },
+         "minItems": 1,
+         "maxItems": 12
+        },
+        "event": {
+         "type": "string",
+         "maxLength": 200
+        }
+       },
+       "required": [
+        "sentence_ids",
+        "event"
+       ],
+       "additionalProperties": false
+      },
+      "maxItems": 6
+     },
+     "counter_sentence_ids": {
+      "type": "array",
+      "items": {
+       "type": "string",
+       "pattern": "^s[0-9]{5}$"
+      },
+      "maxItems": 6
+     }
+    },
+    "required": [
+     "id",
+     "type",
+     "name",
+     "definition",
+     "sufficiency_rule",
+     "support",
+     "counter_sentence_ids"
+    ],
+    "additionalProperties": false
+   },
+   "minItems": 1,
+   "maxItems": 3
+  }
+ },
+ "required": [
+  "foils"
+ ],
+ "additionalProperties": false
+}

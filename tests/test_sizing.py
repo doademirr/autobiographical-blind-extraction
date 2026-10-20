@@ -3,9 +3,12 @@ import unittest
 
 from abx import config, init, invoke, prepare, sizing, store, text
 from abx.errors import UsageError
+from abx.roles import ROLES
 
 from .helpers import FIXTURE, FakeWorkspace
 
+# The per-era rater roles; the zoner is checked per chunk.
+ERA_ROLES = tuple(r for r, p in ROLES.items() if p.per_era and r != "zoner")
 PARAGRAPH = " ".join(f"He walked to market number {i} and bought bread." for i in range(40))
 
 
@@ -54,7 +57,7 @@ class EraSizeTest(unittest.TestCase):
     def test_rendered_era_over_budget_fails_where_raw_text_would_fit(self):
         original, eras, sents = self.corpus(1)
         raw, full, _ = self.era_texts(original, eras[0], sents)
-        roles = ("discovery", "recode", "deductive_ledger")
+        roles = ERA_ROLES
         budget = max(self.need(r, 0, raw) for r in roles)
         self.assertGreater(max(self.need(r, 0, full) for r in roles), budget)
         with self.assertRaises(UsageError) as cm:
@@ -66,7 +69,7 @@ class EraSizeTest(unittest.TestCase):
     def test_the_largest_card_alone_tips_recode_over(self):
         original, eras, sents = self.corpus(1)
         _, full, _ = self.era_texts(original, eras[0], sents)
-        others = max(self.need(r, 0, full) for r in ("discovery", "deductive_ledger"))
+        others = max(self.need(r, 0, full) for r in ERA_ROLES if r != "recode")
         budget = max(others, self.need("recode", 0, full, card=False))
         self.assertGreater(self.need("recode", 0, full), budget)
         with self.assertRaises(UsageError) as cm:
@@ -86,7 +89,7 @@ class EraSizeTest(unittest.TestCase):
     def test_a_placeholder_used_twice_is_counted_twice(self):
         original, eras, sents = self.corpus(1)
         _, full, _ = self.era_texts(original, eras[0], sents)
-        budget = max(self.need(r, 0, full) for r in ("discovery", "recode", "deductive_ledger"))
+        budget = max(self.need(r, 0, full) for r in ERA_ROLES)
         sizing.check_eras(self.ws, _budget(self.cfg, budget), eras, sents, original)
         template = self.ws.path("prereg/prompts/recode.md")
         template.write_text(template.read_text() + "\nThe era again:\n{{era}}\n")

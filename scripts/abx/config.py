@@ -51,6 +51,8 @@ class Config:
     runs: int
     zoner: str
     codebook_author: str
+    foil_author: str
+    auditor: str
     crosswalk_coders: tuple[str, ...]
     canaries: tuple[str, ...]
     env_passthrough: tuple[str, ...]
@@ -119,11 +121,15 @@ def parse(obj: dict) -> Config:
         lineages=MappingProxyType({n: _lineage(n, lineages[n]) for n in LINEAGES}),
         runs=_get(obj, "runs", int, "config"),
         zoner=_get(roles, "zoner", str, "roles"), codebook_author=_get(roles, "codebook_author", str, "roles"),
+        foil_author=_get(roles, "foil_author", str, "roles"), auditor=_get(roles, "auditor", str, "roles"),
         crosswalk_coders=_strings(roles, "crosswalk_coders", "roles"), canaries=_strings(obj, "canaries", "config"),
         env_passthrough=_strings(obj, "env_passthrough", "config"), timeout_s=_get(obj, "timeout_s", int, "config"))
-    for who in (cfg.zoner, cfg.codebook_author):
+    for who in (cfg.zoner, cfg.codebook_author, cfg.foil_author, cfg.auditor):
         if who not in LINEAGES:
             raise UsageError("config.json: roles name an unknown lineage")
+    if cfg.auditor == cfg.foil_author:
+        raise UsageError("config.json: roles.auditor must differ from roles.foil_author, so another lineage audits "
+                         "the foils")
     if sorted(cfg.crosswalk_coders) != sorted(LINEAGES):
         raise UsageError(f"config.json: roles.crosswalk_coders must be exactly {list(LINEAGES)}, one coder per lineage")
     if not 2 <= cfg.runs <= 9:

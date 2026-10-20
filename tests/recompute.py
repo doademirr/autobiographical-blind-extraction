@@ -38,10 +38,14 @@ def _corpus(ws: store.Workspace) -> dict:
     return stats
 
 
+# The stages whose call records exist when `extract` runs its integrity audit.
+AUDITED = ("prepare", "freeze", "extract")
+
+
 def _audit(ws: store.Workspace, eras: list[str]) -> dict:
-    """The integrity audit as it must have run inside `extract`, before generation C: over the prepare and
+    """The integrity audit as it must have run inside `extract`, before generation C: over the prepare, freeze and
     extract call records, with generations A and B frozen, against the frozen qualification baseline."""
-    records = [p for stage in ("prepare", "extract") for p in sorted(ws.root.glob(f"run/calls/{stage}/**/*.json"))]
+    records = [p for stage in AUDITED for p in sorted(ws.root.glob(f"run/calls/{stage}/**/*.json"))]
     bad_events = outside = 0
     for path in records:
         rec = store.read_json(path)
@@ -54,7 +58,7 @@ def _audit(ws: store.Workspace, eras: list[str]) -> dict:
                                     era_order=eras)
         except AbxError:
             outside += 1
-    incidents = sum(1 for stage in ("prepare", "extract") for p in ws.root.glob(f"run/incidents/{stage}/**/*.json")
+    incidents = sum(1 for stage in AUDITED for p in ws.root.glob(f"run/incidents/{stage}/**/*.json")
                     if store.read_json(p)["kind"] == "tool_event")
     fresh = store.read_json(ws.path(extract.REQUALIFICATION_AUDIT))
     baseline = store.read_json(ws.path(invoke.QUALIFICATION_A))
@@ -83,7 +87,8 @@ def _invalid_outputs(ws: store.Workspace) -> dict[str, int]:
     """Counted from the incidents generations C and D froze, never from whatever the folder holds now."""
     manifest = [json.loads(line) for line in ws.path(store.MANIFEST).read_text().splitlines() if line.strip()]
     frozen = {e["gen"]: [rel for rel in e["artifacts"] if rel.startswith("run/incidents/")] for e in manifest}
-    stages = {"prepare": frozen.get("C", []), "extract": frozen.get("C", []), "unmask": frozen.get("D", [])}
+    stages = {"prepare": frozen.get("C", []), "freeze": frozen.get("C", []), "extract": frozen.get("C", []),
+              "unmask": frozen.get("D", [])}
     return {stage: sum(1 for rel in rels if rel.startswith(f"run/incidents/{stage}/")
                        and json.loads(ws.path(rel).read_text())["kind"] == "invalid_output")
             for stage, rels in stages.items()}
@@ -160,7 +165,7 @@ def _rows(want: dict) -> list[str]:
                     + ", ".join(f"{lin} {_num(v)}" for lin, v in sorted(a["stability"].items())) + ".")
     rows.append(f"rules: {want['agreement']['downgrades']}.")
     n = want["invalid_outputs"]["by_stage"]
-    rows.append(f"up to 3 attempts): {n['prepare'] + n['extract'] + n['unmask']} (prepare {n['prepare']}, "
+    rows.append(f"up to 3 attempts): {sum(n.values())} (prepare {n['prepare']}, freeze {n['freeze']}, "
                 f"extract {n['extract']}, unmask {n['unmask']}).")
     audit = want["agreement"]["integrity_audit"]
     if audit:

@@ -7,7 +7,7 @@ for recode the largest card the codebook schema allows. The zoner is checked per
 words, the role and the most words an era can hold.
 """
 
-from . import config, extract, invoke, prompts, store, text
+from . import card, config, invoke, prompts, store, text
 from .errors import UsageError
 from .roles import ROLES
 
@@ -22,7 +22,7 @@ def _largest_card(ws: store.Workspace) -> str:
     props = store.read_json(ws.path("prereg/schemas/codebook.json"))["properties"]["constructs"]["items"]["properties"]
     widest = {"item_id": "K000000", **{f: "x" * props[f]["maxLength"] for f in ("name", "definition",
                                                                                  "sufficiency_rule")}}
-    return extract.card_line(widest) * extract.MAX_CONSTRUCTS
+    return card.line(widest) * card.MAX_CONSTRUCTS
 
 
 def _prompt(ws: store.Workspace, role: str, era_ids: list[str], position: int, label: str, body: str) -> str:

@@ -31,7 +31,7 @@ class EndToEndTest(unittest.TestCase):
         cls.log = cls.tmp / "fakelog"
         # Every recode and crosswalk prompt is answered with non-JSON once, so resampling runs through the real CLI.
         cls.env = {**os.environ, "PATH": f"{FAKES}{os.pathsep}{os.environ['PATH']}", "ABX_FAKE_LOG": str(cls.log),
-                   "PYTHONDONTWRITEBYTECODE": "1", "ABX_FAKE_INVALID": "recode:1,crosswalk:1"}
+                   "PYTHONDONTWRITEBYTECODE": "1", "ABX_FAKE_INVALID": "foil_author:1,recode:1,crosswalk:1"}
         cls.codes = {}
         cls.run_stage("init", "--text", str(FIXTURE / "autobiography.txt"), "--canary", "ABXPROFILECANARY")
         cfg_path = cls.ws_path / "config.json"
@@ -76,13 +76,14 @@ class EndToEndTest(unittest.TestCase):
 
     def test_invalid_outputs_are_counted_from_frozen_incidents_only(self):
         n = self.results["invalid_outputs"]["by_stage"]
-        # Replicate runs send the same prompt, and the fake fails each distinct prompt once: 2 lineages x 2 eras.
-        self.assertEqual((n["prepare"], n["extract"], n["unmask"]), (0, 4, 2))
-        self.assertIn("Invalid outputs (failed their schema or validator; each call gets up to 3 attempts): 6 "
-                      "(prepare 0, extract 4, unmask 2).", self.report)
+        # Replicate runs send the same prompt, and the fake fails each distinct prompt once: recode 2 lineages x 2
+        # eras, the foil author 1 lineage x 2 eras.
+        self.assertEqual((n["prepare"], n["freeze"], n["extract"], n["unmask"]), (0, 2, 4, 2))
+        self.assertIn("Invalid outputs (failed their schema or validator; each call gets up to 3 attempts): 8 "
+                      "(prepare 0, freeze 2, extract 4, unmask 2).", self.report)
         frozen = {path for e in store.verify_manifest(self.ws) for path in e["artifacts"]}
         incidents = {self.ws.rel(p) for p in self.ws.root.glob("run/incidents/**/*.json")}
-        self.assertEqual(len(incidents), 6)
+        self.assertEqual(len(incidents), 8)
         self.assertLessEqual(incidents, frozen)
         victim = self.ws.path(sorted(incidents)[0])
         saved = victim.read_bytes()
