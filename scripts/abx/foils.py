@@ -8,14 +8,14 @@ is rendered here from the frozen JSON, so the two can never disagree.
 
 from collections.abc import Mapping
 from pathlib import Path
+from types import MappingProxyType
 
 from . import artifacts, card, config, evidence, invoke, store
 
-__all__ = ["EXPECTED", "MAX_FOILS", "author", "endorsement", "load", "path", "render_for_audit", "validate"]
+__all__ = ["EXPECTED", "author", "endorsement", "load", "path", "render_for_audit", "validate"]
 
 # What each type expects in its own era.
-EXPECTED = {"clear": "absent", "near_miss": "absent", "anchored": "present"}
-MAX_FOILS = 3  # per era, the foils schema's maxItems
+EXPECTED = MappingProxyType({"clear": "absent", "near_miss": "absent", "anchored": "present"})
 
 
 def path(ws: store.Workspace, era: str) -> Path:
@@ -33,7 +33,7 @@ def _evidence_problems(foil: dict, ix: evidence.Index) -> list[str]:
     if foil["type"] == "near_miss" and not (support and counter):
         return [f"{foil['id']}: a near-miss foil cites a tempting support occurrence and a counter-sentence"]
     if foil["type"] == "anchored" and \
-            evidence.apply_bar({"verdict": "present", "occurrences": support}, ix.seg_of)[0] != "present":
+            evidence.apply_bar({"verdict": "present", "occurrences": support}, ix.seg_of).verdict != "present":
         return [f"{foil['id']}: an anchored foil cites two support occurrences in separate, non-adjacent paragraphs"]
     return []
 
@@ -79,13 +79,23 @@ def render_for_audit(foils: list[dict], era: str) -> str:
                    f"{f['definition']} Present when: {f['sufficiency_rule']}\n" for f in foils) or "- (none)\n"
 
 
+def _free_id(key: str, salt: str, taken: set[str]) -> str:
+    n = 0
+    while (iid := card.item_id(key if n == 0 else f"{key}:{n}", salt)) in taken:
+        n += 1
+    taken.add(iid)
+    return iid
+
+
 def author(ws: store.Workspace, cfg: config.Config, ix: evidence.Index, salt: str) -> None:
-    """One foil-author call per era; each era's foils are stored with their expectation and card item id."""
+    """One foil-author call per era; each era's foils are stored with their expectation and card item id. Item ids
+    are unique across eras by construction: a hash collision with an earlier foil takes the next free suffix."""
+    taken: set[str] = set()
     for era in ix.era_ids:
         out = invoke.call(ws, cfg, invoke.CallRequest(
             stage="freeze", role="foil_author", lineage=cfg.foil_author, run=None, era=era, generation="A",
             slots={"era": f"era:{era}"}, validate=lambda o, era=era: validate(o, ix, era)))
-        foils = [{**f, "expected": {era: EXPECTED[f["type"]]}, "item_id": card.item_id(f"foil:{era}:{f['id']}", salt)}
-                 for f in out["foils"]]
+        foils = [{**f, "expected": {era: EXPECTED[f["type"]]},
+                  "item_id": _free_id(f"foil:{era}:{f['id']}", salt, taken)} for f in out["foils"]]
         store.write_json(path(ws, era), {"era": era, "foils": foils})
         store.write_text_atomic(artifacts.path_of(ws, f"foils:{era}"), render_for_audit(foils, era))

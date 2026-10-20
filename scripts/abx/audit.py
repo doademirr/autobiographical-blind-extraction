@@ -43,7 +43,7 @@ def flags(ws: store.Workspace, era_ids: list[str]) -> dict[str, list[str]]:
 
 
 def run(ws: store.Workspace, cfg: config.Config, ix: evidence.Index, constructs: list[Mapping]) -> dict:
-    """Audit every era; write each era's audit and the kept and dropped foils. Returns the kept foils."""
+    """Audit every era; write each era's audit and the kept and dropped foils, and return both."""
     store.write_text_atomic(artifacts.path_of(ws, "codebook:B"), render_codebook(constructs))
     construct_ids = {c["id"] for c in constructs}
     kept, dropped = [], []

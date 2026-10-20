@@ -4,8 +4,8 @@ import re
 import unittest
 from unittest import mock
 
-from abx import audit, evidence, extract, foils, prompts, store
-from abx.errors import IntegrityError, IsolationError
+from abx import audit, evidence, extract, foils, invoke, prompts, store
+from abx.errors import CallFailed, IntegrityError, IsolationError
 
 from .helpers import FakeWorkspace, build
 
@@ -37,6 +37,13 @@ class AuditValidationTest(unittest.TestCase):
                          ["a construct is flagged more than once"])
         self.assertEqual(self.problems(["F1", "F2"], [("C01", ["s00003"])]),
                          ["cites 1 sentence id(s) outside the zoned era: s00003 (era:e2)"])
+
+    def test_a_per_era_call_names_its_era_and_uses_its_own_schema(self):
+        with self.assertRaises(IsolationError):
+            prompts.check_allowlist("auditor", ["foils:e1", "codebook:B", "era:e2"], era_order=["e1", "e2"])
+        with self.assertRaises(IsolationError):
+            prompts.check_allowlist("auditor", ["schema:recode", "era:e1"], era="e1", era_order=["e1", "e2"])
+        prompts.check_allowlist("auditor", ["schema:audit", "era:e1"], era="e1", era_order=["e1", "e2"])
 
     def test_an_auditor_may_not_receive_another_eras_foils(self):
         with self.assertRaises(IsolationError):
@@ -81,6 +88,30 @@ class AuditInExtractTest(unittest.TestCase):
         kept = store.read_json(self.ws.path(audit.FOILS))["kept"]
         rec = store.read_json(self.ws.path("run/recode/claude-r1-e1.json"))
         self.assertLessEqual({f["item_id"] for f in kept}, {v["item_id"] for v in rec["verdicts"]})
+
+    def test_an_interrupted_audit_resumes_to_the_same_foils_and_card(self):
+        clean_fw = FakeWorkspace()
+        try:
+            clean = build(clean_fw)
+            want = {rel: clean.path(rel).read_bytes() for rel in (audit.FOILS, "run/codebook/card.md")}
+        finally:
+            clean_fw.close()
+        real, audits = invoke.call, []
+
+        def second_audit_fails(*args, **kwargs):
+            if args[2].role == "auditor":
+                audits.append(args[2].era)
+                if len(audits) == 2:
+                    raise CallFailed("interrupted")
+            return real(*args, **kwargs)
+
+        with mock.patch.object(invoke, "call", side_effect=second_audit_fails), self.assertRaises(CallFailed):
+            extract.extract(self.ws)
+        first = self.ws.path("run/calls/extract/auditor/codex-r0-e1.json")
+        before = first.read_bytes()
+        extract.extract(self.ws)
+        self.assertEqual(first.read_bytes(), before)
+        self.assertEqual({rel: self.ws.path(rel).read_bytes() for rel in want}, want)
 
     def test_an_edited_foil_view_stops_extract_before_any_auditor_call(self):
         view = self.ws.path("prereg/foils/e1.md")

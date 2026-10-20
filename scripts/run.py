@@ -87,6 +87,8 @@ def _run_stage(stage: lifecycle.Stage, args: argparse.Namespace) -> int:
     if not ws.path("config.json").exists():
         print(f"{args.ws} is not a workspace (no config.json)", file=sys.stderr)
         return 2
+    if stage.checks_method:
+        invoke.check_method(ws)  # an older workspace's config may not parse under the current method's rules
     if stage.estimate and ws.path("prepare/eras.json").exists():
         pre = stage.estimate(ws)
         extra = f" (+{pre.conditional_calls} conditional)" if pre.conditional_calls else ""

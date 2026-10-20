@@ -32,6 +32,8 @@ def check_allowlist(role: str, ids: list[str], rater: tuple[str, int] | None = N
                     era: str | None = None, era_order: list[str] | None = None, revealed: bool = False) -> None:
     """`revealed`: generation C is frozen, so sealed comparators may reach the roles allowed them."""
     policy = get_role(role)
+    if policy.per_era and era is None:
+        raise IsolationError(f"{role} runs per era; its call must name the era")
     for aid in ids:
         ref = artifacts.parse(aid)
         if ref.kind == "self_prediction" and not revealed:
@@ -39,6 +41,8 @@ def check_allowlist(role: str, ids: list[str], rater: tuple[str, int] | None = N
         if ref.kind in FRAME_KINDS:
             if ref.kind == "template" and ref.role != role:
                 raise IsolationError(f"{role} call may not use another role's template {aid}")
+            if ref.kind == "schema" and ref.name != policy.schema:
+                raise IsolationError(f"{role} call may not use another role's schema {aid}")
             continue
         if ref.kind not in policy.kinds:
             raise IsolationError(f"{role} call may not receive {aid}")

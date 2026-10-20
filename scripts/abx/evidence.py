@@ -7,10 +7,11 @@ call saw, and a recurring trait only if its occurrences sit in distinct, non-adj
 from collections.abc import Mapping
 from dataclasses import dataclass
 from types import MappingProxyType
+from typing import NamedTuple
 
 from . import store
 
-__all__ = ["MAX_NAMED", "Index", "apply_bar", "cited", "load"]
+__all__ = ["MAX_NAMED", "Bar", "Index", "apply_bar", "cited", "load"]
 
 # The most ids one validation message names per category; the stray-citation count is always complete.
 MAX_NAMED = 20
@@ -68,12 +69,18 @@ def cited(node, keys: tuple[str, ...]) -> list[str]:
     return []
 
 
-def apply_bar(v: dict, seg_of) -> tuple[str, str | None]:
+class Bar(NamedTuple):
+    verdict: str
+    downgrade: str | None  # why a present or absent verdict became insufficient, or None
+
+
+def apply_bar(v: dict, seg_of) -> Bar:
     """The script's verdict: present needs two occurrences in distinct, non-adjacent segments; absent a counter."""
     if v["verdict"] == "present":
         segs = [{seg_of(s) for s in occ["sentence_ids"]} for occ in v["occurrences"]]
         separate = any(all(abs(a - b) >= 2 for a in x for b in y) for i, x in enumerate(segs) for y in segs[i + 1:])
-        return ("present", None) if separate else ("insufficient", "present_without_two_separate_episodes")
+        return Bar("present", None) if separate else Bar("insufficient", "present_without_two_separate_episodes")
     if v["verdict"] == "absent":
-        return ("absent", None) if v["counter_sentence_ids"] else ("insufficient", "absent_without_counter_sentence")
-    return "insufficient", None
+        return Bar("absent", None) if v["counter_sentence_ids"] else Bar("insufficient",
+                                                                         "absent_without_counter_sentence")
+    return Bar("insufficient", None)

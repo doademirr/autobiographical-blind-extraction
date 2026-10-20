@@ -22,17 +22,18 @@ class Role:
     per_era: bool = False          # calls per era (the zoner per chunk); each must fit the budget at `prepare`
     params: frozenset[str] = frozenset()   # labels the call boundary derives from the workspace, never callers
     rater_bound: frozenset[str] = frozenset()  # kinds that must belong to the calling rater
+    single: str | None = None      # the config role naming the one lineage it runs on; None runs on every rater
 
 
 _ROLES = [
-    Role("zoner", frozenset({"chunk"}), "zoner", per_era=True, params=frozenset({"era_label"})),
+    Role("zoner", frozenset({"chunk"}), "zoner", per_era=True, params=frozenset({"era_label"}), single="zoner"),
     Role("discovery", frozenset({"era", "hypotheses"}), "discovery", zoned_consumer=True, per_era=True,
          params=frozenset({"era_label", "hypotheses"}), rater_bound=frozenset({"hypotheses"})),
     Role("foil_author", frozenset({"era"}), "foils", zoned_consumer=True, per_era=True,
-         params=frozenset({"era_label"})),
-    Role("codebook_author", frozenset({"pool"}), "codebook", zoned_consumer=True),
+         params=frozenset({"era_label"}), single="foil_author"),
+    Role("codebook_author", frozenset({"pool"}), "codebook", zoned_consumer=True, single="codebook_author"),
     Role("auditor", frozenset({"codebook", "foils", "era"}), "audit", zoned_consumer=True, per_era=True,
-         params=frozenset({"era_label"})),
+         params=frozenset({"era_label"}), single="auditor"),
     Role("recode", frozenset({"card", "era"}), "recode", zoned_consumer=True, per_era=True,
          params=frozenset({"era_label"})),
     Role("deductive_ledger", frozenset({"era", "facets"}), "ledger", zoned_consumer=True, per_era=True,

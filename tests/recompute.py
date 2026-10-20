@@ -121,6 +121,17 @@ def _foils(ws: store.Workspace, eras: list[str], ratings: extract.Ratings, linea
             "audit_flags": dict(sorted(flags.items()))}
 
 
+def _with_foils(ratings: extract.Ratings, book: dict, kept: list[dict], eras: list[str]) -> agreement.ArmResult:
+    """The diagnostic arm rebuilt here: binary values, construct and kept-foil units in every era."""
+    runs: dict = {}
+    for key, rows in ratings.verdicts.items():
+        cell = runs.setdefault(key.lineage, {}).setdefault(key.run, {})
+        for v in rows:
+            cell[(v["item_id"], key.era)] = "present" if v["verdict"] == "present" else "not_present"
+    units = [(item["item_id"], era) for item in [*book["constructs"], *kept] for era in eras]
+    return agreement.arm(runs, units, "nominal")
+
+
 def expected(ws: store.Workspace) -> dict:
     """The results `unmask` must have produced, rebuilt from raw ratings and sealed inputs."""
     cfg = config.load(ws)
@@ -142,7 +153,7 @@ def expected(ws: store.Workspace) -> dict:
     audit = _audit(ws, eras) if inductive.integrity_audit_due or deductive_arm.integrity_audit_due else None
     invalid = _invalid_outputs(ws)
     foiled = _foils(ws, eras, ratings, lineages)
-    diag = extract.with_foils(ratings, book, foiled["kept"], eras)
+    diag = _with_foils(ratings, book, foiled["kept"], eras)
     return {
         "corpus": _corpus(ws),
         "fingerprints": {lin: {k: v for k, v in q.items() if k != "evidence"}
@@ -214,7 +225,8 @@ def _rows(want: dict) -> list[str]:
     rows.append(f"- Constructs plus foils (diagnostic, not a gate; {d['units']} units): α = {_num(d['alpha'])}; units "
                 f"with both lineages: {_pct(d['paired_fraction'])}; raw agreement on them: {_pct(d['raw_agreement'])}.")
     f = want["foils"]
-    rows.append(f"- Foils written: {f['authored']}; dropped by the audit as unclear: {len(f['dropped'])} (")
+    rows.append(f"- Foils written: {f['authored']}; dropped by the audit as unclear: "
+                + (", ".join(f"{d['era']} {d['id']}" for d in f["dropped"]) or "none") + ".")
     for kind, label, rate in (("clear", "Clear foils", "false-positive"), ("near_miss", "Near-miss foils",
                                                                           "false-positive"),
                               ("anchored", "Anchored foils", "recovery")):

@@ -162,4 +162,4 @@ def unmask(ws: store.Workspace) -> dict:
 
 
 STAGE = lifecycle.Stage("unmask", 5, "crosswalk, IPIP reveal, report", unmask, estimate, needs="C",
-                        closed_after="E")
+                        closed_after="E", checks_method=True)

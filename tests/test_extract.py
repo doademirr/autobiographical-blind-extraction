@@ -1,12 +1,15 @@
+import io
 import json
 import os
+import sys
 import unittest
+from contextlib import redirect_stderr
 from unittest import mock
 
-from abx import agreement, evidence, extract, invoke, lifecycle, store, unmask
-from abx.errors import CallFailed, IntegrityError, IsolationError
+from abx import agreement, config, evidence, extract, invoke, lifecycle, store, unmask
+from abx.errors import CallFailed, IntegrityError, IsolationError, UsageError
 
-from .helpers import FakeWorkspace, build
+from .helpers import FIXTURE, FakeWorkspace, build
 
 
 class RecurrenceBarTest(unittest.TestCase):
@@ -291,6 +294,23 @@ class MethodVersionTest(unittest.TestCase):
             with newer, self.assertRaises(IntegrityError):
                 unmask.unmask(ws)
             self.assertFalse(ws.path("report/report.md").exists())
+        finally:
+            fw.close()
+
+
+    def test_the_cli_refuses_an_older_method_before_its_estimate_reads_the_config(self):
+        """An older workspace's config lacks the current roles; the method refusal (exit 4) must come first."""
+        sys.path.insert(0, str(FIXTURE.parent.parent / "scripts"))
+        import run as cli
+
+        fw = FakeWorkspace()
+        try:
+            ws = build(fw, until="freeze")
+            older = mock.patch.object(invoke, "METHOD_VERSION", invoke.METHOD_VERSION + 1)
+            old_config = mock.patch.object(config, "load", side_effect=UsageError("roles is missing 'foil_author'"))
+            for stage in ("extract", "unmask"):
+                with older, old_config, redirect_stderr(io.StringIO()) as err:
+                    self.assertEqual(cli.main([stage, str(ws.root)]), 4, err.getvalue())
         finally:
             fw.close()
 

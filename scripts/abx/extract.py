@@ -68,10 +68,6 @@ class Context:
     facets: tuple[str, ...]
 
     @property
-    def era_ids(self) -> list[str]:
-        return self.ix.era_ids
-
-    @property
     def runs(self) -> range:
         return range(1, self.cfg.runs + 1)
 
@@ -107,10 +103,10 @@ def _discovery(c: Context) -> None:
     for lineage in c.cfg.lineages:
         for run in c.runs:
             hypotheses: list[str] = []
-            for k, era in enumerate(c.era_ids):
+            for k, era in enumerate(c.ix.era_ids):
                 slots = {"era": f"era:{era}"}
                 if k > 0:
-                    slots["hypotheses"] = f"hypotheses:{lineage}:{run}:{c.era_ids[k - 1]}"
+                    slots["hypotheses"] = f"hypotheses:{lineage}:{run}:{c.ix.era_ids[k - 1]}"
                 out = invoke.call(c.ws, c.cfg, invoke.CallRequest(
                     stage="extract", role="discovery", lineage=lineage, run=run, era=era, generation="B", slots=slots,
                     validate=lambda o, era=era: c.ix.outside(era, evidence.cited(o, ("sentence_ids",)))))
@@ -125,7 +121,7 @@ def _pool(c: Context) -> dict[str, dict]:
     candidates = {}
     for lineage in c.cfg.lineages:
         for run in c.runs:
-            for era in c.era_ids:
+            for era in c.ix.era_ids:
                 for t in store.read_json(artifacts.path_of(c.ws, f"discovery:{lineage}:{run}:{era}"))["traits"]:
                     ref = f"c{len(candidates) + 1:03d}"
                     candidates[ref] = {"lineage": lineage, "run": run, "era": era, "trait": t["trait"],
@@ -173,7 +169,7 @@ def validate_codebook(out: dict, refs: set[str]) -> list[str]:
 
 def _codebook(c: Context, candidates: dict[str, dict]) -> dict:
     salt = store.sha256_file(c.ws.path("prepare/redacted.txt"))
-    foil_ids = [f["item_id"] for era in c.era_ids for f in foils.load(c.ws, era)]
+    foil_ids = [f["item_id"] for era in c.ix.era_ids for f in foils.load(c.ws, era)]
 
     def validate(o):
         problems = validate_codebook(o, set(candidates))
@@ -203,7 +199,7 @@ def _recode(c: Context, book: dict) -> None:
     items = {i["item_id"] for i in [*book["constructs"], *store.read_json(c.ws.path(audit.FOILS))["kept"]]}
     for lineage in c.cfg.lineages:
         for run in c.runs:
-            for era in c.era_ids:
+            for era in c.ix.era_ids:
 
                 def validate(o, era=era):
                     return _coverage(items, [v["item_id"] for v in o["verdicts"]]) or \
@@ -228,7 +224,7 @@ def _deductive(c: Context) -> None:
     for lineage in c.cfg.lineages:
         for run in c.runs:
             ledgers, cited = [], {f: set() for f in facets}
-            for era in c.era_ids:
+            for era in c.ix.era_ids:
 
                 def validate(o, era=era):
                     if sorted(f["facet"] for f in o["facets"]) != facets:
@@ -326,12 +322,12 @@ def _arm_json(arm: agreement.ArmResult) -> dict:
 
 def _agree(c: Context, book: dict) -> dict:
     ratings = load_ratings(c.ws)
-    inductive, deductive_arm = arms(ratings, book, c.era_ids, list(c.facets))
+    inductive, deductive_arm = arms(ratings, book, c.ix.era_ids, list(c.facets))
     lineages = sorted(inductive.collapsed)
     result = {
         "inductive": _arm_json(inductive), "deductive": _arm_json(deductive_arm),
         "construct_status": {con["id"]: {era: agreement.status([inductive.collapsed[lin][Unit(con["item_id"], era)]
-                                                               for lin in lineages]) for era in c.era_ids}
+                                                               for lin in lineages]) for era in c.ix.era_ids}
                              for con in book["constructs"]},
         "inductive_collapsed": [{"lineage": lin, "item_id": u.item_id, "era": u.era, "value": v}
                                 for lin in lineages for u, v in inductive.collapsed[lin].items()],
@@ -352,14 +348,14 @@ def _agree(c: Context, book: dict) -> dict:
 def _diagnostics(c: Context, book: dict, ratings: Ratings, lineages: list[str]) -> dict:
     """Foil and audit figures: reported, never part of a gate."""
     audited = store.read_json(c.ws.path(audit.FOILS))
-    diag = with_foils(ratings, book, audited["kept"], c.era_ids)
+    diag = with_foils(ratings, book, audited["kept"], c.ix.era_ids)
     return {
         "inductive_with_foils": {"metric": diag.metric, "alpha": diag.alpha, "units": len(diag.units),
                                  "paired_fraction": diag.paired_fraction, "raw_agreement": diag.raw_agreement,
                                  "missing_rate": diag.missing_rate},
-        "foils": {"authored": sum(len(foils.load(c.ws, era)) for era in c.era_ids), "dropped": audited["dropped"],
+        "foils": {"authored": sum(len(foils.load(c.ws, era)) for era in c.ix.era_ids), "dropped": audited["dropped"],
                   "endorsement": foils.endorsement(ratings.verdicts, audited["kept"], lineages)},
-        "audit_flags": audit.flags(c.ws, c.era_ids),
+        "audit_flags": audit.flags(c.ws, c.ix.era_ids),
     }
 
 
@@ -398,7 +394,7 @@ def integrity_audit(c: Context) -> dict:
             rater = (rec["lineage"], rec["run"]) if rec["run"] is not None else None
             try:
                 prompts.check_allowlist(rec["role"], list(rec["input_artifacts"]), rater=rater, era=rec["era"],
-                                        era_order=c.era_ids)
+                                        era_order=c.ix.era_ids)
             except AbxError:
                 outside += 1
         return Check(not outside, "within_allowlists" if not outside else "outside_allowlist",
@@ -442,4 +438,4 @@ def extract(ws: store.Workspace) -> dict:
 
 
 STAGE = lifecycle.Stage("extract", 4, "the blind engine, to generation C", extract, estimate, needs="A",
-                        closed_after="E")
+                        closed_after="E", checks_method=True)

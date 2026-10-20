@@ -18,16 +18,20 @@ __all__ = ["MAX_HYPOTHESES_CHARS", "check_eras", "max_era_words"]
 MAX_HYPOTHESES_CHARS = 40 * 303
 
 
-def _widest(ws: store.Workspace) -> dict:
-    """A construct (and so a foil) with every card field at its schema maximum."""
-    props = store.read_json(ws.path("prereg/schemas/codebook.json"))["properties"]["constructs"]["items"]["properties"]
-    return {"id": "C00", "item_id": "K000000", **{f: "x" * props[f]["maxLength"]
-                                                  for f in ("name", "definition", "sufficiency_rule")}}
+def _widest(ws: store.Workspace, schema: str, key: str) -> tuple[dict, int]:
+    """An item of a staged schema's `key` list with every card field at its maximum, and how many the list allows."""
+    items = store.read_json(ws.path(f"prereg/schemas/{schema}.json"))["properties"][key]
+    props = items["items"]["properties"]
+    return ({"id": "C00", "item_id": "K000000", **{f: "x" * props[f]["maxLength"]
+                                                   for f in ("name", "definition", "sufficiency_rule")}},
+            items["maxItems"])
 
 
 def _largest_card(ws: store.Workspace, eras: int) -> str:
-    """Every construct the codebook schema allows plus every foil the eras can author, at their widest."""
-    return card.line(_widest(ws)) * (card.MAX_CONSTRUCTS + foils.MAX_FOILS * eras)
+    """Every construct the codebook schema allows plus every foil the foils schema allows per era, at their widest."""
+    construct, n_constructs = _widest(ws, "codebook", "constructs")
+    foil, n_foils = _widest(ws, "foils", "foils")
+    return card.line(construct) * n_constructs + card.line(foil) * (n_foils * eras)
 
 
 def _prompt(ws: store.Workspace, role: str, era_ids: list[str], position: int, label: str, body: str) -> str:
@@ -58,10 +62,12 @@ def _largest_input(ws: store.Workspace, kind: str, era_ids: list[str], position:
     if kind == "card":
         return "card:B", _largest_card(ws, len(era_ids))
     if kind == "codebook":
-        return "codebook:B", audit.render_codebook([_widest(ws)] * card.MAX_CONSTRUCTS)
+        construct, n = _widest(ws, "codebook", "constructs")
+        return "codebook:B", audit.render_codebook([construct] * n)
     if kind == "foils":
-        widest = {**_widest(ws), "id": "F1", "type": "near_miss", "expected": {era: "absent"}}
-        return f"foils:{era}", foils.render_for_audit([widest] * foils.MAX_FOILS, era)
+        foil, n = _widest(ws, "foils", "foils")
+        widest = {**foil, "id": "F1", "type": "near_miss", "expected": {era: "absent"}}
+        return f"foils:{era}", foils.render_for_audit([widest] * n, era)
     if kind == "facets":
         return "facets:all", ws.path("prereg/facets.md").read_text()
     if kind == "hypotheses":
@@ -70,9 +76,9 @@ def _largest_input(ws: store.Workspace, kind: str, era_ids: list[str], position:
 
 
 def _lineages(cfg: config.Config, role: str) -> list[config.Lineage]:
-    """The lineages a per-era role runs on: the configured one for a single-author role, every rater otherwise."""
-    single = {"zoner": cfg.zoner, "foil_author": cfg.foil_author, "auditor": cfg.auditor}
-    return [cfg.lineage(single[role])] if role in single else list(cfg.lineages.values())
+    """The lineages a role runs on: the one its config role names, or every rater."""
+    single = ROLES[role].single
+    return [cfg.lineage(getattr(cfg, single))] if single else list(cfg.lineages.values())
 
 
 # Stands in for the era text to count how many times a template expands it.

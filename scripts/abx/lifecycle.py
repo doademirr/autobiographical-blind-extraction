@@ -44,6 +44,7 @@ class Stage(NamedTuple):
     closed_after: str | None = None
     verifies_seal: bool = True
     creates_workspace: bool = False
+    checks_method: bool = False  # refuses a workspace made under an older method, before even its estimate
 
 SEALED = ("sealed/self-prediction.md", "sealed/ipip-120.csv")
 HASHES = "prereg/sealed-hashes.json"

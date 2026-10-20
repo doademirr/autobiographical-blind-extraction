@@ -61,7 +61,7 @@ def _foils(r: dict) -> list[str]:
            "The rates count every rater run's verdict in the foil's own era. They are descriptive: replicate runs are "
            "not independent samples, and the audit lineage chose which foils stayed, so they do not rank the "
            "lineages.", "",
-           f"- Foils written: {f['authored']}; dropped by the audit as unclear: {len(f['dropped'])} ({dropped})."]
+           f"- Foils written: {f['authored']}; dropped by the audit as unclear: {dropped}."]
     for key, label, rate in FOIL_TYPES:
         t = f["endorsement"][key]
         cells = "; ".join(f"{lin} {pct(c['rate'])} ({c['present']} of {c['verdicts']} verdicts)"

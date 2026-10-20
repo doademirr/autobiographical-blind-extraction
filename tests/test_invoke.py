@@ -293,7 +293,7 @@ class AllowlistTest(unittest.TestCase):
 
     def test_labels_are_declared_short_and_single_line(self):
         texts = {"template:zoner": "# abx-role: zoner\n{{chunk}} {{era_label}}", "chunk:e1:1": "[s00001] x"}
-        p = prompts.assemble("zoner", {"chunk": "chunk:e1:1"}, texts.__getitem__, {"era_label": "Boston"})
+        p = prompts.assemble("zoner", {"chunk": "chunk:e1:1"}, texts.__getitem__, {"era_label": "Boston"}, era="e1")
         self.assertEqual(p.text, "# abx-role: zoner\n[s00001] x Boston")
         for params in ({"era_label": "x\ny"}, {"era_label": "x" * 300}, {"secret": "x"}):
             with self.subTest(params=params), self.assertRaises(UsageError):

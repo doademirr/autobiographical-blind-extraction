@@ -57,6 +57,13 @@ class FoilEvidenceTest(unittest.TestCase):
         self.assertTrue(schema.errors({"foils": []}, s))
         self.assertTrue(schema.errors({"foils": [{**one, "id": f"F{i}"} for i in (1, 2, 3, 1)]}, s))
 
+    def test_a_colliding_foil_item_id_takes_the_next_free_one(self):
+        with mock.patch.object(foils.card, "item_id", side_effect=lambda key, salt: f"K<{key}>"):
+            taken = {"K<foil:e1:F1>"}
+            self.assertEqual(foils._free_id("foil:e1:F1", "salt", taken), "K<foil:e1:F1:1>")
+            self.assertEqual(foils._free_id("foil:e2:F1", "salt", taken), "K<foil:e2:F1>")
+            self.assertEqual(taken, {"K<foil:e1:F1>", "K<foil:e1:F1:1>", "K<foil:e2:F1>"})
+
     def test_auditor_must_differ_from_the_foil_author(self):
         fw = FakeWorkspace()
         self.addCleanup(fw.close)
@@ -101,12 +108,14 @@ class FoilRatesTest(unittest.TestCase):
         rows = {}
         for run in (1, 2):
             for lin, side in (("claude", 0), ("codex", 1)):
-                rows[(lin, run, "e1")] = {i: ("present" if v[side] == "present" else "absent")
-                                          for i, v in {**constructs, **foil_items}.items()}
+                for era in ("e1", "e2"):
+                    rows[(lin, run, era)] = {i: ("present" if v[side] == "present" else "absent")
+                                             for i, v in {**constructs, **foil_items}.items()}
         ratings = _ratings(rows)
         book = {"constructs": [{"item_id": i} for i in constructs]}
-        gate, _ = extract.arms(ratings, book, ["e1"], [])
-        pooled = extract.with_foils(ratings, book, [{"item_id": i} for i in foil_items], ["e1"])
+        gate, _ = extract.arms(ratings, book, ["e1", "e2"], [])
+        pooled = extract.with_foils(ratings, book, [{"item_id": i} for i in foil_items], ["e1", "e2"])
+        self.assertEqual((len(gate.units), len(pooled.units)), (6, 66))
         self.assertEqual(gate.verdict, "not_reportable")
         self.assertGreaterEqual(pooled.alpha, 0.8)
 
