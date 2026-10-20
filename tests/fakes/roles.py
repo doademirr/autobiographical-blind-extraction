@@ -1,8 +1,9 @@
 """Outputs the fake CLIs generate, by role, from the prompt they receive.
 
 Deterministic in (prompt, lineage, occurrence), and shaped so the offline smoke exercises
-every path: lineage-specific traits (one-lineage discovery), contested and one-lineage
-verdicts, run-to-run drift, insufficient facets, and prediction matches.
+every path: lineage-specific traits (one-lineage discovery), contested and not-shown verdicts
+(insufficient and absent agree under the binary reading), run-to-run drift, insufficient
+facets, and prediction matches.
 """
 
 import hashlib

@@ -10,7 +10,9 @@ __all__ = ["RECEIPT", "STAGE", "estimate", "prepare", "receipt_problems", "revie
 
 RECEIPT = "prepare/receipt.json"
 RECEIPT_INPUTS = ("text/original.txt", "config.json", "prepare/redactions.json", "prepare/eras.json",
-                  "prereg/prompts/zoner.md", "prereg/schemas/zoner.json")
+                  "prereg/facets.md")
+# Every staged prompt and schema: zoning reads the zoner's, and the size check reads every per-era role's.
+RECEIPT_METHOD_GLOBS = ("prereg/prompts/*.md", "prereg/schemas/*.json")
 RECEIPT_OUTPUT_GLOBS = ("prepare/redacted.txt", "prepare/offsets.json", "prepare/segments.json",
                         "prepare/sentences.json", "prepare/stats.json", "prepare/removed-sentences.json",
                         "prepare/substrate/*.md", "prepare/chunks/*/*.txt", "prepare/zoning/*.json")
@@ -91,9 +93,14 @@ def _parse_review(name: str, raw: bytes) -> dict:
 def estimate(ws: store.Workspace) -> lifecycle.Preflight:
     eras = review_doc(ws, "eras.json")["eras"] if ws.path("prepare/eras.json").exists() else []
     original = ws.path("text/original.txt").read_text(encoding="utf-8")
-    sents = text.sentences(original, text.segment(original))
+    segs = text.segment(original)
+    try:
+        text.validate_eras(eras, segs)
+    except UsageError:
+        eras = []  # the stage itself reports the malformed file as a usage error
+    sents = text.sentences(original, segs)
     chunks = sum(len(text.zoning_chunks([s for s in sents if s.segment_id in set(e.get("segment_ids", []))]))
-                 for e in eras if isinstance(e, dict))
+                 for e in eras)
     return lifecycle.Preflight(chunks + 2, 0, f"one zoning call per chunk of up to {text.ZONING_CHUNK} sentences "
                                               "plus one leak probe per lineage")
 
@@ -186,7 +193,7 @@ def _substrate(ws, cfg: config.Config, eras, sents, redacted, labels, approved: 
 
 def _receipt(ws: store.Workspace) -> dict:
     """Hashes of what this preparation read and wrote, so a later edit to either is caught at `freeze`."""
-    outputs = [ws.rel(p) for g in RECEIPT_OUTPUT_GLOBS for p in sorted(ws.root.glob(g))]
+    outputs = [ws.rel(p) for g in (*RECEIPT_METHOD_GLOBS, *RECEIPT_OUTPUT_GLOBS) for p in sorted(ws.root.glob(g))]
     return {rel: store.sha256_file(ws.path(rel)) for rel in (*RECEIPT_INPUTS, *outputs)}
 
 

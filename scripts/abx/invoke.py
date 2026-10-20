@@ -48,6 +48,7 @@ __all__ = [
     "estimate_tokens",
     "execute",
     "execute_unlocked",
+    "invalid_outputs",
     "live_fingerprint",
     "outcome",
     "parse_claude",
@@ -55,7 +56,6 @@ __all__ = [
     "probe",
     "qualified",
     "record_path",
-    "resampled",
     "sandbox_profile",
 ]
 
@@ -588,10 +588,12 @@ def _incident(ws: store.Workspace, req: CallRequest, kind: str, detail: list[str
                      {"identity": req.identity, "kind": kind, "detail": detail})
 
 
-def resampled(ws: store.Workspace) -> dict[str, int]:
-    """Invalid outputs that were resampled or failed their call, per stage."""
-    return {stage: sum(1 for p in sorted(ws.root.glob(f"run/incidents/{stage}/**/*.json"))
-                       if store.read_json(p)["kind"] == "invalid_output") for stage in RESAMPLED_STAGES}
+def invalid_outputs(ws: store.Workspace) -> dict[str, int]:
+    """Invalid outputs per stage, each resampled or the last of its call's attempts, counted only from the incidents
+    the manifest froze (generation C for prepare and extract, D for unmask): an incident added later counts nothing."""
+    frozen = [rel for e in store.read_manifest(ws) for rel in e["artifacts"] if rel.startswith("run/incidents/")]
+    return {stage: sum(1 for rel in frozen if rel.startswith(f"run/incidents/{stage}/")
+                       and store.read_json(ws.path(rel))["kind"] == "invalid_output") for stage in RESAMPLED_STAGES}
 
 
 def _reusable(ws: store.Workspace, req: CallRequest, expect: dict, schema: dict) -> object:

@@ -19,7 +19,7 @@ class Role:
     kinds: frozenset[str]          # artifact kinds the role may receive, besides its template and schema
     schema: str
     zoned_consumer: bool = False   # reads zoned material, so must never carry text the zoner removed
-    per_era: bool = False          # one call per era; its era input must fit the budget at `prepare`
+    per_era: bool = False          # calls per era (the zoner per chunk); each must fit the budget at `prepare`
     params: frozenset[str] = frozenset()   # labels the call boundary derives from the workspace, never callers
     rater_bound: frozenset[str] = frozenset()  # kinds that must belong to the calling rater
 

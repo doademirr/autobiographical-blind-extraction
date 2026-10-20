@@ -26,11 +26,11 @@ def estimate(ws: store.Workspace) -> lifecycle.Preflight:
 
 def freeze(ws: store.Workspace) -> dict:
     lifecycle.enter(ws, STAGE)
+    invoke.check_method(ws)  # before the receipt: an older workspace's receipt lists files the current layout lacks
     stale = prepare.receipt_problems(ws)
     if stale:
         raise UsageError(f"preparation is not current ({', '.join(stale[:3])}); rerun `prepare`")
     cfg = config.load(ws)
-    invoke.check_method(ws)
     requalified = False
     try:
         for lineage in cfg.lineages:

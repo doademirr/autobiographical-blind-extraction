@@ -68,9 +68,9 @@ def render(r: dict) -> str:
     out += _arm("Deductive facets (strict)", r["agreement"]["deductive"])
     out.append(f"- Verdicts downgraded to insufficient by the recurrence and counter-evidence rules: "
                f"{r['agreement']['downgrades']}.")
-    n = r["resampled"]
-    out.append(f"- Outputs resampled after failing validation: {sum(n.values())} "
-               f"({', '.join(f'{stage} {count}' for stage, count in n.items())}).")
+    n = r["invalid_outputs"]
+    out.append(f"- Invalid outputs (failed their schema or validator; each call gets up to 3 attempts): "
+               f"{sum(n.values())} ({', '.join(f'{stage} {count}' for stage, count in n.items())}).")
     audit = r["agreement"]["integrity_audit"]
     if audit:
         verdict = "every check passed" if all(c["ok"] for c in audit.values()) else "a check failed"

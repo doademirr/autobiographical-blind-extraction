@@ -79,6 +79,16 @@ def _arm(arm: agreement.ArmResult) -> dict:
             "units": len(arm.units), "integrity_audit_due": arm.integrity_audit_due}
 
 
+def _invalid_outputs(ws: store.Workspace) -> dict[str, int]:
+    """Counted from the incidents generations C and D froze, never from whatever the folder holds now."""
+    manifest = [json.loads(line) for line in ws.path(store.MANIFEST).read_text().splitlines() if line.strip()]
+    frozen = {e["gen"]: [rel for rel in e["artifacts"] if rel.startswith("run/incidents/")] for e in manifest}
+    stages = {"prepare": frozen.get("C", []), "extract": frozen.get("C", []), "unmask": frozen.get("D", [])}
+    return {stage: sum(1 for rel in rels if rel.startswith(f"run/incidents/{stage}/")
+                       and json.loads(ws.path(rel).read_text())["kind"] == "invalid_output")
+            for stage, rels in stages.items()}
+
+
 def expected(ws: store.Workspace) -> dict:
     """The results `unmask` must have produced, rebuilt from raw ratings and sealed inputs."""
     cfg = config.load(ws)
@@ -112,9 +122,7 @@ def expected(ws: store.Workspace) -> dict:
         "deductive_vs_ipip": unmask.domain_comparison(unmask.deductive_domains(collapsed, instrument), self_report)
         | {"deductive_reportable": deductive_arm.verdict in unmask.REPORTABLE},
         "domain_names": instrument["domains"],
-        "resampled": {stage: sum(1 for p in ws.root.glob(f"run/incidents/{stage}/**/*.json")
-                                 if store.read_json(p)["kind"] == "invalid_output")
-                      for stage in ("prepare", "extract", "unmask")},
+        "invalid_outputs": _invalid_outputs(ws),
     }
 
 
@@ -150,8 +158,8 @@ def _rows(want: dict) -> list[str]:
                     f"{_pct(a['raw_agreement'])}; missing: {_pct(a['missing_rate'])}; stability α within lineage: "
                     + ", ".join(f"{lin} {_num(v)}" for lin, v in sorted(a["stability"].items())) + ".")
     rows.append(f"rules: {want['agreement']['downgrades']}.")
-    n = want["resampled"]
-    rows.append(f"failing validation: {n['prepare'] + n['extract'] + n['unmask']} (prepare {n['prepare']}, "
+    n = want["invalid_outputs"]
+    rows.append(f"up to 3 attempts): {n['prepare'] + n['extract'] + n['unmask']} (prepare {n['prepare']}, "
                 f"extract {n['extract']}, unmask {n['unmask']}).")
     audit = want["agreement"]["integrity_audit"]
     if audit:

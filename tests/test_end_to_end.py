@@ -15,7 +15,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from abx import store
+from abx import invoke, store
 
 from . import REPO, recompute
 from .helpers import FAKE_ENV, FAKES, FIXTURE, write_logins
@@ -74,11 +74,12 @@ class EndToEndTest(unittest.TestCase):
         self.assertEqual(json.loads(p.stdout)["next"], "done: read report/report.md")
         self.assertEqual([e["gen"] for e in store.verify_manifest(self.ws)], ["A", "B", "C", "D", "E"])
 
-    def test_resamples_are_counted_and_frozen(self):
-        n = self.results["resampled"]
+    def test_invalid_outputs_are_counted_from_frozen_incidents_only(self):
+        n = self.results["invalid_outputs"]
         # Replicate runs send the same prompt, and the fake fails each distinct prompt once: 2 lineages x 2 eras.
         self.assertEqual((n["prepare"], n["extract"], n["unmask"]), (0, 4, 2))
-        self.assertIn("Outputs resampled after failing validation: 6 (prepare 0, extract 4, unmask 2).", self.report)
+        self.assertIn("Invalid outputs (failed their schema or validator; each call gets up to 3 attempts): 6 "
+                      "(prepare 0, extract 4, unmask 2).", self.report)
         frozen = {path for e in store.verify_manifest(self.ws) for path in e["artifacts"]}
         incidents = {self.ws.rel(p) for p in self.ws.root.glob("run/incidents/**/*.json")}
         self.assertEqual(len(incidents), 6)
@@ -91,6 +92,13 @@ class EndToEndTest(unittest.TestCase):
         finally:
             victim.write_bytes(saved)
         self.assertEqual(recompute.problems(self.ws), [])
+        stray = self.ws.path("run/incidents/extract/recode/added-after-freezing-1.json")
+        store.write_json(stray, {"identity": "x", "kind": "invalid_output", "detail": []})
+        try:
+            self.assertEqual(invoke.invalid_outputs(self.ws), n)
+            self.assertEqual(recompute.problems(self.ws), [])
+        finally:
+            stray.unlink()
 
     def test_report_first_section_is_non_clinical(self):
         headings = [line for line in self.report.splitlines() if line.startswith("## ")]

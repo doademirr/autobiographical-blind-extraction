@@ -111,6 +111,8 @@ def init(ws_path: Path, texts: list[Path], canaries: list[str], allow_synced: bo
         body = "\n\n".join(p.read_text(encoding="utf-8").strip() for p in texts) + "\n"
     except (OSError, UnicodeDecodeError) as exc:
         raise UsageError(f"cannot read the text as UTF-8: {exc}") from exc
+    if not body.strip():
+        raise UsageError("the text is empty")
     cfg = config or default_config(canaries)
     ws = store.Workspace(ws_path)
     original = ws.path("text/original.txt")

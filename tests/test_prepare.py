@@ -47,6 +47,12 @@ class InitTest(unittest.TestCase):
         self.assertTrue(ws.path("sealed/self-prediction.md").exists())
         config.load(ws)
 
+    def test_refuses_an_empty_text(self):
+        empty = self.fw.ws.root.parent / "empty.md"
+        empty.write_text(" \n\n ")
+        with self.assertRaises(UsageError):
+            init.init(self.fw.ws.root.parent / "w", [empty], [], False, config=self.fw.cfg)
+
     def test_refuses_git_repo_and_synced_folder(self):
         with tempfile.TemporaryDirectory() as d:
             (Path(d) / ".git").mkdir()
@@ -115,6 +121,22 @@ class PrepareTest(unittest.TestCase):
             self.assertEqual(len(self.fw.prompts_logged()), sent + 1)
         with self.assertRaises(IsolationError):
             prompts.check_allowlist("zoner", ["chunk:e2:1"], era="e1")
+
+    def test_cli_reports_malformed_eras_as_usage_not_a_crash(self):
+        import contextlib
+        import io
+        import sys
+
+        sys.path.insert(0, str(FIXTURE.parent.parent / "scripts"))
+        import run as cli
+
+        prepare.prepare(self.ws)
+        eras = store.read_json(self.ws.path("prepare/eras.json"))
+        eras["eras"][0]["segment_ids"] = None
+        store.write_json(self.ws.path("prepare/eras.json"), {**eras, "approved": True})
+        store.write_json(self.ws.path("prepare/redactions.json"), {"approved": True, "names": {}})
+        with contextlib.redirect_stderr(io.StringIO()):
+            self.assertEqual(cli.main(["prepare", str(self.ws.root)]), 2)
 
     def test_malformed_review_files_are_usage_errors(self):
         prepare.prepare(self.ws)
@@ -223,6 +245,41 @@ class LifecycleTest(unittest.TestCase):
         for stage in (prepare.prepare, seal.seal, freeze.freeze):
             with self.subTest(stage=stage.__module__), self.assertRaises(IntegrityError):
                 stage(self.ws)
+
+    def test_freeze_refuses_a_legacy_layout_workspace_as_an_older_method(self):
+        """A workspace from before chunked zoning has flat chunk files in its receipt; the method guard must
+        answer (exit 4) before the receipt check would call it stale (exit 2)."""
+        fw = FakeWorkspace()
+        try:
+            ws = build(fw, until="prepare")
+            receipt = store.read_json(ws.path(prepare.RECEIPT))
+            for chunk in sorted(ws.root.glob("prepare/chunks/*/*.txt")):
+                flat = ws.path(f"prepare/chunks/{chunk.parent.name}.txt")
+                chunk.rename(flat)
+                receipt[ws.rel(flat)] = receipt.pop(ws.rel(chunk))
+            store.write_json(ws.path(prepare.RECEIPT), receipt)
+            q = store.read_json(ws.path(invoke.QUALIFICATION))
+            for lin in q.values():
+                del lin["method_version"]
+            store.write_json(ws.path(invoke.QUALIFICATION), q)
+            for name in ("self-prediction.md", "ipip-120.csv"):
+                ws.path(f"sealed/{name}").write_text((FIXTURE / name).read_text())
+            seal.seal(ws)
+            with self.assertRaises(IntegrityError) as cm:
+                freeze.freeze(ws)
+            self.assertEqual(cm.exception.exit_code, 4)
+        finally:
+            fw.close()
+
+    def test_a_changed_rater_prompt_makes_preparation_stale(self):
+        fw = FakeWorkspace()
+        try:
+            ws = build(fw, until="prepare")
+            recode = ws.path("prereg/prompts/recode.md")
+            recode.write_text(recode.read_text() + "\nlonger\n")
+            self.assertIn("prereg/prompts/recode.md", prepare.receipt_problems(ws))
+        finally:
+            fw.close()
 
     def test_generation_a_freezes_every_zoning_chunk(self):
         fw = FakeWorkspace()
