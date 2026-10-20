@@ -4,6 +4,8 @@ Run a blind analysis over a body of text about you. Diaries, an autobiography pr
 
 The longer the better. To get a decent result we suggest at least 10k words of content in each era, across at least 5-6 different life eras. Each era is a period of years in length.
 
+For scale: Ben Franklin's full *Autobiography* is about 61k words (53k after the hindsight strip) across 6 eras. A full run took about 125 model calls and 2 hours.
+
 Why blind extraction? Why not just feed your diary to an agent and ask it for some psychoanalysis? Well, expect to get back a judgement coloured by its memory, AGENTS.md files, account holder info, and other leaks.
 
 This tool does three things:
