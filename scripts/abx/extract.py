@@ -13,7 +13,7 @@ from dataclasses import dataclass
 from types import MappingProxyType
 from typing import NamedTuple
 
-from . import agreement, artifacts, config, invoke, ipip, lifecycle, prompts, qualify, store
+from . import agreement, artifacts, config, evidence, invoke, ipip, lifecycle, prompts, qualify, store
 from .errors import AbxError, IntegrityError
 
 __all__ = ["MAX_CONSTRUCTS",
@@ -22,7 +22,6 @@ __all__ = ["MAX_CONSTRUCTS",
     "RaterKey",
     "Ratings",
     "Unit",
-    "apply_bar",
     "arms",
     "card_line",
     "estimate",
@@ -53,63 +52,24 @@ class Unit(NamedTuple):
 
 @dataclass(frozen=True)
 class Context:
-    """What every step of one `extract` shares: the workspace, config, eras and sentence index."""
+    """What every step of one `extract` shares: the workspace, config, zoned-era index and facets."""
 
     ws: store.Workspace
     cfg: config.Config
-    eras: tuple[Mapping, ...]
-    sentences: Mapping[str, dict]
-    seg_index: Mapping[str, int]
-    kept: Mapping[str, frozenset[str]]
+    ix: evidence.Index
     facets: tuple[str, ...]
 
     @property
     def era_ids(self) -> list[str]:
-        return [e["id"] for e in self.eras]
+        return self.ix.era_ids
 
     @property
     def runs(self) -> range:
         return range(1, self.cfg.runs + 1)
 
-    def where(self, sentence_id: str, era: str) -> str:
-        """Where a sentence cited from `era` but outside its zoned text lies: zoned out of that same era
-        (`removed:<era>`), in another era (`era:<id>`), or nowhere (`unknown`)."""
-        s = self.sentences.get(sentence_id)
-        home = next((e["id"] for e in self.eras if s and s["segment_id"] in e["segment_ids"]), None)
-        return "unknown" if home is None else f"removed:{home}" if home == era else f"era:{home}"
-
-
 
 def _context(ws: store.Workspace) -> Context:
-    eras = tuple(store.read_json(ws.path("prepare/eras.json"))["eras"])
-    kept = {e["id"]: frozenset(sid for sid, lab in store.read_json(ws.path(f"prepare/zoning/{e['id']}.json")).items()
-                               if lab == "keep") for e in eras}
-    return Context(ws=ws, cfg=config.load(ws), eras=tuple(MappingProxyType(e) for e in eras),
-                   sentences=MappingProxyType({s["id"]: s for s in store.read_json(ws.path("prepare/sentences.json"))}),
-                   seg_index=MappingProxyType({s["id"]: i for i, s in
-                                               enumerate(store.read_json(ws.path("prepare/segments.json")))}),
-                   kept=MappingProxyType(kept), facets=tuple(ipip.load_instrument(ws)["facets"]))
-
-
-def _cited(node, keys: tuple[str, ...]) -> list[str]:
-    """Sentence ids cited anywhere under the given keys."""
-    if isinstance(node, dict):
-        return [x for k, v in node.items() for x in (v if k in keys and isinstance(v, list) else _cited(v, keys))]
-    if isinstance(node, list):
-        return [x for v in node for x in _cited(v, keys)]
-    return []
-
-
-# The most ids one validation message names per category; the stray-citation count is always complete.
-MAX_NAMED = 20
-
-
-def _outside(c: Context, era: str, ids: list[str]) -> list[str]:
-    bad = [i for i in ids if i not in c.kept[era]]
-    if not bad:
-        return []
-    named = ", ".join(f"{i} ({c.where(i, era)})" for i in bad[:MAX_NAMED])
-    return [f"cites {len(bad)} sentence id(s) outside the zoned era: {named}"]
+    return Context(ws=ws, cfg=config.load(ws), ix=evidence.load(ws), facets=tuple(ipip.load_instrument(ws)["facets"]))
 
 
 def _coverage(items: set[str], got: list[str]) -> list[str]:
@@ -119,7 +79,7 @@ def _coverage(items: set[str], got: list[str]) -> list[str]:
     unknown = sorted(set(got) - items)
     if not (missing or repeated or unknown):
         return []
-    parts = [f"{label} {', '.join(ids[:MAX_NAMED])}" for label, ids in
+    parts = [f"{label} {', '.join(ids[:evidence.MAX_NAMED])}" for label, ids in
              (("missing", missing), ("repeated", repeated), ("not on the card", unknown)) if ids]
     return [f"verdicts must cover every card item exactly once: {'; '.join(parts)}"]
 
@@ -144,7 +104,7 @@ def _discovery(c: Context) -> None:
                     slots["hypotheses"] = f"hypotheses:{lineage}:{run}:{c.era_ids[k - 1]}"
                 out = invoke.call(c.ws, c.cfg, invoke.CallRequest(
                     stage="extract", role="discovery", lineage=lineage, run=run, era=era, generation="B", slots=slots,
-                    validate=lambda o, era=era: _outside(c, era, _cited(o, ("sentence_ids",)))))
+                    validate=lambda o, era=era: c.ix.outside(era, evidence.cited(o, ("sentence_ids",)))))
                 store.write_json(artifacts.path_of(c.ws, f"discovery:{lineage}:{run}:{era}"), out)
                 hypotheses += out["hypotheses"]
                 store.write_text_atomic(artifacts.path_of(c.ws, f"hypotheses:{lineage}:{run}:{era}"),
@@ -235,37 +195,22 @@ def card_line(construct: Mapping) -> str:
 
 # --- recode ------------------------------------------------------------------------------------------------------
 
-def apply_bar(v: dict, seg_of) -> tuple[str, str | None]:
-    """The script's verdict: present needs two occurrences in distinct, non-adjacent segments; absent a counter."""
-    if v["verdict"] == "present":
-        segs = [{seg_of(s) for s in occ["sentence_ids"]} for occ in v["occurrences"]]
-        separate = any(all(abs(a - b) >= 2 for a in x for b in y) for i, x in enumerate(segs) for y in segs[i + 1:])
-        return ("present", None) if separate else ("insufficient", "present_without_two_separate_episodes")
-    if v["verdict"] == "absent":
-        return ("absent", None) if v["counter_sentence_ids"] else ("insufficient", "absent_without_counter_sentence")
-    return "insufficient", None
-
-
 def _recode(c: Context, book: dict) -> None:
     items = {con["item_id"] for con in book["constructs"]}
-
-    def seg_of(sid):
-        return c.seg_index[c.sentences[sid]["segment_id"]]
-
     for lineage in c.cfg.lineages:
         for run in c.runs:
             for era in c.era_ids:
 
                 def validate(o, era=era):
                     return _coverage(items, [v["item_id"] for v in o["verdicts"]]) or \
-                        _outside(c, era, _cited(o, ("sentence_ids", "counter_sentence_ids")))
+                        c.ix.outside(era, evidence.cited(o, ("sentence_ids", "counter_sentence_ids")))
 
                 out = invoke.call(c.ws, c.cfg, invoke.CallRequest(
                     stage="extract", role="recode", lineage=lineage, run=run, era=era, generation="C",
                     slots={"card": "card:B", "era": f"era:{era}"}, validate=validate))
                 verdicts = []
                 for v in out["verdicts"]:
-                    final, reason = apply_bar(v, seg_of)
+                    final, reason = evidence.apply_bar(v, c.ix.seg_of)
                     verdicts.append({"item_id": v["item_id"], "rater_verdict": v["verdict"], "verdict": final,
                                      "downgrade": reason})
                 store.write_json(c.ws.path(f"run/recode/{lineage}-r{run}-{era}.json"),
@@ -284,7 +229,7 @@ def _deductive(c: Context) -> None:
                 def validate(o, era=era):
                     if sorted(f["facet"] for f in o["facets"]) != facets:
                         return ["the ledger must list all 30 facets once"]
-                    return _outside(c, era, _cited(o, ("sentence_ids",)))
+                    return c.ix.outside(era, evidence.cited(o, ("sentence_ids",)))
 
                 out = invoke.call(c.ws, c.cfg, invoke.CallRequest(
                     stage="extract", role="deductive_ledger", lineage=lineage, run=run, era=era, generation="C",
@@ -292,12 +237,12 @@ def _deductive(c: Context) -> None:
                 store.write_json(artifacts.path_of(c.ws, f"ledger:{lineage}:{run}:{era}"), out)
                 ledgers.append({"era": era, **out})
                 for entry in out["facets"]:
-                    cited[entry["facet"]] |= set(_cited(entry, ("sentence_ids",)))
+                    cited[entry["facet"]] |= set(evidence.cited(entry, ("sentence_ids",)))
             store.write_json(artifacts.path_of(c.ws, f"ledgers:{lineage}:{run}"), ledgers)
 
-            evidence = {f: frozenset(ids) for f, ids in cited.items()}
+            by_facet = {f: frozenset(ids) for f, ids in cited.items()}
 
-            def validate_scores(o, cited=evidence):
+            def validate_scores(o, cited=by_facet):
                 """Each score rests on its own facet's ledger evidence; a facet with none must be insufficient."""
                 if sorted(s["facet"] for s in o["scores"]) != facets:
                     return ["scores must cover all 30 facets once"]
