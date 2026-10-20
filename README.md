@@ -4,8 +4,6 @@ Run a blind analysis over a body of text about you. Diaries, an autobiography pr
 
 The longer the better. To get a decent result we suggest at least 10k words of content in each era, across at least 5-6 different life eras. Each era is a period of years in length.
 
-For scale: Ben Franklin's full *Autobiography* is about 61k words (53k after the hindsight strip) across 6 eras. A full run took about 125 model calls and 2 hours.
-
 Why blind extraction? Why not just feed your diary to an agent and ask it for some psychoanalysis? Well, expect to get back a judgement coloured by its memory, AGENTS.md files, account holder info, and other leaks.
 
 This tool does three things:
@@ -71,7 +69,7 @@ The report lands in `report/report.md`: agreement per arm, the construct table, 
 
 ## Behaviour worth knowing
 
-- **Cost.** Every model-calling stage prints its call estimate first. Calls scale with eras × raters × replicates; two eras take about 50 calls and 35 minutes.
+- **Cost.** Every model-calling stage prints its call estimate first. Calls scale with eras × raters × replicates. For scale: Ben Franklin's full *Autobiography* is about 61k words (53k after the hindsight strip) across 6 eras, and a full run took about 125 model calls and 2 hours.
 - **Resuming.** A failed call (exit 5) can be rerun; finished calls are reused only when every input still matches.
 - **What isolation means here.** Before your text is sent, each CLI is pointed at a local fake provider and the harness reads the request it actually sends: tool list, system text and any canary. Claude's capture uses a dummy API key, so it can't see what Claude Code adds only for logged-in accounts. Claude calls run with your account identity blanked, Codex calls inside a macOS read sandbox, and a leak probe checks both end to end.
 - **Strict evidence bar.** A construct counts as present in an era only with two occurrences in separate, non-adjacent passages. On short records most verdicts end up insufficient, and the inductive arm says not reportable rather than guess.
