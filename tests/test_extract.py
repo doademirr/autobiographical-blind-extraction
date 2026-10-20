@@ -81,6 +81,28 @@ class CodebookValidatorTest(unittest.TestCase):
         self.assertTrue(any("not placed" in p for p in problems))
 
 
+class ValidationDetailTest(unittest.TestCase):
+    """An invalid output's incident names what failed, so a stray citation can be told from a typo."""
+
+    def context(self):
+        eras = ({"id": "e1", "segment_ids": ["p1", "p2"]}, {"id": "e2", "segment_ids": ["p3"]})
+        sentences = {"s1": {"segment_id": "p1"}, "s2": {"segment_id": "p2"}, "s3": {"segment_id": "p3"}}
+        return extract.Context(ws=None, cfg=None, eras=eras, sentences=sentences, seg_index={},
+                               kept={"e1": frozenset({"s1"}), "e2": frozenset({"s3"})}, facets=())
+
+    def test_out_of_era_citations_are_named_with_where_they_lie(self):
+        problems = extract._outside(self.context(), "e1", ["s1", "s2", "s3", "s9"])
+        self.assertEqual(problems, ["cites 3 sentence id(s) outside the zoned era: s2 (removed:e1), s3 (era:e2), "
+                                    "s9 (unknown)"])
+        self.assertEqual(extract._outside(self.context(), "e1", ["s1"]), [])
+
+    def test_coverage_names_missing_repeated_and_unknown_items(self):
+        problems = extract._coverage({"K1", "K2", "K3"}, ["K1", "K1", "K4"])
+        self.assertEqual(problems, ["verdicts must cover every card item exactly once: missing K2, K3; "
+                                    "repeated K1; not on the card K4"])
+        self.assertEqual(extract._coverage({"K1"}, ["K1"]), [])
+
+
 class InductiveArmTest(unittest.TestCase):
     """The binary reading through `extract.arms`: verdicts map before runs collapse."""
 

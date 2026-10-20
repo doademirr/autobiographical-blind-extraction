@@ -69,6 +69,13 @@ class Context:
     def runs(self) -> range:
         return range(1, self.cfg.runs + 1)
 
+    def where(self, sentence_id: str, era: str) -> str:
+        """Where a sentence cited from `era` but outside its zoned text lies: zoned out of that same era
+        (`removed:<era>`), in another era (`era:<id>`), or nowhere (`unknown`)."""
+        s = self.sentences.get(sentence_id)
+        home = next((e["id"] for e in self.eras if s and s["segment_id"] in e["segment_ids"]), None)
+        return "unknown" if home is None else f"removed:{home}" if home == era else f"era:{home}"
+
 
 
 def _context(ws: store.Workspace) -> Context:
@@ -91,9 +98,28 @@ def _cited(node, keys: tuple[str, ...]) -> list[str]:
     return []
 
 
-def _outside(ids: list[str], allowed: frozenset[str] | set[str]) -> list[str]:
-    bad = [i for i in ids if i not in allowed]
-    return [f"cites {len(bad)} sentence id(s) outside the zoned era"] if bad else []
+# The most ids one validation message names; the count is always complete.
+MAX_NAMED = 20
+
+
+def _outside(c: Context, era: str, ids: list[str]) -> list[str]:
+    bad = [i for i in ids if i not in c.kept[era]]
+    if not bad:
+        return []
+    named = ", ".join(f"{i} ({c.where(i, era)})" for i in bad[:MAX_NAMED])
+    return [f"cites {len(bad)} sentence id(s) outside the zoned era: {named}"]
+
+
+def _coverage(items: set[str], got: list[str]) -> list[str]:
+    """Each card item exactly once, naming what is missing, repeated or not on the card."""
+    missing = sorted(items - set(got))
+    repeated = sorted({i for i in got if got.count(i) > 1})
+    unknown = sorted(set(got) - items)
+    if not (missing or repeated or unknown):
+        return []
+    parts = [f"{label} {', '.join(ids[:MAX_NAMED])}" for label, ids in
+             (("missing", missing), ("repeated", repeated), ("not on the card", unknown)) if ids]
+    return [f"verdicts must cover every card item exactly once: {'; '.join(parts)}"]
 
 
 def estimate(ws: store.Workspace) -> lifecycle.Preflight:
@@ -114,10 +140,9 @@ def _discovery(c: Context) -> None:
                 slots = {"era": f"era:{era}"}
                 if k > 0:
                     slots["hypotheses"] = f"hypotheses:{lineage}:{run}:{c.era_ids[k - 1]}"
-                allowed = c.kept[era]
                 out = invoke.call(c.ws, c.cfg, invoke.CallRequest(
                     stage="extract", role="discovery", lineage=lineage, run=run, era=era, generation="B", slots=slots,
-                    validate=lambda o, allowed=allowed: _outside(_cited(o, ("sentence_ids",)), allowed)))
+                    validate=lambda o, era=era: _outside(c, era, _cited(o, ("sentence_ids",)))))
                 store.write_json(artifacts.path_of(c.ws, f"discovery:{lineage}:{run}:{era}"), out)
                 hypotheses += out["hypotheses"]
                 store.write_text_atomic(artifacts.path_of(c.ws, f"hypotheses:{lineage}:{run}:{era}"),
@@ -223,13 +248,10 @@ def _recode(c: Context, book: dict) -> None:
     for lineage in c.cfg.lineages:
         for run in c.runs:
             for era in c.era_ids:
-                allowed = c.kept[era]
 
-                def validate(o, allowed=allowed):
-                    got = [v["item_id"] for v in o["verdicts"]]
-                    if len(got) != len(set(got)) or set(got) != items:
-                        return ["verdicts must cover every card item exactly once"]
-                    return _outside(_cited(o, ("sentence_ids", "counter_sentence_ids")), allowed)
+                def validate(o, era=era):
+                    return _coverage(items, [v["item_id"] for v in o["verdicts"]]) or \
+                        _outside(c, era, _cited(o, ("sentence_ids", "counter_sentence_ids")))
 
                 out = invoke.call(c.ws, c.cfg, invoke.CallRequest(
                     stage="extract", role="recode", lineage=lineage, run=run, era=era, generation="C",
@@ -251,12 +273,11 @@ def _deductive(c: Context) -> None:
         for run in c.runs:
             ledgers, cited = [], {f: set() for f in facets}
             for era in c.era_ids:
-                allowed = c.kept[era]
 
-                def validate(o, allowed=allowed):
+                def validate(o, era=era):
                     if sorted(f["facet"] for f in o["facets"]) != facets:
                         return ["the ledger must list all 30 facets once"]
-                    return _outside(_cited(o, ("sentence_ids",)), allowed)
+                    return _outside(c, era, _cited(o, ("sentence_ids",)))
 
                 out = invoke.call(c.ws, c.cfg, invoke.CallRequest(
                     stage="extract", role="deductive_ledger", lineage=lineage, run=run, era=era, generation="C",
