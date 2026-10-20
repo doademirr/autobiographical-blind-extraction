@@ -76,7 +76,7 @@ The report lands in `report/report.md`: agreement per arm, the construct table, 
 - **Cost.** Every model-calling stage prints its call estimate first. Calls scale with eras × raters × replicates. For scale: Ben Franklin's full *Autobiography* is about 61k words (53k after the hindsight strip) across 6 eras, and a full run took about 125 model calls and 2 hours.
 - **Resuming.** A failed call (exit 5) can be rerun; finished calls are reused only when every input still matches.
 - **What isolation means here.** Before your text is sent, each CLI is pointed at a local fake provider and the harness reads the request it actually sends: tool list, system text and any canary. Claude's capture uses a dummy API key, so it can't see what Claude Code adds only for logged-in accounts. Claude calls run with your account identity blanked, Codex calls inside a macOS read sandbox, and a leak probe checks both end to end.
-- **Strict evidence bar.** A construct counts as present in an era only with two occurrences in separate, non-adjacent passages. On short records most verdicts end up insufficient, and the inductive arm says not reportable rather than guess.
+- **Strict evidence bar.** A construct counts as present in an era only with two occurrences in separate, non-adjacent passages. Agreement asks whether both model families see a construct in an era; a construct an era doesn't show counts as not shown, so most of a whole-life codebook is not shown in any one era.
 - **Famous texts aren't blind.** Models know published autobiographies and restore redacted names from memory.
 
 ## Development
