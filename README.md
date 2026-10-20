@@ -86,7 +86,7 @@ python3 -m unittest                  # offline: fake CLIs, plus model-free check
 tests/live_smoke.sh "$TMPDIR/abx-live"   # live: the Franklin pipeline on your subscriptions (~55 calls)
 ```
 
-`SPEC.md` is the v0.1 contract; its "Scope of this version" section lists the requirements this code does not yet build. `ARCHITECTURE.md` is the as-built structure.
+[`ARCHITECTURE.md`](ARCHITECTURE.md) is the as-built structure, and its [Not yet built](ARCHITECTURE.md#not-yet-built) section lists what this version leaves out.
 
 ## Credits
 

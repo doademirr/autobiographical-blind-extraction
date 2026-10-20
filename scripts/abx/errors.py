@@ -1,4 +1,4 @@
-"""Typed failures. Each carries the process exit code SPEC § User Interface assigns it.
+"""Typed failures. Each carries its process exit code (the table in README § Use).
 
 Exit 1 is a reported outcome, never a crash: Python's own uncaught-exception exit is
 also 1, so `run.py` catches everything and maps unexpected exceptions elsewhere.

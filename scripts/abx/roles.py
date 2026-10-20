@@ -1,7 +1,7 @@
 """Role policy: the single owner of what each model role may receive and how it is called.
 
-SPEC § Approach, role input allowlists. Every consumer (prompt assembly, the substring
-audit, the per-era budget check, the call boundary, the integrity audit) reads this table.
+Every consumer (prompt assembly, the substring audit, the per-era budget check, the call
+boundary, the integrity audit) reads this table.
 """
 
 from collections.abc import Mapping

@@ -46,7 +46,7 @@ def _crosswalk(ws: store.Workspace, cfg: config.Config, book: dict) -> None:
 
 
 def prediction_rates(codes: dict[str, list[dict]], predictions: list[str], eligible: set[str]) -> dict:
-    """SPEC § Comparisons, inductive vs self-prediction.
+    """Match rates of the self-prediction against the inductive constructs.
 
     `eligible` is the supported constructs of a reportable inductive arm. A prediction is matched
     when every coder codes some eligible construct `match`, partial when every coder's best is

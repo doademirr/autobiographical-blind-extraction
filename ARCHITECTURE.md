@@ -3,7 +3,8 @@
 Updated: 20/10/2026
 
 Stdlib-only Python ≥ 3.10. `scripts/run.py` is the CLI; `scripts/abx/` holds one module per stage plus the shared
-layers below. `SPEC.md` is the contract this structure implements, less the requirements listed under its "Scope of this version".
+layers below. This version builds every stage end to end but not every planned requirement; [Not yet built](#not-yet-built)
+lists the gaps.
 
 ## Layout
 
@@ -79,3 +80,12 @@ Each stage module declares a `lifecycle.Stage` descriptor (name, order, argument
 - Unit tests per module; `tests/fakes/` emulates both CLIs' event streams and their measured behaviour against the capture provider, with switches for tool events, failures, leaks, version changes and interruption.
 - `tests/test_capture_cli.py` runs qualification's capture against the real `claude` and `codex` binaries with a stand-in provider, model-free, and skips when a binary is absent.
 - `tests/test_end_to_end.py` drives `run.py` stage by stage on the Franklin fixture with the fakes; `tests/recompute.py` recomputes every report figure from the frozen run files and is shared with `tests/live_smoke.sh`, which runs the same pipeline against the real CLIs.
+
+## Not yet built
+
+- **Preparation.** No local candidate-name scan (the user writes `redactions.json` unaided); no era proposal from dates and headings (the user writes `eras.json`); no user spot-check of kept and removed sentences; the per-era kept-word band is reported, not enforced; budget confirmation prints the estimate only.
+- **Zoning calibration.** No tuning or held-out sets and no calibration judges, so the zoner's false-keep and false-remove rates are not measured. Until they are, a run is a demonstration of the pipeline.
+- **Qualification.** File-read and app/MCP capability classes are qualified with positive controls; the image, web, browser and agent classes are not.
+- **Codebook and audit.** No foils (authoring, diagnostics or constructs-plus-foils α) and no blind auditor pass.
+- **Agreement and comparison.** The strict stance only, so no lenient stance or strict-vs-lenient sensitivity α; no Cohen's κ; no facet map or inductive-to-IPIP construct correspondences; domain-level bands only; no temporal read.
+- **Revision and resume.** `revise` exists as a stage and refuses: a change to a frozen artifact means a new workspace. A fingerprint change refuses the stage (exit 4) instead of invalidating and rerunning its outputs.

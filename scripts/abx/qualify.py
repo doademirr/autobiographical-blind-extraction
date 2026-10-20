@@ -1,4 +1,4 @@
-"""Lineage qualification (SPEC § Qualification). Fails closed; evidence comes from the harness.
+"""Lineage qualification. Fails closed; evidence comes from the harness.
 
 Per lineage: the request capture (no model) and the leak probe (one recorded model call,
 which also resolves Claude's model). Every locked capture passes the same complete

@@ -8,7 +8,7 @@ def codes(rows: list[tuple[str, str, str]]) -> list[dict]:
 
 
 class PredictionRatesTest(unittest.TestCase):
-    """Hand-computed against SPEC § Comparisons, inductive vs self-prediction."""
+    """Hand-computed against the rule in `unmask.prediction_rates`."""
 
     def test_matched_partial_ambiguous_and_multiple(self):
         a = codes([("P1", "C01", "match"), ("P1", "C02", "match"),   # P1 matches two constructs: counts once

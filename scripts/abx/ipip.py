@@ -1,4 +1,4 @@
-"""IPIP-NEO-120 scoring (SPEC § Data Model, IPIP) and the band rule shared with observer scores.
+"""IPIP-NEO-120 scoring and the band rule shared with observer scores.
 
 Means and band boundaries are exact fractions: a domain mean of exactly 11/3 must land in the
 same band on every Python version, which float sums do not guarantee.

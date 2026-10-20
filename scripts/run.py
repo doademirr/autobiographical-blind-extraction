@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Blind, two-lineage trait extraction from a diary or autobiography. See SPEC.md.
+"""Blind, two-lineage trait extraction from a diary or autobiography. See README.md and ARCHITECTURE.md.
 
 Exit codes: 0 stage done · 1 a reliability gate fired · 2 usage or preflight failure ·
 3 isolation or leak failure · 4 integrity failure · 5 a model call failed (rerun resumes).
