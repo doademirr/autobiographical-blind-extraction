@@ -100,7 +100,7 @@ def _cited(node, keys: tuple[str, ...]) -> list[str]:
     return []
 
 
-# The most ids one validation message names; the count is always complete.
+# The most ids one validation message names per category; the stray-citation count is always complete.
 MAX_NAMED = 20
 
 
