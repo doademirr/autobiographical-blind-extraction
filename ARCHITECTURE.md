@@ -1,6 +1,6 @@
 # Architecture
 
-Updated: 19/10/2026
+Updated: 20/10/2026
 
 Stdlib-only Python ≥ 3.10. `scripts/run.py` is the CLI; `scripts/abx/` holds one module per stage plus the shared
 layers below. `SPEC.md` is the contract this structure implements, less the requirements listed under its "Scope of this version".
@@ -46,7 +46,7 @@ report/                     results.json, report.md
 | `revise.py` | `revise` | declared so the command exists; refuses (not in this version) |
 | `prepare.py` | `prepare` | review files on first run; then redaction, segments/sentences, qualification, zoning per era, substrate, stats and a receipt hashing what it read and wrote |
 | `seal.py` | `seal` | validates sealed/ and records its hashes; `verify_sealed` is called by every later stage |
-| `freeze.py` | `freeze` | refuses a stale preparation (receipt mismatch), re-qualifies if a fingerprint moved, then freezes generation A: method, substrate, offset map, seal hashes, statistics, the instrument copy, the facet catalog, the qualification baseline and the zoning call records |
+| `freeze.py` | `freeze` | refuses a stale preparation (receipt mismatch) or one qualified under an older isolation policy, re-qualifies if a fingerprint moved, then freezes generation A: method, substrate, offset map, seal hashes, statistics, the instrument copy, the facet catalog, the qualification baseline and the zoning call records |
 | `extract.py` | `extract` | discovery → pool → codebook + validator → card (generation B) → recode with the recurrence bar → deductive ledgers and scores → agreement and integrity audit (generation C) |
 | `unmask.py` | `unmask` | two-coder crosswalk (generation D), IPIP scoring, comparisons, results and report (generation E) |
 | `status.py` | `status` | generations, call counts, incidents, next step as a code `run.py` renders |
