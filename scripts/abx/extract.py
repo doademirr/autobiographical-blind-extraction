@@ -16,13 +16,15 @@ from typing import NamedTuple
 from . import agreement, artifacts, config, invoke, ipip, lifecycle, prompts, qualify, store
 from .errors import AbxError, IntegrityError
 
-__all__ = ["REQUALIFICATION_AUDIT",
+__all__ = ["MAX_CONSTRUCTS",
+    "REQUALIFICATION_AUDIT",
     "STAGE",
     "RaterKey",
     "Ratings",
     "Unit",
     "apply_bar",
     "arms",
+    "card_line",
     "estimate",
     "extract",
     "load_ratings",
@@ -221,9 +223,14 @@ def _codebook(c: Context, candidates: dict[str, dict]) -> dict:
     book = {"constructs": constructs, "appendix": out["appendix"]}
     store.write_json(c.ws.path("run/codebook/codebook.json"), book)
     store.write_text_atomic(artifacts.path_of(c.ws, "card:B"), "".join(
-        f"- {con['item_id']}: {con['name']}. {con['definition']} Present when: {con['sufficiency_rule']}\n"
-        for con in sorted(constructs, key=lambda x: x["item_id"])))
+        card_line(con) for con in sorted(constructs, key=lambda x: x["item_id"])))
     return book
+
+
+def card_line(construct: Mapping) -> str:
+    """One card item as raters see it; the size check builds its largest possible card from this too."""
+    return (f"- {construct['item_id']}: {construct['name']}. {construct['definition']} "
+            f"Present when: {construct['sufficiency_rule']}\n")
 
 
 # --- recode ------------------------------------------------------------------------------------------------------

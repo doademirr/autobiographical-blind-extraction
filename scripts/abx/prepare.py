@@ -3,9 +3,8 @@
 import shutil
 from pathlib import Path
 
-from . import artifacts, config, invoke, ipip, lifecycle, qualify, store, text, withheld
+from . import artifacts, config, invoke, ipip, lifecycle, qualify, sizing, store, text, withheld
 from .errors import UsageError
-from .roles import ROLES
 
 __all__ = ["RECEIPT", "STAGE", "estimate", "prepare", "receipt_problems", "review_doc"]
 
@@ -18,9 +17,11 @@ RECEIPT_OUTPUT_GLOBS = ("prepare/redacted.txt", "prepare/offsets.json", "prepare
 
 REPO = Path(__file__).resolve().parents[2]
 THIN, STOP = 0.50, 0.25
-# The most hypotheses text one earlier era can pass to discovery: the schema allows 40 of 300 characters,
-# plus list markers. Era k carries the hypotheses of every era before it.
-MAX_HYPOTHESES_CHARS = 40 * 303
+ERA_RULE = ("You decide the eras, before any model call. Aim for at least 5-6, each a period of years with at least "
+            "10k words and no more than the maximum below. Eras run in order, back to back, and every paragraph "
+            "(segment) is in exactly one. Cut at life events: a move, a new school or job, a relationship starting or "
+            "ending, a birth or death, a long gap in the writing. Never cut around traits you expect to see. "
+            "segments-preview.txt gives each paragraph's word count.")
 
 
 def _stage_method(ws: store.Workspace) -> None:
@@ -45,7 +46,7 @@ def _stage_method(ws: store.Workspace) -> None:
         store.write_json(schema_path, schema)
 
 
-def _review_files(ws: store.Workspace, original: str) -> dict[str, tuple[dict, str]] | None:
+def _review_files(ws: store.Workspace, cfg: config.Config, original: str) -> dict[str, tuple[dict, str]] | None:
     """Write the templates the user edits on first run. Returns each review file read exactly once, as
     (parsed document, sha256 of the bytes read), when both are approved; None while either is not.
     Preparation uses only this snapshot, so a file edited mid-run cannot change what was approved."""
@@ -54,9 +55,15 @@ def _review_files(ws: store.Workspace, original: str) -> dict[str, tuple[dict, s
         store.write_json(red, {"approved": False, "names": {}})
     if not eras.exists():
         segs = text.segment(original)
-        store.write_json(eras, {"approved": False, "eras": [
+        sents = text.sentences(original, segs)
+        words = len(original.split())
+        limit = sizing.max_era_words(ws, cfg, 5, len(text.render_numbered(original, sents)) / max(words, 1))
+        note = (f"{ERA_RULE} Maximum, estimated: about {limit} words for the sixth era under this config (earlier "
+                "eras hold a little more, later ones less; `prepare` checks every era exactly before any call).")
+        store.write_json(eras, {"approved": False, "note": note, "eras": [
             {"id": "e1", "label": "", "date_range": "", "segment_ids": [s.id for s in segs]}]})
-        preview = [f"{s.id}: {original[s.start:s.end][:100]}" for s in segs]
+        preview = [f"{s.id} ({len(original[s.start:s.end].split())} words): {original[s.start:s.end][:100]}"
+                   for s in segs]
         store.write_text_atomic(ws.path("prepare/segments-preview.txt"), "\n".join(preview) + "\n")
     snapshot = {}
     for name in ("redactions.json", "eras.json"):
@@ -115,7 +122,8 @@ def prepare(ws: store.Workspace) -> dict:
     lifecycle.enter(ws, STAGE)
     cfg = config.load(ws)
     original = ws.path("text/original.txt").read_text(encoding="utf-8")
-    snapshot = _review_files(ws, original)
+    _stage_method(ws)
+    snapshot = _review_files(ws, cfg, original)
     if snapshot is None:
         return {"status": "review", "next": "approve_review_files"}
     names = snapshot["redactions.json"][0]["names"]
@@ -132,7 +140,7 @@ def prepare(ws: store.Workspace) -> dict:
     store.write_json(ws.path("prepare/offsets.json"), spans)
     store.write_json(ws.path("prepare/segments.json"), text.as_dicts(segs))
     store.write_json(ws.path("prepare/sentences.json"), text.as_dicts(sents))
-    _stage_method(ws)
+    sizing.check_eras(ws, cfg, eras, sents, redacted)
     if not ws.path(invoke.QUALIFICATION).exists():
         qualify.qualify(ws, cfg)
     labels: dict[str, str] = {}
@@ -167,20 +175,6 @@ def _substrate(ws, cfg: config.Config, eras, sents, redacted, labels, approved: 
             "removed": sum(1 for s in era_sents if labels[s.id] == "remove"),
             "band": "normal" if ratio >= THIN else "thin" if ratio >= STOP else "stop",
         }
-        for policy in ROLES.values():
-            template = ws.path(f"prereg/prompts/{policy.name}.md")
-            if not (policy.per_era and policy.name != "zoner" and template.exists()):
-                continue
-            fixed = template.read_text() + ws.path(f"prereg/schemas/{policy.schema}.json").read_text() + body
-            if "facets" in policy.kinds:
-                fixed += ws.path("prereg/facets.md").read_text()
-            if "hypotheses" in policy.kinds:
-                fixed += "x" * (MAX_HYPOTHESES_CHARS * eras.index(era))
-            fixed += era["label"] or era["id"]
-            need = invoke.estimate_tokens(fixed)
-            for lin in cfg.lineages.values():
-                if need + lin.reserve_output_tokens > lin.input_budget_tokens:
-                    raise UsageError(f"era {era['id']} is too large for {policy.name} on {lin.name}")
     store.write_json(ws.path("prepare/stats.json"), stats)
     receipt = _receipt(ws)
     changed = [rel for rel, digest in approved.items() if receipt[rel] != digest]

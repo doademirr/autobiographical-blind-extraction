@@ -1,0 +1,109 @@
+import dataclasses
+import unittest
+
+from abx import config, init, invoke, prepare, sizing, store, text
+from abx.errors import UsageError
+
+from .helpers import FIXTURE, FakeWorkspace
+
+PARAGRAPH = " ".join(f"He walked to market number {i} and bought bread." for i in range(40))
+
+
+def _budget(cfg: config.Config, tokens: int) -> config.Config:
+    lineages = {name: dataclasses.replace(lin, input_budget_tokens=tokens + lin.reserve_output_tokens)
+                for name, lin in cfg.lineages.items()}
+    return config.Config(**{**cfg.__dict__, "lineages": lineages})
+
+
+class EraSizeTest(unittest.TestCase):
+    """The size check is an upper bound on what each per-era call will send."""
+
+    def setUp(self):
+        self.fw = FakeWorkspace()
+        self.ws, self.cfg = self.fw.ws, self.fw.config
+        prepare._stage_method(self.ws)
+
+    def tearDown(self):
+        self.fw.close()
+
+    def corpus(self, n_eras: int):
+        original = "\n\n".join([PARAGRAPH] * (2 * n_eras))
+        segs = text.segment(original)
+        eras = [{"id": f"e{k + 1}", "label": "", "segment_ids": [s.id for s in segs[2 * k:2 * k + 2]]}
+                for k in range(n_eras)]
+        return original, eras, text.sentences(original, segs)
+
+    def need(self, role: str, position: int, body: str, card: bool = True) -> int:
+        fixed = sizing._fixed(self.ws, role, position, "e1")
+        if not card:
+            fixed = fixed.replace(sizing._largest_card(self.ws), "")
+        return invoke.estimate_tokens(fixed + body)
+
+    def era_texts(self, original, era, sents):
+        mine = [s for s in sents if s.segment_id in set(era["segment_ids"])]
+        raw = "\n\n".join(original[s.start:s.end] for s in text.segment(original) if s.id in era["segment_ids"])
+        return raw, text.render_zoned(original, era["segment_ids"], mine, {s.id for s in mine}), mine
+
+    def test_the_all_kept_rendering_bounds_any_zoned_rendering(self):
+        original, eras, sents = self.corpus(1)
+        _, full, mine = self.era_texts(original, eras[0], sents)
+        for kept in ({s.id for s in mine[::2]}, {mine[0].id}, set()):
+            self.assertGreaterEqual(len(full), len(text.render_zoned(original, eras[0]["segment_ids"], mine, kept)))
+
+    def test_rendered_era_over_budget_fails_where_raw_text_would_fit(self):
+        original, eras, sents = self.corpus(1)
+        raw, full, _ = self.era_texts(original, eras[0], sents)
+        roles = ("discovery", "recode", "deductive_ledger")
+        budget = max(self.need(r, 0, raw) for r in roles)
+        self.assertGreater(max(self.need(r, 0, full) for r in roles), budget)
+        with self.assertRaises(UsageError) as cm:
+            sizing.check_eras(self.ws, _budget(self.cfg, budget), eras, sents, original)
+        self.assertIn("era e1 has", str(cm.exception))
+        sizing.check_eras(self.ws, _budget(self.cfg, max(self.need(r, 0, full) for r in roles)), eras, sents,
+                          original)
+
+    def test_the_largest_card_alone_tips_recode_over(self):
+        original, eras, sents = self.corpus(1)
+        _, full, _ = self.era_texts(original, eras[0], sents)
+        others = max(self.need(r, 0, full) for r in ("discovery", "deductive_ledger"))
+        budget = max(others, self.need("recode", 0, full, card=False))
+        self.assertGreater(self.need("recode", 0, full), budget)
+        with self.assertRaises(UsageError) as cm:
+            sizing.check_eras(self.ws, _budget(self.cfg, budget), eras, sents, original)
+        self.assertIn("recode", str(cm.exception))
+
+    def test_identical_text_fits_an_early_era_but_not_a_later_discovery(self):
+        original, eras, sents = self.corpus(8)
+        _, full, _ = self.era_texts(original, eras[0], sents)
+        budget = max(self.need("recode", 0, full), self.need("discovery", 6, full))
+        self.assertGreater(self.need("discovery", 7, full), budget)
+        with self.assertRaises(UsageError) as cm:
+            sizing.check_eras(self.ws, _budget(self.cfg, budget), eras, sents, original)
+        self.assertIn("era e8 has", str(cm.exception))
+        self.assertIn("discovery", str(cm.exception))
+
+    def test_an_oversize_era_stops_prepare_before_any_model_call(self):
+        ws = init.init(self.fw.ws.root.parent / "w", [FIXTURE / "autobiography.txt"], [], False,
+                       config={**self.fw.cfg, "lineages": {name: {**lin, "input_budget_tokens": 30000,
+                                                                   "reserve_output_tokens": 8000}
+                                                            for name, lin in self.fw.cfg["lineages"].items()}})
+        for name in ("redactions.json", "eras.json"):
+            store.write_json(ws.path(f"prepare/{name}"), store.read_json(FIXTURE / name))
+        with self.assertRaises(UsageError) as cm:
+            prepare.prepare(ws)
+        self.assertEqual(cm.exception.exit_code, 2)
+        self.assertRegex(str(cm.exception), r"era e1 has \d+ words; recode on \w+ fits about \d+ words")
+        self.assertEqual(self.fw.prompts_logged(), [])
+        self.assertFalse(ws.path(invoke.QUALIFICATION).exists())
+
+    def test_the_eras_template_states_the_rule_and_an_estimated_maximum(self):
+        ws = init.init(self.fw.ws.root.parent / "w", [FIXTURE / "autobiography.txt"], [], False, config=self.fw.cfg)
+        prepare.prepare(ws)
+        note = store.read_json(ws.path("prepare/eras.json"))["note"]
+        self.assertIn("at least 5-6", note)
+        self.assertRegex(note, r"about \d+ words for the sixth era")
+        self.assertRegex(ws.path("prepare/segments-preview.txt").read_text().splitlines()[0], r"^p\d+ \(\d+ words\): ")
+
+
+if __name__ == "__main__":
+    unittest.main()
