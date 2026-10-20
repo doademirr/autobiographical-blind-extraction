@@ -12,8 +12,10 @@ ERA_ROLES = tuple(r for r, p in ROLES.items() if p.per_era and r != "zoner")
 PARAGRAPH = " ".join(f"He walked to market number {i} and bought bread." for i in range(40))
 
 
-def _budget(cfg: config.Config, tokens: int) -> config.Config:
-    lineages = {name: dataclasses.replace(lin, input_budget_tokens=tokens + lin.reserve_output_tokens)
+def _budget(cfg: config.Config, tokens: int, roomy: str | None = None) -> config.Config:
+    """Every lineage gets `tokens` of input room, except `roomy`, which gets ten times as much."""
+    lineages = {name: dataclasses.replace(lin, input_budget_tokens=tokens * (10 if name == roomy else 1)
+                                          + lin.reserve_output_tokens)
                 for name, lin in cfg.lineages.items()}
     return config.Config(**{**cfg.__dict__, "lineages": lineages})
 
@@ -72,9 +74,12 @@ class EraSizeTest(unittest.TestCase):
         others = max(self.need(r, 0, full) for r in ERA_ROLES if r not in {"recode", "auditor"})
         budget = max(others, self.need("recode", 0, full, card=False))
         self.assertGreater(self.need("recode", 0, full), budget)
+        # The auditor, which also carries the largest codebook, runs on its own lineage; give that one room, so only
+        # recode (which runs on every lineage) can fail.
+        roomy = _budget(self.cfg, budget, roomy=self.cfg.auditor)
         with self.assertRaises(UsageError) as cm:
-            sizing.check_eras(self.ws, _budget(self.cfg, budget), eras, sents, original)
-        self.assertRegex(str(cm.exception), "recode|auditor")
+            sizing.check_eras(self.ws, roomy, eras, sents, original)
+        self.assertIn(f"recode on {next(n for n in self.cfg.lineages if n != self.cfg.auditor)}", str(cm.exception))
 
     def test_identical_text_fits_an_early_era_but_not_a_later_discovery(self):
         original, eras, sents = self.corpus(8)

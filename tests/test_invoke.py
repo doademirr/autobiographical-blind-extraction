@@ -277,11 +277,18 @@ class AllowlistTest(unittest.TestCase):
                                         era_order=list(self.ORDER))
 
     def test_deductive_never_gets_inductive_artifacts(self):
+        # Each call is otherwise valid (its era named, an allowed input present), so the refusal is the bad input's.
+        allowed = {"deductive_ledger": ["era:e1", "facets:all"], "deductive_scorer": ["ledgers:claude:1", "facets:all"],
+                   "recode": ["card:B", "era:e1"]}
+        for role, ids in allowed.items():
+            prompts.check_allowlist(role, ids, rater=("claude", 1), era="e1", era_order=list(self.ORDER))
         for role, bad in (("deductive_ledger", "discovery:claude:1:e1"), ("deductive_ledger", "card:B"),
                           ("deductive_scorer", "ledger:codex:1:e1"), ("recode", "self_prediction:sealed"),
                           ("recode", "template:discovery")):
-            with self.subTest(role=role, bad=bad), self.assertRaises(IsolationError):
-                prompts.check_allowlist(role, [bad], rater=("claude", 1))
+            with self.subTest(role=role, bad=bad), self.assertRaises(IsolationError) as cm:
+                prompts.check_allowlist(role, [*allowed[role], bad], rater=("claude", 1), era="e1",
+                                        era_order=list(self.ORDER))
+            self.assertNotIn("must name the era", str(cm.exception))
 
     def test_artifact_ids_cannot_escape_their_directory(self):
         for bad in ("era:../../sealed/self-prediction", "era:e1:extra", "discovery:claude:1", "card:A",
