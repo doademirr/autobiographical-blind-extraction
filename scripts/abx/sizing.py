@@ -53,9 +53,16 @@ def _lineages(cfg: config.Config, role: str) -> list[config.Lineage]:
     return [cfg.lineage(cfg.zoner)] if role == "zoner" else list(cfg.lineages.values())
 
 
-def _words_that_fit(empty_prompt: str, lin: config.Lineage, chars_per_word: float) -> int:
-    room = lin.input_budget_tokens - lin.reserve_output_tokens - invoke.estimate_tokens(empty_prompt)
-    return max(0, int(room / 1.2 * 4 / chars_per_word))
+# Stands in for the era text to count how many times a template expands it.
+_MARK = "\u2063era\u2063"
+
+
+def _words_that_fit(ws: store.Workspace, role: str, era_ids: list[str], position: int, label: str,
+                    lin: config.Lineage, chars_per_word: float) -> int:
+    copies = max(1, _prompt(ws, role, era_ids, position, label, _MARK).count(_MARK))
+    room = lin.input_budget_tokens - lin.reserve_output_tokens - \
+        invoke.estimate_tokens(_prompt(ws, role, era_ids, position, label, ""))
+    return max(0, int(room / 1.2 * 4 / chars_per_word / copies))
 
 
 def _fits(prompt: str, lin: config.Lineage) -> bool:
@@ -67,7 +74,7 @@ def max_era_words(ws: store.Workspace, cfg: config.Config, position: int, chars_
     per-era rater role. An estimate where the text's characters per word are an average."""
     era_ids = [f"e{k + 1}" for k in range(position + 1)]
     label = "x" * prompts.MAX_PARAM_LEN
-    return min(_words_that_fit(_prompt(ws, role, era_ids, position, label, ""), lin, chars_per_word)
+    return min(_words_that_fit(ws, role, era_ids, position, label, lin, chars_per_word)
                for role, policy in ROLES.items() if policy.per_era and role != "zoner"
                for lin in _lineages(cfg, role))
 
@@ -91,7 +98,7 @@ def check_eras(ws: store.Workspace, cfg: config.Config, eras: list[dict], sents:
                 if role == "zoner":
                     raise UsageError(f"era {era['id']}: a zoning chunk is too large for {lin.name}'s budget "
                                      f"({lin.input_budget_tokens} tokens); its sentences are unusually long")
-                fits = _words_that_fit(_prompt(ws, role, era_ids, position, label, ""), lin, len(body) / max(words, 1))
+                fits = _words_that_fit(ws, role, era_ids, position, label, lin, len(body) / max(words, 1))
                 raise UsageError(f"era {era['id']} has {words} words; {role} on {lin.name} fits about {fits} words "
                                  f"in this era ({lin.input_budget_tokens} tokens, {lin.reserve_output_tokens} kept for "
                                  "output). Split it into smaller eras.")

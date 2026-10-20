@@ -94,6 +94,13 @@ class EraSizeTest(unittest.TestCase):
         with self.assertRaises(UsageError) as cm:
             sizing.check_eras(self.ws, _budget(self.cfg, budget), eras, sents, original)
         self.assertIn("recode", str(cm.exception))
+        lin = _budget(self.cfg, budget).lineage("claude")
+        once = sizing._words_that_fit(self.ws, "deductive_ledger", ["e1"], 0, "e1", lin, 6.0)
+        twice = sizing._words_that_fit(self.ws, "recode", ["e1"], 0, "e1", lin, 6.0)
+        template.write_text(template.read_text().replace("\nThe era again:\n{{era}}\n", ""))
+        self.assertAlmostEqual(twice, sizing._words_that_fit(self.ws, "recode", ["e1"], 0, "e1", lin, 6.0) // 2,
+                               delta=1)
+        self.assertGreater(once, twice)
 
     def test_an_oversize_era_stops_prepare_before_any_model_call(self):
         ws = init.init(self.fw.ws.root.parent / "w", [FIXTURE / "autobiography.txt"], [], False,
