@@ -53,7 +53,7 @@ class CallTest(unittest.TestCase):
                         self.call(req)
                     self.assertEqual(cm.exception.exit_code, 3)
                     self.assertFalse(invoke.record_path(self.ws, req).exists())
-                    incident = store.read_json(self.ws.path(f"run/incidents/{req.identity}.json"))
+                    incident = store.read_json(self.ws.path(f"run/incidents/{req.identity}-1.json"))
                     self.assertEqual(incident["kind"], "tool_event")
 
     def test_a_config_frozen_before_profile_file_defaults_it(self):
@@ -103,7 +103,7 @@ class CallTest(unittest.TestCase):
         with mock.patch.dict(os.environ, {"ABX_FAKE_PROFILE_FETCH": "1"}), self.assertRaises(IsolationError) as cm:
             self.call(req)
         self.assertEqual(cm.exception.exit_code, 3)
-        incident = store.read_json(self.ws.path(f"run/incidents/{req.identity}.json"))
+        incident = store.read_json(self.ws.path(f"run/incidents/{req.identity}-1.json"))
         self.assertEqual(incident["kind"], "tool_event")
         self.assertNotIn("example.com", json.dumps(incident))
 
@@ -121,13 +121,42 @@ class CallTest(unittest.TestCase):
                     self.call(_req(lineage="codex"), _with(self.cfg, timeout_s=2))
 
     def test_cli_failure_timeout_and_invalid_output_exit_5(self):
-        for env in ({"ABX_FAKE_FAIL": "1"}, {"ABX_FAKE_RAW": "not json"}, {"ABX_FAKE_RAW": '{"other": 1}'},
-                    {"ABX_FAKE_SLEEP": "5"}):
+        """A CLI failure or timeout is one execution; an invalid output is resampled to the attempt limit."""
+        cases = (({"ABX_FAKE_FAIL": "1"}, 1), ({"ABX_FAKE_RAW": "not json"}, invoke.MAX_ATTEMPTS),
+                 ({"ABX_FAKE_RAW": '{"other": 1}'}, invoke.MAX_ATTEMPTS), ({"ABX_FAKE_SLEEP": "5"}, 1))
+        for n, (env, executions) in enumerate(cases, start=1):
             for lineage in ("claude", "codex"):
                 with self.subTest(env=env, lineage=lineage), mock.patch.dict(os.environ, env):
+                    before = len(self.fw.prompts_logged())
+                    req = _req(lineage=lineage, run=n)
                     with self.assertRaises(CallFailed) as cm:
-                        self.call(_req(lineage=lineage), _with(self.cfg, timeout_s=2))
+                        self.call(req, _with(self.cfg, timeout_s=2))
                     self.assertEqual(cm.exception.exit_code, 5)
+                    self.assertEqual(len(self.fw.prompts_logged()) - before, executions)
+                    self.assertEqual(len(list(self.ws.root.glob(f"run/incidents/{req.identity}-*.json"))), executions)
+                    self.assertFalse(invoke.record_path(self.ws, req).exists())
+
+    def test_an_invalid_output_is_resampled_and_recorded(self):
+        req = _req()
+        with mock.patch.dict(os.environ, {"ABX_FAKE_INVALID": "probe:1"}):
+            self.assertEqual(self.call(req), {"answer": "NONE"})
+        prompts_sent = self.fw.prompts_logged()
+        self.assertEqual(len(prompts_sent), 2)
+        self.assertEqual(json.loads(prompts_sent[0])["prompt"], json.loads(prompts_sent[1])["prompt"])
+        incident = store.read_json(self.ws.path(f"run/incidents/{req.identity}-1.json"))
+        self.assertEqual((incident["kind"], incident["detail"]), ("invalid_output", ["output is not JSON"]))
+        self.assertTrue(invoke.record_path(self.ws, req).exists())
+        self.call(req)  # resume reuses the resampled success
+        self.assertEqual(len(self.fw.prompts_logged()), 2)
+
+    def test_a_tool_event_is_never_resampled(self):
+        req = _req()
+        with mock.patch.dict(os.environ, {"ABX_FAKE_INVALID": "probe:1", "ABX_FAKE_TOOL_EVENT": "tool_use"}), \
+                self.assertRaises(IsolationError):
+            self.call(req)
+        self.assertEqual(len(self.fw.prompts_logged()), 1)
+        self.assertEqual([store.read_json(p)["kind"] for p in self.ws.root.glob("run/incidents/**/*.json")],
+                         ["tool_event"])
 
     def test_replicates_run_separately_and_resume_reuses_each(self):
         for run in (1, 2, 3):
@@ -176,7 +205,7 @@ class CallTest(unittest.TestCase):
         with mock.patch.dict(os.environ, {"ABX_FAKE_NO_INIT": "1", "ABX_FAKE_FAIL": "1"}), \
                 self.assertRaises(CallFailed):
             self.call(_req())
-        self.assertEqual(store.read_json(self.ws.path(f"run/incidents/{_req().identity}.json"))["kind"],
+        self.assertEqual(store.read_json(self.ws.path(f"run/incidents/{_req().identity}-1.json"))["kind"],
                          "call_failed")
 
     def test_a_record_copied_to_another_replicate_is_not_reused(self):

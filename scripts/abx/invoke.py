@@ -30,6 +30,7 @@ from .roles import role as get_role
 __all__ = [
     "FINGERPRINT_KEYS",
     "ISOLATION_POLICY",
+    "MAX_ATTEMPTS",
     "METHOD_VERSION",
     "QUALIFICATION",
     "QUALIFICATION_A",
@@ -54,6 +55,7 @@ __all__ = [
     "probe",
     "qualified",
     "record_path",
+    "resampled",
     "sandbox_profile",
 ]
 
@@ -569,9 +571,24 @@ def parse_output(text: str | None, schema: dict, validate) -> tuple[object, list
     return out, problems
 
 
+# An output failing its schema or validator is resampled with the same prompt up to this many attempts in all.
+MAX_ATTEMPTS = 3
+RESAMPLED_STAGES = ("prepare", "extract", "unmask")
+
+
 def _incident(ws: store.Workspace, req: CallRequest, kind: str, detail: list[str]) -> None:
-    store.write_json(ws.path(f"run/incidents/{req.identity}.json"),
+    """One file per attempt, numbered, so a resample or a rerun never overwrites earlier evidence."""
+    n = 1
+    while ws.path(f"run/incidents/{req.identity}-{n}.json").exists():
+        n += 1
+    store.write_json(ws.path(f"run/incidents/{req.identity}-{n}.json"),
                      {"identity": req.identity, "kind": kind, "detail": detail})
+
+
+def resampled(ws: store.Workspace) -> dict[str, int]:
+    """Invalid outputs that were resampled or failed their call, per stage."""
+    return {stage: sum(1 for p in sorted(ws.root.glob(f"run/incidents/{stage}/**/*.json"))
+                       if store.read_json(p)["kind"] == "invalid_output") for stage in RESAMPLED_STAGES}
 
 
 def _reusable(ws: store.Workspace, req: CallRequest, expect: dict, schema: dict) -> object:
@@ -622,7 +639,27 @@ def call(ws: store.Workspace, cfg: Config, req: CallRequest) -> object:
     reused = _reusable(ws, req, expect, s_obj)
     if reused is not None:
         return reused
-    code, result = execute(cfg, req.lineage, prompt.text, s_text)
+    for _ in range(MAX_ATTEMPTS):
+        code, result = _attempt(ws, cfg, req, prompt.text, s_text, fingerprint)
+        output, problems = parse_output(result.text, s_obj, req.validate)
+        if not problems:
+            break
+        _incident(ws, req, "invalid_output", problems[:10])
+    else:
+        raise CallFailed(f"{req.identity}: invalid output on all {MAX_ATTEMPTS} attempts ({problems[0]})")
+    store.write_json(record_path(ws, req), {
+        "attempt_id": store.sha256_text(store.canonical(expect))[:16], "identity": req.identity,
+        "stage": req.stage, "role": req.role, "lineage": req.lineage, "run": req.run, "era": req.era,
+        "exit": code, **expect, "output": output, "events": [asdict(e) for e in result.events],
+    })
+    return output
+
+
+def _attempt(ws: store.Workspace, cfg: Config, req: CallRequest, prompt_text: str, s_text: str,
+             fingerprint: dict) -> tuple[int | None, Result]:
+    """One execution, audited before its output is looked at: a tool event, a CLI failure or a timeout ends the call
+    here and is never resampled."""
+    code, result = execute(cfg, req.lineage, prompt_text, s_text)
     state = outcome(req.lineage, code, result.events)
     if state == "tool_event":
         _incident(ws, req, "tool_event", audit_events(req.lineage, result.events))
@@ -635,16 +672,7 @@ def call(ws: store.Workspace, cfg: Config, req: CallRequest) -> object:
         raise IsolationError(f"{req.identity}: the stream carried no registry evidence")
     if req.lineage == "claude" and (not result.model or result.model != fingerprint["resolved_model"]):
         raise IntegrityError(f"{req.identity}: the model is not the qualified {fingerprint['resolved_model']}")
-    output, problems = parse_output(result.text, s_obj, req.validate)
-    if problems:
-        _incident(ws, req, "invalid_output", problems[:10])
-        raise CallFailed(f"{req.identity}: invalid output ({problems[0]})")
-    store.write_json(record_path(ws, req), {
-        "attempt_id": store.sha256_text(store.canonical(expect))[:16], "identity": req.identity,
-        "stage": req.stage, "role": req.role, "lineage": req.lineage, "run": req.run, "era": req.era,
-        "exit": code, **expect, "output": output, "events": [asdict(e) for e in result.events],
-    })
-    return output
+    return code, result
 
 
 PROBE_MODES = ("leak", "control")

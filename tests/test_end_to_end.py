@@ -29,8 +29,9 @@ class EndToEndTest(unittest.TestCase):
         cls.tmp = Path(os.path.realpath(tempfile.mkdtemp(prefix="abx-e2e-")))
         cls.ws_path = cls.tmp / "ws"
         cls.log = cls.tmp / "fakelog"
+        # Every recode and crosswalk prompt is answered with non-JSON once, so resampling runs through the real CLI.
         cls.env = {**os.environ, "PATH": f"{FAKES}{os.pathsep}{os.environ['PATH']}", "ABX_FAKE_LOG": str(cls.log),
-                   "PYTHONDONTWRITEBYTECODE": "1"}
+                   "PYTHONDONTWRITEBYTECODE": "1", "ABX_FAKE_INVALID": "recode:1,crosswalk:1"}
         cls.codes = {}
         cls.run_stage("init", "--text", str(FIXTURE / "autobiography.txt"), "--canary", "ABXPROFILECANARY")
         cfg_path = cls.ws_path / "config.json"
@@ -72,6 +73,24 @@ class EndToEndTest(unittest.TestCase):
                            capture_output=True, text=True, check=True)
         self.assertEqual(json.loads(p.stdout)["next"], "done: read report/report.md")
         self.assertEqual([e["gen"] for e in store.verify_manifest(self.ws)], ["A", "B", "C", "D", "E"])
+
+    def test_resamples_are_counted_and_frozen(self):
+        n = self.results["resampled"]
+        # Replicate runs send the same prompt, and the fake fails each distinct prompt once: 2 lineages x 2 eras.
+        self.assertEqual((n["prepare"], n["extract"], n["unmask"]), (0, 4, 2))
+        self.assertIn("Outputs resampled after failing validation: 6 (prepare 0, extract 4, unmask 2).", self.report)
+        frozen = {path for e in store.verify_manifest(self.ws) for path in e["artifacts"]}
+        incidents = {self.ws.rel(p) for p in self.ws.root.glob("run/incidents/**/*.json")}
+        self.assertEqual(len(incidents), 6)
+        self.assertLessEqual(incidents, frozen)
+        victim = self.ws.path(sorted(incidents)[0])
+        saved = victim.read_bytes()
+        victim.unlink()
+        try:
+            self.assertTrue(recompute.problems(self.ws))
+        finally:
+            victim.write_bytes(saved)
+        self.assertEqual(recompute.problems(self.ws), [])
 
     def test_report_first_section_is_non_clinical(self):
         headings = [line for line in self.report.splitlines() if line.startswith("## ")]

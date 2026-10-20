@@ -112,6 +112,9 @@ def expected(ws: store.Workspace) -> dict:
         "deductive_vs_ipip": unmask.domain_comparison(unmask.deductive_domains(collapsed, instrument), self_report)
         | {"deductive_reportable": deductive_arm.verdict in unmask.REPORTABLE},
         "domain_names": instrument["domains"],
+        "resampled": {stage: sum(1 for p in ws.root.glob(f"run/incidents/{stage}/**/*.json")
+                                 if store.read_json(p)["kind"] == "invalid_output")
+                      for stage in ("prepare", "extract", "unmask")},
     }
 
 
@@ -147,6 +150,9 @@ def _rows(want: dict) -> list[str]:
                     f"{_pct(a['raw_agreement'])}; missing: {_pct(a['missing_rate'])}; stability α within lineage: "
                     + ", ".join(f"{lin} {_num(v)}" for lin, v in sorted(a["stability"].items())) + ".")
     rows.append(f"rules: {want['agreement']['downgrades']}.")
+    n = want["resampled"]
+    rows.append(f"failing validation: {n['prepare'] + n['extract'] + n['unmask']} (prepare {n['prepare']}, "
+                f"extract {n['extract']}, unmask {n['unmask']}).")
     audit = want["agreement"]["integrity_audit"]
     if audit:
         ev, al = audit["events"]["counts"], audit["allowlist"]["counts"]

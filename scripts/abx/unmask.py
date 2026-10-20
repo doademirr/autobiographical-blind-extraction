@@ -129,6 +129,7 @@ def compute(ws: store.Workspace, cfg: config.Config) -> dict:
         "fingerprints": {lin: {k: v for k, v in q.items() if k != "evidence"} for lin, q in qualification.items()},
         "agreement": {k: agree[k] for k in ("inductive", "deductive", "downgrades")}
         | {"integrity_audit": agree.get("integrity_audit")},
+        "resampled": invoke.resampled(ws),
         "constructs": [{"id": c["id"], "name": c["name"], "definition": c["definition"], "lineages": c["lineages"],
                         "status": agree["construct_status"][c["id"]]} for c in book["constructs"]],
         "predictions": prediction_rates(codes, preds, supported if inductive_ok else set())
@@ -148,7 +149,8 @@ def unmask(ws: store.Workspace) -> dict:
         _crosswalk(ws, cfg, book)
         store.append_generation(ws, "D", [
             "run/crosswalk/constructs.md", *(f"run/crosswalk/codes-{c}.json" for c in cfg.crosswalk_coders),
-            *(ws.rel(p) for p in sorted(ws.root.glob("run/calls/unmask/crosswalk/*.json")))])
+            *(ws.rel(p) for g in ("run/calls/unmask/crosswalk/*.json", "run/incidents/unmask/**/*.json")
+              for p in sorted(ws.root.glob(g)))])
     results = compute(ws, cfg)
     store.write_json(ws.path("report/results.json"), results)
     store.write_text_atomic(ws.path("report/report.md"), report.render(results))

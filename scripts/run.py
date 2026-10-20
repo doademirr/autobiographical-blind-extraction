@@ -16,7 +16,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 import abx
-from abx import lifecycle, store
+from abx import invoke, lifecycle, store
 from abx.errors import AbxError
 
 UNEXPECTED = 70
@@ -90,7 +90,8 @@ def _run_stage(stage: lifecycle.Stage, args: argparse.Namespace) -> int:
     if stage.estimate and ws.path("prepare/eras.json").exists():
         pre = stage.estimate(ws)
         extra = f" (+{pre.conditional_calls} conditional)" if pre.conditional_calls else ""
-        print(f"{stage.name}: about {pre.model_calls} model calls{extra}: {pre.note}", file=sys.stderr)
+        print(f"{stage.name}: about {pre.model_calls} model calls{extra}: {pre.note}; an output that fails "
+              f"validation is resampled, up to {invoke.MAX_ATTEMPTS} attempts per call", file=sys.stderr)
     return SHOW.get(stage.name, _show)(stage.run(ws, args) if stage.args else stage.run(ws))
 
 

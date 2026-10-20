@@ -21,6 +21,8 @@ failures:
   ABX_FAKE_READ_INSTRUCTIONS  repeat any CLAUDE.md / AGENTS.md found in the working directory, as an
                         unlocked CLI would load it
   ABX_FAKE_STDERR       write this to stderr
+  ABX_FAKE_INVALID      "role:n,role:n": the first n answers to each prompt of that role are not JSON (resampling);
+                        they leave the prompt's occurrence count alone, so the valid answer is the usual one
 """
 
 import hashlib
@@ -70,6 +72,22 @@ def _bump(log: Path | None, lineage: str, prompt: str) -> None:
     path.write_text(json.dumps(state))
 
 
+def _invalid_now(log: Path | None, lineage: str, prompt: str) -> bool:
+    """Whether this answer is one of the invalid ones ABX_FAKE_INVALID asks for, counting it if so."""
+    wanted = dict(item.split(":") for item in os.environ.get("ABX_FAKE_INVALID", "").split(",") if item)
+    times = int(wanted.get(roles.role_of(prompt), 0))
+    if log is None or not times:
+        return False
+    path = log / f"invalid-{lineage}.json"
+    seen = json.loads(path.read_text()) if path.exists() else {}
+    key = hashlib.sha256(prompt.encode()).hexdigest()
+    if seen.get(key, 0) >= times:
+        return False
+    seen[key] = seen.get(key, 0) + 1
+    path.write_text(json.dumps(seen))
+    return True
+
+
 def _arg(argv: list[str], flag: str) -> str | None:
     return argv[argv.index(flag) + 1] if flag in argv else None
 
@@ -103,6 +121,9 @@ def main(lineage: str) -> int:
         text = os.environ["ABX_FAKE_RAW"]
     else:
         text = json.dumps(roles.respond(prompt, lineage, occurrence, os.environ.get("ABX_FAKE_LEAK")))
+    invalid = _invalid_now(log, lineage, prompt)
+    if invalid:
+        text = "not json"
     if lineage == "claude" and os.environ.get("ABX_FAKE_PROFILE_FETCH"):
         profile = Path(os.environ["HOME"]) / ".claude.json"
         profile.write_text(json.dumps({"oauthAccount": {"emailAddress": "someone@example.com"}}))
@@ -149,5 +170,6 @@ def main(lineage: str) -> int:
         time.sleep(float(os.environ["ABX_FAKE_SLEEP"]))
     if failing:
         return 1
-    _bump(log, lineage, prompt)
+    if not invalid:
+        _bump(log, lineage, prompt)
     return 0

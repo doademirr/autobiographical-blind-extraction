@@ -429,7 +429,8 @@ def extract(ws: store.Workspace) -> dict:
     _deductive(c)
     result = _agree(c, book)
     outputs = [ws.rel(p) for g in ("run/recode/*.json", "run/deductive/*.json", "run/calls/extract/recode/*.json",
-                                   "run/calls/extract/deductive_*/*.json", REQUALIFICATION_AUDIT)
+                                   "run/calls/extract/deductive_*/*.json", REQUALIFICATION_AUDIT,
+                                   "run/incidents/prepare/**/*.json", "run/incidents/extract/**/*.json")
                for p in sorted(ws.root.glob(g))]
     store.append_generation(ws, "C", ["run/agreement.json", *outputs])
     return result
