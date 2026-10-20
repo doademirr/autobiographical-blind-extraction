@@ -2,7 +2,7 @@
 
 Blind, pre-registered personality extraction from your own diary or autobiography, rated by two model families (Claude and Codex) and compared with what you predicted about yourself.
 
-> **Status:** v0.1, walking skeleton. Runs end to end live on macOS. The test suite includes real-binary isolation checks that call no model. Not yet run on a real person's record.
+> **Status:** v0.1, walking skeleton. Runs end to end live on macOS. The test suite includes real-binary isolation checks that call no model. Not yet run on a real person's record, and zoning calibration, which the spec requires before one, is not built yet (see `SPEC.md`, "Scope of this version").
 
 ```console
 $ python3 scripts/run.py extract ~/abx/franklin
@@ -107,7 +107,7 @@ python3 -m unittest                  # offline: fake CLIs, plus model-free check
 tests/live_smoke.sh "$TMPDIR/abx-live"   # live: the Franklin pipeline on your subscriptions (~55 calls)
 ```
 
-`SPEC.md` is the contract and `ARCHITECTURE.md` the as-built structure.
+`SPEC.md` is the v0.1 contract; its "Scope of this version" section lists the requirements this code does not yet build. `ARCHITECTURE.md` is the as-built structure.
 
 ## Credits
 

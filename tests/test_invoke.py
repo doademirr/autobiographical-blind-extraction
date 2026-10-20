@@ -214,6 +214,11 @@ class CallTest(unittest.TestCase):
         self.assertIn("cli_version", str(cm.exception))
         self.assertEqual(self.fw.prompts_logged(), [])
 
+    def test_audited_fingerprint_keys_are_every_live_field_plus_the_model(self):
+        for lineage in self.cfg.lineages:
+            live = invoke.live_fingerprint(self.cfg, lineage)
+            self.assertEqual(set(invoke.FINGERPRINT_KEYS), {*live, "resolved_model"})
+
     def test_unexpected_claude_model_is_integrity_failure(self):
         q = store.read_json(self.ws.path(invoke.QUALIFICATION))
         q["claude"]["resolved_model"] = "some-other-model"

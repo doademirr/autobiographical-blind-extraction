@@ -16,7 +16,8 @@ from typing import NamedTuple
 from . import agreement, artifacts, config, invoke, ipip, lifecycle, prompts, qualify, store
 from .errors import AbxError, IntegrityError
 
-__all__ = ["STAGE",
+__all__ = ["REQUALIFICATION_AUDIT",
+    "STAGE",
     "RaterKey",
     "Ratings",
     "Unit",

@@ -3,7 +3,7 @@
 Updated: 19/10/2026
 
 Stdlib-only Python ≥ 3.10. `scripts/run.py` is the CLI; `scripts/abx/` holds one module per stage plus the shared
-layers below. `SPEC.md` is the contract this structure implements.
+layers below. `SPEC.md` is the contract this structure implements, less the requirements listed under its "Scope of this version".
 
 ## Layout
 
