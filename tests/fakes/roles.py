@@ -85,6 +85,25 @@ def foil_author(prompt, lineage, occurrence):
     return {"foils": out}
 
 
+def auditor(prompt, lineage, occurrence):
+    """Keeps every foil but the near-miss of one Franklin era (by a hash of its label). Flags the first construct in
+    every era, or with ABX_FAKE_PLANTED only in an era whose text holds that planted sentence, citing it."""
+    segs = segments(prompt)
+    era = era_label(prompt)
+    decisions = [{"foil_id": fid, "decision": "drop" if (kind == "near_miss" and h(era, "drop") % 2 == 0) else "keep",
+                  "reason": "judged against the era"} for fid, kind in re.findall(r"^- (F\d) \((\w+),", prompt, re.M)]
+    constructs = re.findall(r"^- (C\d{2}): ", prompt, re.M)
+    planted = os.environ.get("ABX_FAKE_PLANTED")
+    if planted:
+        hit = re.search(rf"^\[(s\d{{5}})\] .*{re.escape(planted)}", prompt, re.M)
+        flags = [{"construct_id": constructs[0], "counter_sentence_ids": [hit.group(1)], "reason": "contradicts it"}] \
+            if hit and constructs else []
+    else:
+        flags = [{"construct_id": constructs[0], "counter_sentence_ids": [segs[0][0]], "reason": "contradicts it"}] \
+            if constructs else []
+    return {"foils": decisions, "flags": flags}
+
+
 def recode(prompt, lineage, occurrence):
     segs = segments(prompt)
     era = era_label(prompt)
@@ -162,8 +181,8 @@ def crosswalk(prompt, lineage, occurrence):
     return {"codes": codes}
 
 
-ROLES = {"foil_author": foil_author, "discovery": discovery, "codebook_author": codebook_author, "recode": recode,
-         "deductive_ledger": ledger, "deductive_scorer": scorer, "crosswalk": crosswalk}
+ROLES = {"foil_author": foil_author, "auditor": auditor, "discovery": discovery, "codebook_author": codebook_author,
+         "recode": recode, "deductive_ledger": ledger, "deductive_scorer": scorer, "crosswalk": crosswalk}
 
 
 def respond(prompt: str, lineage: str, occurrence: int, leak: str | None):

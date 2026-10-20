@@ -320,7 +320,7 @@ class ResumeTest(unittest.TestCase):
             resumed = store.read_json(ws.path("run/agreement.json"))
             total = len(model_calls()) - calls_before
             self.assertEqual(failed_attempts, len(records) + 1)
-            self.assertEqual(total, failed_attempts + 43 - len(records))
+            self.assertEqual(total, failed_attempts + 45 - len(records))  # 45 extract calls, 2 of them auditors
             for key in ("inductive", "deductive", "construct_status"):
                 self.assertEqual(resumed[key], clean[key])
         finally:

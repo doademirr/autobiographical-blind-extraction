@@ -1,9 +1,9 @@
 """`extract`: the blind engine, from discovery to the agreement gates (generations B and C).
 
 Discovery (lineage x run x era, future-blind) -> pooled candidates -> clean-room codebook
-author + validator -> card (generation B) -> recode -> deductive ledgers and strict
-scoring -> agreement by script -> integrity audit when agreement is very high
-(generation C). Every model call is a `CallRequest` through `invoke.call`.
+author + validator -> blind audit per era -> card of constructs and kept foils (generation B)
+-> recode -> deductive ledgers and strict scoring -> agreement by script -> integrity audit
+when agreement is very high (generation C). Every model call is a `CallRequest` through `invoke.call`.
 """
 
 from collections.abc import Mapping
@@ -11,7 +11,21 @@ from dataclasses import dataclass
 from types import MappingProxyType
 from typing import NamedTuple
 
-from . import agreement, artifacts, card, config, evidence, invoke, ipip, lifecycle, prompts, qualify, store
+from . import (
+    agreement,
+    artifacts,
+    audit,
+    card,
+    config,
+    evidence,
+    foils,
+    invoke,
+    ipip,
+    lifecycle,
+    prompts,
+    qualify,
+    store,
+)
 from .errors import AbxError, IntegrityError
 
 __all__ = [
@@ -80,9 +94,10 @@ def _coverage(items: set[str], got: list[str]) -> list[str]:
 def estimate(ws: store.Workspace) -> lifecycle.Preflight:
     cfg = config.load(ws)
     eras = len(store.read_json(ws.path("prepare/eras.json"))["eras"])
-    return lifecycle.Preflight(len(cfg.lineages) * cfg.runs * (3 * eras + 1) + 1, 2,
+    return lifecycle.Preflight(len(cfg.lineages) * cfg.runs * (3 * eras + 1) + 1 + eras, 2,
                                "discovery, recode and ledger per rater and era, one scorer per rater, one codebook "
-                               "author; if agreement is very high, one leak probe per lineage for the integrity audit")
+                               "author, one auditor per era; if agreement is very high, one leak probe per lineage "
+                               "for the integrity audit")
 
 
 # --- discovery ---------------------------------------------------------------------------------------------------
@@ -157,10 +172,11 @@ def validate_codebook(out: dict, refs: set[str]) -> list[str]:
 
 def _codebook(c: Context, candidates: dict[str, dict]) -> dict:
     salt = store.sha256_file(c.ws.path("prepare/redacted.txt"))
+    foil_ids = [f["item_id"] for era in c.era_ids for f in foils.load(c.ws, era)]
 
     def validate(o):
         problems = validate_codebook(o, set(candidates))
-        ids = [card.item_id(con["id"], salt) for con in o["constructs"]]
+        ids = [card.item_id(con["id"], salt) for con in o["constructs"]] + foil_ids
         return problems + (["card item ids collide; the author must rename a construct"]
                            if len(set(ids)) != len(ids) else [])
 
@@ -171,14 +187,19 @@ def _codebook(c: Context, candidates: dict[str, dict]) -> dict:
                    "item_id": card.item_id(con["id"], salt)} for con in out["constructs"]]
     book = {"constructs": constructs, "appendix": out["appendix"]}
     store.write_json(c.ws.path("run/codebook/codebook.json"), book)
-    store.write_text_atomic(artifacts.path_of(c.ws, "card:B"), card.render(constructs))
     return book
+
+
+def _card(c: Context, book: dict) -> None:
+    """Audit, then the card: constructs and the foils the audit kept, alike and sorted by item id."""
+    kept = audit.run(c.ws, c.cfg, c.ix, book["constructs"])["kept"]
+    store.write_text_atomic(artifacts.path_of(c.ws, "card:B"), card.render([*book["constructs"], *kept]))
 
 
 # --- recode ------------------------------------------------------------------------------------------------------
 
 def _recode(c: Context, book: dict) -> None:
-    items = {con["item_id"] for con in book["constructs"]}
+    items = {i["item_id"] for i in [*book["constructs"], *store.read_json(c.ws.path(audit.FOILS))["kept"]]}
     for lineage in c.cfg.lineages:
         for run in c.runs:
             for era in c.era_ids:
@@ -371,11 +392,13 @@ def extract(ws: store.Workspace) -> dict:
     if "B" not in gens:
         _discovery(c)
         candidates = _pool(c)
-        _codebook(c, candidates)
+        _card(c, _codebook(c, candidates))
         store.append_generation(ws, "B", [
-            "run/discovery/pool.json", "run/discovery/pool.md", "run/codebook/codebook.json", "run/codebook/card.md",
-            *(ws.rel(p) for g in ("run/discovery/*-r*-*.json", "run/discovery/*.hypotheses.md",
-                                  "run/calls/extract/discovery/*.json", "run/calls/extract/codebook_author/*.json")
+            "run/discovery/pool.json", "run/discovery/pool.md", "run/codebook/codebook.json",
+            "run/codebook/codebook.md", audit.FOILS, "run/codebook/card.md",
+            *(ws.rel(p) for g in ("run/discovery/*-r*-*.json", "run/discovery/*.hypotheses.md", "run/audit/*.json",
+                                  "run/calls/extract/discovery/*.json", "run/calls/extract/codebook_author/*.json",
+                                  "run/calls/extract/auditor/*.json")
               for p in sorted(ws.root.glob(g)))])
     if "C" in gens:
         return store.read_json(ws.path("run/agreement.json"))

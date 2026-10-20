@@ -1,0 +1,76 @@
+{
+ "type": "object",
+ "properties": {
+  "foils": {
+   "type": "array",
+   "maxItems": 3,
+   "items": {
+    "type": "object",
+    "properties": {
+     "foil_id": {
+      "type": "string",
+      "enum": [
+       "F1",
+       "F2",
+       "F3"
+      ]
+     },
+     "decision": {
+      "type": "string",
+      "enum": [
+       "keep",
+       "drop"
+      ]
+     },
+     "reason": {
+      "type": "string",
+      "maxLength": 300
+     }
+    },
+    "required": [
+     "foil_id",
+     "decision",
+     "reason"
+    ],
+    "additionalProperties": false
+   }
+  },
+  "flags": {
+   "type": "array",
+   "maxItems": 80,
+   "items": {
+    "type": "object",
+    "properties": {
+     "construct_id": {
+      "type": "string",
+      "pattern": "^C[0-9]{2}$"
+     },
+     "counter_sentence_ids": {
+      "type": "array",
+      "items": {
+       "type": "string",
+       "pattern": "^s[0-9]{5}$"
+      },
+      "minItems": 1,
+      "maxItems": 6
+     },
+     "reason": {
+      "type": "string",
+      "maxLength": 300
+     }
+    },
+    "required": [
+     "construct_id",
+     "counter_sentence_ids",
+     "reason"
+    ],
+    "additionalProperties": false
+   }
+  }
+ },
+ "required": [
+  "foils",
+  "flags"
+ ],
+ "additionalProperties": false
+}

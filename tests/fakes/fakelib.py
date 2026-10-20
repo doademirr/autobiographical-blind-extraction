@@ -21,6 +21,7 @@ failures:
   ABX_FAKE_READ_INSTRUCTIONS  repeat any CLAUDE.md / AGENTS.md found in the working directory, as an
                         unlocked CLI would load it
   ABX_FAKE_STDERR       write this to stderr
+  ABX_FAKE_PLANTED      the auditor flags a construct only in an era whose text holds this phrase, citing it
   ABX_FAKE_INVALID      "role:n,role:n": the first n answers to each prompt of that role are not JSON (resampling);
                         they leave the prompt's occurrence count alone, so the valid answer is the usual one
 """

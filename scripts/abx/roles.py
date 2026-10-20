@@ -31,6 +31,8 @@ _ROLES = [
     Role("foil_author", frozenset({"era"}), "foils", zoned_consumer=True, per_era=True,
          params=frozenset({"era_label"})),
     Role("codebook_author", frozenset({"pool"}), "codebook", zoned_consumer=True),
+    Role("auditor", frozenset({"codebook", "foils", "era"}), "audit", zoned_consumer=True, per_era=True,
+         params=frozenset({"era_label"})),
     Role("recode", frozenset({"card", "era"}), "recode", zoned_consumer=True, per_era=True,
          params=frozenset({"era_label"})),
     Role("deductive_ledger", frozenset({"era", "facets"}), "ledger", zoned_consumer=True, per_era=True,

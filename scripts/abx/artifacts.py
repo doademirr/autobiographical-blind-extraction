@@ -34,6 +34,7 @@ _KINDS: dict[str, tuple[tuple[str, ...], str]] = {
     "discovery": (("lineage", "run", "era"), "run/discovery/{lineage}-r{run}-{era}.json"),
     "hypotheses": (("lineage", "run", "era"), "run/discovery/{lineage}-r{run}-{era}.hypotheses.md"),
     "pool": (("=all",), "run/discovery/pool.md"),
+    "codebook": (("=B",), "run/codebook/codebook.md"),
     "card": (("=B",), "run/codebook/card.md"),
     "ledger": (("lineage", "run", "era"), "run/deductive/ledger-{lineage}-r{run}-{era}.json"),
     "ledgers": (("lineage", "run"), "run/deductive/ledgers-{lineage}-r{run}.json"),

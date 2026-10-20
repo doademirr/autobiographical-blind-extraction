@@ -36,11 +36,11 @@ class EraSizeTest(unittest.TestCase):
                 for k in range(n_eras)]
         return original, eras, text.sentences(original, segs)
 
-    def need(self, role: str, position: int, body: str, card: bool = True, n_eras: int = 8) -> int:
+    def need(self, role: str, position: int, body: str, card: bool = True, n_eras: int = 1) -> int:
         era_ids = [f"e{k + 1}" for k in range(n_eras)]
         prompt = sizing._prompt(self.ws, role, era_ids, position, era_ids[position], body)
         if not card:
-            prompt = prompt.replace(sizing._largest_card(self.ws), "")
+            prompt = prompt.replace(sizing._largest_card(self.ws, n_eras), "")
         return invoke.estimate_tokens(prompt)
 
     def era_texts(self, original, era, sents):
@@ -69,18 +69,18 @@ class EraSizeTest(unittest.TestCase):
     def test_the_largest_card_alone_tips_recode_over(self):
         original, eras, sents = self.corpus(1)
         _, full, _ = self.era_texts(original, eras[0], sents)
-        others = max(self.need(r, 0, full) for r in ERA_ROLES if r != "recode")
+        others = max(self.need(r, 0, full) for r in ERA_ROLES if r not in {"recode", "auditor"})
         budget = max(others, self.need("recode", 0, full, card=False))
         self.assertGreater(self.need("recode", 0, full), budget)
         with self.assertRaises(UsageError) as cm:
             sizing.check_eras(self.ws, _budget(self.cfg, budget), eras, sents, original)
-        self.assertIn("recode", str(cm.exception))
+        self.assertRegex(str(cm.exception), "recode|auditor")
 
     def test_identical_text_fits_an_early_era_but_not_a_later_discovery(self):
         original, eras, sents = self.corpus(8)
         _, full, _ = self.era_texts(original, eras[0], sents)
-        budget = max(self.need("recode", 0, full), self.need("discovery", 6, full))
-        self.assertGreater(self.need("discovery", 7, full), budget)
+        budget = max(self.need("recode", 0, full, n_eras=8), self.need("discovery", 6, full, n_eras=8))
+        self.assertGreater(self.need("discovery", 7, full, n_eras=8), budget)
         with self.assertRaises(UsageError) as cm:
             sizing.check_eras(self.ws, _budget(self.cfg, budget), eras, sents, original)
         self.assertIn("era e8 has", str(cm.exception))
@@ -101,8 +101,9 @@ class EraSizeTest(unittest.TestCase):
         once = sizing._words_that_fit(self.ws, "deductive_ledger", ["e1"], 0, "e1", lin, 6.0)
         twice = sizing._words_that_fit(self.ws, "recode", ["e1"], 0, "e1", lin, 6.0)
         template.write_text(template.read_text().replace("\nThe era again:\n{{era}}\n", ""))
+        # Within the few words the added template line itself takes.
         self.assertAlmostEqual(twice, sizing._words_that_fit(self.ws, "recode", ["e1"], 0, "e1", lin, 6.0) // 2,
-                               delta=1)
+                               delta=2)
         self.assertGreater(once, twice)
 
     def test_an_oversize_era_stops_prepare_before_any_model_call(self):
@@ -115,7 +116,8 @@ class EraSizeTest(unittest.TestCase):
         with self.assertRaises(UsageError) as cm:
             prepare.prepare(ws)
         self.assertEqual(cm.exception.exit_code, 2)
-        self.assertRegex(str(cm.exception), r"era e1 has \d+ words; recode on \w+ fits about \d+ words")
+        # Recode and the auditor both carry the largest codebook, so either can be the first to fail.
+        self.assertRegex(str(cm.exception), r"era e1 has \d+ words; (recode|auditor) on \w+ fits about \d+ words")
         self.assertEqual(self.fw.prompts_logged(), [])
         self.assertFalse(ws.path(invoke.QUALIFICATION).exists())
 
