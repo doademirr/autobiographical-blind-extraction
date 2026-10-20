@@ -32,6 +32,8 @@ Codex qualification pins the exact inert results some tools return on a given CL
 
 Clone the repo somewhere local. The skill drives `scripts/run.py` from the clone, so either open your agent in the clone, or copy `skills/autobiographical-blind-extraction/` into your agent's skills folder (for Claude Code, `~/.claude/skills/`) and tell it where the clone is. Then ask it to run the blind extraction on your record. It stops at each review point and never opens your sealed files.
 
+**Your text** must be plain UTF-8 text: `.txt` or `.md` files (Markdown is read as plain text, so headings and lists just become paragraphs). PDF, Word and scans aren't read; export them to text first. Pass one file or several with `--text`. Several files are joined in the order you list them, so list them oldest first. Separate paragraphs with a blank line: paragraphs are the units you group into eras.
+
 ## Use
 
 Pick a workspace folder outside any git repo or synced folder (Dropbox, iCloud, Google Drive). Then, stage by stage:
