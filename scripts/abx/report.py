@@ -80,8 +80,8 @@ def render(r: dict) -> str:
     for c in r["constructs"]:
         out.append(f"| {c['id']} | {c['name']} | {', '.join(c['lineages'])} | "
                    + " | ".join(c["status"][e] for e in eras) + " |")
-    out += ["", "Supported: both lineages present. Contested: they disagree. Absent-supported: both absent. "
-            "One-lineage: one side has no verdict; never counted as supported.", ""]
+    out += ["", "Supported: both lineages find the construct in the era. Contested: they disagree. Not-shown: "
+            "neither finds it. One-lineage: one side has no verdict; never counted as supported.", ""]
     p = r["predictions"]
     out += ["## Your predictions", ""]
     if not p["inductive_reportable"]:

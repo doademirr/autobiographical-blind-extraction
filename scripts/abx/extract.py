@@ -315,13 +315,15 @@ def load_ratings(ws: store.Workspace) -> Ratings:
 
 def arms(ratings: Ratings, book: dict, era_ids: list[str],
          facets: list[str]) -> tuple[agreement.ArmResult, agreement.ArmResult]:
-    """The inductive (constructs-only) and deductive (strict) arms, from named ratings."""
+    """The inductive (constructs-only) and deductive (strict) arms, from named ratings. The inductive value asks
+    whether the era shows the construct: absent and insufficient verdicts, after the citation rules, are both
+    not_present."""
     units = [Unit(con["item_id"], era) for con in book["constructs"] for era in era_ids]
     runs: dict = {}
     for key, rows in ratings.verdicts.items():
         cell = runs.setdefault(key.lineage, {}).setdefault(key.run, {})
         for v in rows:
-            cell[Unit(v["item_id"], key.era)] = None if v["verdict"] == "insufficient" else v["verdict"]
+            cell[Unit(v["item_id"], key.era)] = "present" if v["verdict"] == "present" else "not_present"
     druns: dict = {}
     for key, by_facet in ratings.scores.items():
         druns.setdefault(key.lineage, {})[key.run] = by_facet

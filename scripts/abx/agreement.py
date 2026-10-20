@@ -157,7 +157,7 @@ def status(values: list[object]) -> str:
         return "one-lineage"
     if len(set(present)) > 1:
         return "contested"
-    return "supported" if present[0] == "present" else "absent-supported"
+    return "supported" if present[0] == "present" else "not-shown"
 
 
 class Check(NamedTuple):

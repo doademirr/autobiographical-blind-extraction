@@ -80,12 +80,28 @@ class ArmTest(unittest.TestCase):
         self.assertEqual(res.stability["claude"], 1.0)
 
     def test_mixed_matrix_yields_each_status(self):
-        claude = ["present", "present", "absent", "absent", "present", N] + ["present", "absent"] * 3
-        codex = ["present", "absent", "absent", "present", N, N] + ["present", "absent"] * 3
+        P, X = "present", "not_present"
+        claude = [P, P, X, X, P, N] + [P, X] * 3
+        codex = [P, X, X, P, N, N] + [P, X] * 3
         res = ag.arm(_runs({"claude": [claude] * 3, "codex": [codex] * 3}), list(self.UNITS), "nominal")
         statuses = [ag.status([res.collapsed[lin][u] for lin in ("claude", "codex")]) for u in self.UNITS[:6]]
-        self.assertEqual(statuses, ["supported", "contested", "absent-supported", "contested",
-                                    "one-lineage", "no-verdict"])
+        self.assertEqual(statuses, ["supported", "contested", "not-shown", "contested", "one-lineage", "no-verdict"])
+
+    def test_mostly_not_present_matrix_is_defined_on_every_unit(self):
+        P, X = "present", "not_present"
+        claude = [P, P, P, X, X, X, X, X, X, X, X, X]
+        codex = [P, P, X, X, X, X, X, X, X, X, X, X]
+        res = ag.arm(_runs({"claude": [claude] * 3, "codex": [codex] * 3}), list(self.UNITS), "nominal")
+        self.assertEqual(res.paired_fraction, 1.0)
+        # By hand: 24 values, 5 present; one disagreeing unit. 1 - (2/24) / (2*5*19/(24*23)) = 0.758.
+        self.assertAlmostEqual(res.alpha, 0.758, places=3)
+
+    def test_all_not_present_pairs_fully_but_alpha_is_undefined(self):
+        res = ag.arm(_runs({"claude": [["not_present"] * 12] * 3, "codex": [["not_present"] * 12] * 3}),
+                     list(self.UNITS), "nominal")
+        self.assertEqual(res.paired_fraction, 1.0)
+        self.assertIsNone(res.alpha)
+        self.assertEqual(res.verdict, "not_reportable")
 
     def test_low_pairing_makes_alpha_undefined(self):
         claude = ["present", "absent", "present"] + [N] * 9

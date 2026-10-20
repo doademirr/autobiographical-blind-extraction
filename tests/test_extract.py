@@ -3,7 +3,7 @@ import os
 import unittest
 from unittest import mock
 
-from abx import extract, invoke, lifecycle, store, unmask
+from abx import agreement, extract, invoke, lifecycle, store, unmask
 from abx.errors import CallFailed, IntegrityError, IsolationError
 
 from .helpers import FakeWorkspace, build
@@ -81,6 +81,41 @@ class CodebookValidatorTest(unittest.TestCase):
         self.assertTrue(any("not placed" in p for p in problems))
 
 
+class InductiveArmTest(unittest.TestCase):
+    """The binary reading through `extract.arms`: verdicts map before runs collapse."""
+
+    def arm(self, by_rater: dict[tuple[str, int], list[str]]):
+        verdicts = {extract.RaterKey(lin, run, "e1"): tuple({"item_id": f"K00000{i + 1}", "verdict": v}
+                                                            for i, v in enumerate(vs))
+                    for (lin, run), vs in by_rater.items()}
+        book = {"constructs": [{"item_id": f"K00000{i}"} for i in (1, 2, 3)]}
+        return extract.arms(extract.Ratings(verdicts, {}), book, ["e1"], [])[0]
+
+    def test_absent_and_insufficient_both_map_to_not_present_before_collapse(self):
+        # claude's runs on K2: absent, insufficient, present -> mode not_present (2 of 3), not a three-way tie.
+        claude = [["present", "absent", "insufficient"], ["present", "insufficient", "insufficient"],
+                  ["present", "present", "absent"]]
+        codex = [["present", "insufficient", "absent"]] * 3
+        arm = self.arm({**{("claude", r + 1): v for r, v in enumerate(claude)},
+                        **{("codex", r + 1): v for r, v in enumerate(codex)}})
+        units = [extract.Unit(f"K00000{i}", "e1") for i in (1, 2, 3)]
+        self.assertEqual([arm.collapsed["claude"][u] for u in units], ["present", "not_present", "not_present"])
+        self.assertEqual([arm.collapsed["codex"][u] for u in units], ["present", "not_present", "not_present"])
+        self.assertEqual(arm.paired_fraction, 1.0)
+
+    def test_all_insufficient_output_pairs_fully_with_undefined_alpha(self):
+        arm = self.arm({(lin, r): ["insufficient"] * 3 for lin in ("claude", "codex") for r in (1, 2, 3)})
+        self.assertEqual(arm.paired_fraction, 1.0)
+        self.assertIsNone(arm.alpha)
+
+    def test_missing_runs_still_leave_one_lineage(self):
+        arm = self.arm({**{("claude", r): ["present"] * 3 for r in (1, 2, 3)}, ("codex", 1): ["present"] * 3})
+        unit = extract.Unit("K000001", "e1")
+        self.assertIsNone(arm.collapsed["codex"][unit])
+        self.assertEqual(agreement.status([arm.collapsed[lin][unit] for lin in ("claude", "codex")]), "one-lineage")
+        self.assertEqual(arm.paired_fraction, 0.0)
+
+
 class ExtractPipelineTest(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
@@ -98,7 +133,8 @@ class ExtractPipelineTest(unittest.TestCase):
     def test_generations_and_statuses(self):
         self.assertEqual([e["gen"] for e in store.verify_manifest(self.ws)], ["A", "B", "C"])
         statuses = {s for per_era in self.result["construct_status"].values() for s in per_era.values()}
-        self.assertTrue({"supported", "contested", "one-lineage"} <= statuses, statuses)
+        self.assertTrue(statuses <= {"supported", "contested", "not-shown", "one-lineage", "no-verdict"}, statuses)
+        self.assertTrue({"supported", "not-shown"} <= statuses, statuses)
         self.assertIsNotNone(self.result["inductive"]["alpha"])
         self.assertIsNotNone(self.result["deductive"]["alpha"])
         self.assertGreater(self.result["downgrades"], 0)

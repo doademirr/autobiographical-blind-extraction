@@ -72,8 +72,8 @@ def recode(prompt, lineage, occurrence):
         base = "present" if h(name, era) % 3 else "absent"
         if lineage == "codex" and name == "Self-directed study":
             base = "absent" if base == "present" else "present"
-        if lineage == "codex" and name == "Resentment of authority":
-            base = "insufficient"
+        if lineage == "codex" and name == "Resentment of authority" and base == "absent":
+            base = "insufficient"  # insufficient and absent agree under the binary reading
         if occurrence == 2 and h(name, era, "drift") % 4 == 0 and base != "insufficient":
             base = "absent" if base == "present" else "present"
         episodes = _two_episodes(segs)
