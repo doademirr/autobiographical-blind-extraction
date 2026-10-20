@@ -43,7 +43,7 @@ python3 scripts/run.py init    ~/abx/me --text memoir.md --canary 'Bunny' 'INTJ'
 python3 scripts/run.py prepare ~/abx/me   # writes review files, then stops
 python3 scripts/run.py prepare ~/abx/me   # after you approve them: qualifies both CLIs, zones the text
 python3 scripts/run.py seal    ~/abx/me   # after you fill in sealed/
-python3 scripts/run.py freeze  ~/abx/me
+python3 scripts/run.py freeze  ~/abx/me   # writes test items (foils), one call per era
 python3 scripts/run.py extract ~/abx/me
 python3 scripts/run.py unmask  ~/abx/me
 python3 scripts/run.py status  ~/abx/me   # where a workspace stands and what's next
@@ -69,7 +69,7 @@ Canaries are words only your own profile or instruction files would contain (a n
 | 5 | a model call failed; rerun the stage and completed calls are reused |
 | 70 | an unexpected harness error (a bug; please report it) |
 
-The report lands in `report/report.md`: agreement per arm, the construct table, how your predictions matched, and the observer estimate against your IPIP-NEO-120 by domain.
+The report lands in `report/report.md`: agreement per arm, foil error rates and the audit's flags, the construct table, how your predictions matched, and the observer estimate against your IPIP-NEO-120 by domain.
 
 ## Behaviour worth knowing
 
@@ -77,6 +77,7 @@ The report lands in `report/report.md`: agreement per arm, the construct table, 
 - **Resuming.** A failed call (exit 5) can be rerun; finished calls are reused only when every input still matches.
 - **What isolation means here.** Before your text is sent, each CLI is pointed at a local fake provider and the harness reads the request it actually sends: tool list, system text and any canary. Claude's capture uses a dummy API key, so it can't see what Claude Code adds only for logged-in accounts. Claude calls run with your account identity blanked, Codex calls inside a macOS read sandbox, and a leak probe checks both end to end.
 - **Strict evidence bar.** A construct counts as present in an era only with two occurrences in separate, non-adjacent passages. Agreement asks whether both model families see a construct in an era; a construct an era doesn't show counts as not shown, so most of a whole-life codebook is not shown in any one era.
+- **Foils and the audit.** A clean-room author writes up to three test items per era with a known answer for that era, and the raters score them mixed in with the real constructs. The report gives how often raters marked a trait present that the era plainly lacks, and how often they found one it plainly shows. A second model family audits each era first: it drops test items whose answer is arguable and flags constructs the era holds counter-evidence against. Foils never count toward agreement.
 - **Famous texts aren't blind.** Models know published autobiographies and restore redacted names from memory.
 
 ## Development

@@ -40,8 +40,10 @@ synced folder.
    removed) and a few eras of `prepare/substrate/` (what raters will see).
 3. **Review point 3:** the user fills in `sealed/self-prediction.md` and answers `sealed/ipip-120.csv` (items are
    in `sealed/ipip-120-items.md`) in their own editor. Then `python3 scripts/run.py seal <ws>`.
-4. `python3 scripts/run.py freeze <ws>` — pre-registers the method and substrate.
-5. `python3 scripts/run.py extract <ws>` — about 45 calls. Exit 1 means a reliability gate fired: the run is still
+4. `python3 scripts/run.py freeze <ws>` — one foil-author call per era (test items with a known answer, mixed into
+   the card later so rater errors can be measured), then pre-registers the method, substrate and foils.
+5. `python3 scripts/run.py extract <ws>` — prints its call estimate first (discovery, one audit per era, recode,
+   ledgers, scoring). Exit 1 means a reliability gate fired: the run is still
    valid and the report will say which arm is not reportable.
 6. `python3 scripts/run.py unmask <ws>` — the crosswalk, the IPIP reveal, then `report/report.md`.
 
