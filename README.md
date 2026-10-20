@@ -2,11 +2,9 @@
 
 Run a blind analysis over a body of text about you. Diaries, an autobiography project, even years of scattered writing about different events in your life.
 
-> **Status:** v0.1, walking skeleton. Runs end to end live on macOS. The test suite includes real-binary isolation checks that call no model. Not yet run on a real person's record, and zoning calibration, which the spec requires before one, is not built yet (see `SPEC.md`, "Scope of this version").
+The longer the better. To get a decent result we suggest at least 10k words of content in each era, across at least 5-6 different life eras. Each era is a period of years in length.
 
-## Why
-
-Why blind extraction? Ask your own agent to run the analysis and its memory, AGENTS.md files and other context colour its judgement.
+Why blind extraction? Why not just feed your diary to an agent and ask it for some psychoanalysis? Well, expect to get back a judgement coloured by its memory, AGENTS.md files, account holder info, and other leaks.
 
 This tool does three things:
 
@@ -14,26 +12,25 @@ This tool does three things:
 2. **Uses two blind raters, Claude and Codex.** Each runs as a clean-room CLI process with no tools, instruction files or account identity. It never sees who you are, your sealed self-prediction or any later era of your life.
 3. **Counts a trait only if both model families find it in separate episodes.** Claude and Codex rate independently across repeated runs, with identical prompts. The method and codebook are frozen before any results exist, and scripts compute every number.
 
-The claim ceiling is agreement between raters, never objectivity.
-
 **When not to use it:**
 
-- You want advice, a diagnosis or a type. The report describes patterns and agreement. It isn't a clinical assessment.
-- Your record is short. About 12k words was not enough for the inductive arm. Expect to need a lot more text.
-- You're on Linux or Windows. The Codex read sandbox uses macOS `sandbox-exec` and the Claude login comes from the macOS keychain.
+- You want advice, a diagnosis or a type. The report describes patterns and agreement. Not a clinical assessment.
+- Your record is short. 12k words total produced a poor result in tests. Expect to need a lot more text.
+- You're on Linux or Windows. Sorry! Feel free to open a PR. The Codex read sandbox uses macOS `sandbox-exec` and the Claude login comes from the macOS keychain.
 - You want to compare people. One subject per workspace.
+- You want to psycho-analyse a famous person. Like Ben Franklin. Technically possible, but expect the text to already be in the models' training data, so the result will be coloured.
 
 ## Requirements
 
 - macOS
 - Python 3.10+ (stdlib only, nothing to install)
-- [Claude Code](https://code.claude.com) 2.1.303+ and [Codex CLI](https://github.com/openai/codex) 0.160.1+, both logged in. Calls run on your own subscriptions; there are no API keys.
+- [Claude Code](https://code.claude.com) 2.1.303+ and [Codex CLI](https://github.com/openai/codex) 0.160.1+, both logged in. Calls run on your own subscriptions, recommend at least Max 5x / Pro, the cheap plans are unlikely to be enough. There are no API keys in this version.
 
 Codex qualification pins the exact inert results some tools return on a given CLI version. A newer Codex can fail qualification until those pins are updated, which is deliberate (exit 3 beats an unproven sandbox).
 
 ## Install the skill
 
-Clone the repo somewhere local (not a synced folder). The skill drives `scripts/run.py` from the clone, so either open your agent in the clone, or copy `skills/autobiographical-blind-extraction/` into your agent's skills folder (for Claude Code, `~/.claude/skills/`) and tell it where the clone is. Then ask it to run the blind extraction on your record. It stops at each review point and never opens your sealed files.
+Clone the repo somewhere local. The skill drives `scripts/run.py` from the clone, so either open your agent in the clone, or copy `skills/autobiographical-blind-extraction/` into your agent's skills folder (for Claude Code, `~/.claude/skills/`) and tell it where the clone is. Then ask it to run the blind extraction on your record. It stops at each review point and never opens your sealed files.
 
 ## Use
 
