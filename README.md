@@ -1,36 +1,12 @@
 # autobiographical-blind-extraction
 
-Blind, pre-registered personality extraction from your own diary or autobiography, rated by two model families (Claude and Codex) and compared with what you predicted about yourself.
+Run a blind analysis over a body of text about you. Diaries, an autobiography project, even years of scattered writing about different events in your life.
 
 > **Status:** v0.1, walking skeleton. Runs end to end live on macOS. The test suite includes real-binary isolation checks that call no model. Not yet run on a real person's record, and zoning calibration, which the spec requires before one, is not built yet (see `SPEC.md`, "Scope of this version").
 
-```console
-$ python3 scripts/run.py extract ~/abx/franklin
-extract: about 43 model calls (+2 conditional): discovery, recode and ledger per rater and era, ...
-{
- "gates": {"inductive": "not_reportable", "deductive": "tentative"},
- "alpha": {"inductive": null, "deductive": 0.7910170196227302}
-}
-$ python3 scripts/run.py unmask ~/abx/franklin
-{"report": "report/report.md"}
-```
-
-From the [Franklin demo report](examples/franklin/report.md):
-
-```
-- Deductive facets (strict) (ordinal, 30 units): α = 0.791, tentative (0.667 ≤ α < 0.80).
-  - Units with both lineages: 90%; raw agreement on them: 48%; missing: 7%; stability α within lineage: claude 0.888, codex 0.921.
-
-| C27 | Frugal calculation         | claude, codex | supported  | no-verdict |
-| C43 | Books as social currency   | claude, codex | supported  | supported  |
-| C52 | Acting on ideas from reading | claude, codex | supported | supported |
-```
-
 ## Why
 
-Run a blind analysis over a body of text about you. Diaries, an autobiography project, even years of scattered writing about different events in your life.
-
-Why blind? Ask your own agent to run the analysis and its memory, AGENTS.md files and other context colour its judgement.
+Why blind extraction? Ask your own agent to run the analysis and its memory, AGENTS.md files and other context colour its judgement.
 
 This tool does three things:
 
@@ -43,7 +19,7 @@ The claim ceiling is agreement between raters, never objectivity.
 **When not to use it:**
 
 - You want advice, a diagnosis or a type. The report describes patterns and agreement. It isn't a clinical assessment.
-- Your record is short. Two eras of about 6k words each were not enough for the inductive arm in the demo (34% of units rated by both lineages against a 50% floor). Expect to need a lot more text.
+- Your record is short. About 12k words was not enough for the inductive arm. Expect to need a lot more text.
 - You're on Linux or Windows. The Codex read sandbox uses macOS `sandbox-exec` and the Claude login comes from the macOS keychain.
 - You want to compare people. One subject per workspace.
 
@@ -96,11 +72,11 @@ The report lands in `report/report.md`: agreement per arm, the construct table, 
 
 ## Behaviour worth knowing
 
-- **Cost.** Every model-calling stage prints its call estimate first. The Franklin demo (two eras, about 12.5k words) took 51 calls and 36 minutes. Calls scale with eras × raters × replicates.
+- **Cost.** Every model-calling stage prints its call estimate first. Calls scale with eras × raters × replicates; two eras take about 50 calls and 35 minutes.
 - **Resuming.** A failed call (exit 5) can be rerun; finished calls are reused only when every input still matches.
-- **What isolation means here.** Before your text is sent, each CLI is pointed at a local fake provider and the harness reads the request it actually sends: the tool list, the system text and any canary. Scripted tool calls prove the tools a CLI won't remove are inert, and positive controls prove the checks can see a real file or MCP read. Codex's capture runs on your real login; Claude's runs on a dummy API key, so it can't see what Claude Code adds only for logged-in accounts. The one such addition known is the account email, so every Claude call runs with a temp home holding the login and an account profile with the identity blanked, any identity written back fails the call, and the leak probe checks end to end. Codex runs every call inside a macOS read sandbox.
+- **What isolation means here.** Before your text is sent, each CLI is pointed at a local fake provider and the harness reads the request it actually sends: tool list, system text and any canary. Claude's capture uses a dummy API key, so it can't see what Claude Code adds only for logged-in accounts. Claude calls run with your account identity blanked, Codex calls inside a macOS read sandbox, and a leak probe checks both end to end.
 - **Strict evidence bar.** A construct counts as present in an era only with two occurrences in separate, non-adjacent passages. On short records most verdicts end up insufficient, and the inductive arm says not reportable rather than guess.
-- **Famous texts aren't blind.** Models know published autobiographies. On Franklin they restored redacted names from memory (the prompt audit stopped the run, which is why the demo approves an empty redaction list). The demo tests the pipeline, not the method's validity.
+- **Famous texts aren't blind.** Models know published autobiographies and restore redacted names from memory.
 
 ## Development
 
@@ -115,7 +91,7 @@ tests/live_smoke.sh "$TMPDIR/abx-live"   # live: the Franklin pipeline on your s
 
 - IPIP-NEO-120 items and key: Johnson, J. A. (2014). Measuring thirty facets of the Five Factor Model with a 120-item public domain inventory. *Journal of Research in Personality*, 51, 78–89. Public domain, via [ipip.ori.org](https://ipip.ori.org).
 - Krippendorff's α follows Krippendorff (2011), *Computing Krippendorff's Alpha-Reliability*, and reproduces its worked examples.
-- Demo text: *Autobiography of Benjamin Franklin*, Project Gutenberg eBook #20203. The demo's self-prediction and questionnaire answers are synthetic.
+- Test fixture: *Autobiography of Benjamin Franklin*, Project Gutenberg eBook #20203, with synthetic comparators. An example report is in [`examples/franklin/`](examples/franklin/report.md).
 
 ## Licence
 
