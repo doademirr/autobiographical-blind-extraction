@@ -3,7 +3,7 @@ import re
 import unittest
 from unittest import mock
 
-from abx import init, names, prepare, prompts, store
+from abx import config, init, invoke, names, prepare, prompts, qualify, store
 from abx import text as abx_text
 from abx.errors import IsolationError, UsageError
 from abx.withheld import Withheld
@@ -29,6 +29,8 @@ class ScanTest(unittest.TestCase):
                 "We read CHAPTER notes in The Hague in March and on Sunday, praying to God. "
                 "I met Anne Mary Jane Doe. Alice left early. She said: That was all.")
         found = scanned(body)
+        self.assertEqual(sorted(found), sorted(["John Smith", "Brown", "John", "O'Connor", "Smith-Jones", "Hague",
+                                                "Anne Mary Jane"]))
         self.assertIn("John Smith", found)
         self.assertTrue(found["Brown"].titled)
         self.assertIn("John", found)
@@ -41,6 +43,11 @@ class ScanTest(unittest.TestCase):
                        "Then", "Mr", "Mrs"):
             with self.subTest(absent=absent):
                 self.assertNotIn(absent, found)
+
+    def test_accented_names_are_whole_words(self):
+        found = scanned("I met Dr. José. Later I saw José and Émile, then Émile again.")
+        self.assertEqual(set(found), {"Émile", "José"})
+        self.assertEqual((found["José"].count, found["José"].titled), (2, True))
 
     def test_counts_include_sentence_starts_and_are_whole_word(self):
         body = "Alice came. I saw Alice. Alice's dog barked at Alicea."
@@ -61,6 +68,10 @@ class PrefillTest(unittest.TestCase):
             "John Smith": "Name 1", "Brown": "Name 2", "Smith": "Name 1", "John Wood": "Name 3", "John": "Name 4",
             "Wood": "Name 3"})
 
+    def test_placeholders_never_contain_a_listed_name(self):
+        candidates = [names.Candidate("Name", 2, False, "p1"), names.Candidate("Ada", 2, False, "p1")]
+        self.assertEqual(names.prefill(candidates), {"Name": "Person 1", "Ada": "Person 2"})
+
     def test_preview_lists_every_candidate(self):
         candidates = [names.Candidate("Ann Lee", 2, False, "p0001"), names.Candidate("Once", 1, False, "p0002")]
         text = names.preview(candidates, names.prefill(candidates))
@@ -69,24 +80,23 @@ class PrefillTest(unittest.TestCase):
 
 
 class NameAuditTest(unittest.TestCase):
-    WITHHELD = Withheld(redacted_names=["Ann", "Boston"])
+    def setUp(self):
+        self.withheld = Withheld(redacted_names=["Ann", "Boston"])
+        self.zoner = (prompts.SHIPPED_TEMPLATES / "zoner.md").read_text(encoding="utf-8")
+        self.slots = dict.fromkeys(re.findall(r"\{\{([a-z_]+)\}\}", self.zoner), "Era text.")
 
-    def test_whole_word_in_supplied_text(self):
-        def prompt(supplied, shipped=True):
-            return prompts.Prompt("recode", f"Template words. {supplied}", {}, supplied=supplied,
-                                  shipped_template=shipped)
+    def test_whole_word_in_what_fills_the_template(self):
+        def prompt(value):
+            return prompts.Prompt("zoner", self.zoner, {**self.slots, "chunk": value}, {})
         with self.assertRaises(IsolationError):
-            prompts.audit(prompt("we met Ann's sister"), self.WITHHELD)
-        prompts.audit(prompt("Anna came by"), self.WITHHELD)
+            prompts.audit(prompt("we met Ann's sister"), self.withheld)
+        prompts.audit(prompt("Anna came by"), self.withheld)
 
     def test_shipped_template_wording_is_exempt_and_an_edited_template_is_not(self):
-        shipped = prompts.Prompt("zoner", "An example from Boston. Era text.", {}, supplied="Era text.",
-                                 shipped_template=True)
-        prompts.audit(shipped, self.WITHHELD)
-        edited = prompts.Prompt("zoner", "An example from Boston. Era text.", {}, supplied="Era text.",
-                                shipped_template=False)
+        self.assertIsNotNone(re.search(r"(?<!\w)Boston(?!\w)", self.zoner))
+        prompts.audit(prompts.Prompt("zoner", self.zoner, self.slots, {}), self.withheld)
         with self.assertRaises(IsolationError):
-            prompts.audit(edited, self.WITHHELD)
+            prompts.audit(prompts.Prompt("zoner", self.zoner + "\nOnce more: Boston.", self.slots, {}), self.withheld)
 
 
 class PrepareScanTest(unittest.TestCase):
@@ -156,7 +166,8 @@ class PrepareScanTest(unittest.TestCase):
         store.write_json(self.ws.path("prepare/eras.json"), store.read_json(FIXTURE / "eras.json"))
         with self.assertRaises(UsageError) as cm:
             prepare.prepare(self.ws)
-        self.assertIn("Collins", str(cm.exception))
+        self.assertIn("entry 1", str(cm.exception))
+        self.assertNotIn("Collins", str(cm.exception))
         self.assertEqual(self.fw.prompts_logged(), [])
 
     def test_a_name_added_to_a_staged_template_fails_the_audit(self):
@@ -168,6 +179,18 @@ class PrepareScanTest(unittest.TestCase):
         zoner.write_text(zoner.read_text() + "\nRemember Boston.\n")
         with self.assertRaises(IsolationError):
             prepare.prepare(self.ws)
+
+    def test_the_probes_are_audited_before_anything_is_sent(self):
+        prepare.prepare(self.ws)
+        store.write_json(self.ws.path("prepare/redactions.json"), {"approved": True, "names": {"Collins": "C."}})
+        schema_path = self.ws.path("prereg/schemas/probe.json")
+        store.write_json(schema_path, {**store.read_json(schema_path), "description": "about Collins"})
+        cfg = config.load(self.ws)
+        with self.assertRaises(IsolationError):
+            invoke.probe(self.ws, cfg, "claude", ())
+        with self.assertRaises(IsolationError):
+            qualify.qualify(self.ws, cfg)
+        self.assertEqual(self.fw.prompts_logged(), [])
 
     def test_a_name_added_to_a_staged_schema_fails_the_audit(self):
         prepare.prepare(self.ws)

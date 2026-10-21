@@ -313,7 +313,7 @@ class SubstringAuditTest(unittest.TestCase):
         self_prediction=["P1: I will be found conscientious."], ipip=["i001,4"])
 
     def _p(self, role, text):
-        return prompts.Prompt(role, text, {})
+        return prompts.Prompt(role, text, {}, {})
 
     def test_names_blocked_everywhere_including_zoning(self):
         with self.assertRaises(IsolationError):

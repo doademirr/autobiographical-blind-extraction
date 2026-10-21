@@ -201,9 +201,9 @@ def prepare(ws: store.Workspace) -> dict:
     if not all(isinstance(k, str) and isinstance(v, str) for k, v in redactions.items()):
         raise UsageError("redactions.json: names must map each name to its replacement text")
     listed = text.name_pattern(redactions) if redactions else None
-    holding = sorted(n for n, r in redactions.items() if listed and listed.search(r))
+    holding = [k + 1 for k, r in enumerate(redactions.values()) if listed and listed.search(r)]
     if holding:
-        raise UsageError(f"redactions.json: the replacement for {holding[0]!r} contains a name on the list, so that "
+        raise UsageError(f"redactions.json: the replacement in entry {holding[0]} contains a name on the list, so that "
                          "name would reach every prompt; change the replacement")
     eras = snapshot["eras.json"].doc["eras"]
     if not all(isinstance(e, dict) for e in eras):

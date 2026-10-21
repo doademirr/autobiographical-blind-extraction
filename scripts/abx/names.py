@@ -16,6 +16,8 @@ from .text import Sentence, name_pattern
 __all__ = ["Candidate", "prefill", "preview", "scan"]
 
 MAX_RUN = 3
+# The first stem no chosen name uses, so no placeholder contains a name on the list.
+PLACEHOLDER_STEMS = ("Name", "Person", "Someone", "Party")
 TITLES = frozenset({"Mr", "Mrs", "Ms", "Miss", "Dr", "Sir", "Lady", "Lord", "Aunt", "Uncle", "Captain", "Rev", "St"})
 FUNCTION_WORDS = frozenset({"The", "A", "An", "And", "But", "Or", "In", "On", "At", "To", "Of", "For", "With", "My",
                             "Our", "His", "Her", "Their", "That", "This", "These", "Those", "Without", "When", "If",
@@ -25,7 +27,7 @@ NOT_NAMES = frozenset({"Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "
                        "February", "March", "April", "May", "June", "July", "August", "September", "October",
                        "November", "December", "God", "Christmas", "Easter", "English", "French", "Mother", "Father",
                        "Mum", "Dad"}) | TITLES
-_TOKEN = re.compile(r"[A-Za-z][A-Za-z'’\-]*")
+_TOKEN = re.compile(r"[^\W\d_](?:[^\W\d_]|['’\-])*")
 _OPENERS = " \t\n\"'“‘([{"
 # A capital after one of these inside a sentence starts a clause, not a name.
 _CLAUSE_BREAKS = ":;—–-"
@@ -80,6 +82,9 @@ def _sightings(body: str) -> list[tuple[str, bool]]:
                 body[words[i].end:words[i + 1].start] == " " and _capitalised(words[i + 1].text):
             i += 1
             run.append(words[i])
+        while i + 1 < len(words) and body[words[i].end:words[i + 1].start] == " " and \
+                _capitalised(words[i + 1].text) and not words[i].possessive:
+            i += 1  # a run longer than MAX_RUN words keeps its first ones; the rest are not a run of their own
         i += 1
         texts = [w.text for w in run]
         while texts and texts[0] in FUNCTION_WORDS:
@@ -110,10 +115,11 @@ def prefill(candidates: Sequence[Candidate]) -> dict[str, str]:
     multi = [n for n in chosen if " " in n]
     owner = {n: owners[0] for n in chosen if " " not in n
              for owners in [[m for m in multi if n in m.split(" ")]] if len(owners) == 1}
+    stem = next(s for s in PLACEHOLDER_STEMS if not any(s in n.split(" ") for n in chosen))
     placeholders: dict[str, str] = {}
     for name in chosen:
         if name not in owner:
-            placeholders[name] = f"Name {len(placeholders) + 1}"
+            placeholders[name] = f"{stem} {len(placeholders) + 1}"
     for name, full in owner.items():
         placeholders[name] = placeholders[full]
     return {name: placeholders[name] for name in chosen}
@@ -123,7 +129,7 @@ def preview(candidates: Sequence[Candidate], names: dict[str, str]) -> str:
     """Pre-filled candidates by count, then those seen once and left out."""
     kept = sorted((c for c in candidates if c.name in names), key=lambda c: (-c.count, c.name))
     rest = [c for c in candidates if c.name not in names]
-    lines = ["Pre-filled in redactions.json (name, times in the text, replacement, first paragraph):"]
+    lines = ["Pre-filled in redactions.json (name, times in the text, replacement, first paragraph seen mid-sentence):"]
     lines += [f"{c.name}\t{c.count}\t{names[c.name]}\t{c.first_segment}" + ("\t(after a title)" if c.titled else "")
               for c in kept]
     lines += ["", "Seen once and not pre-filled (add any that are people you want hidden):"]

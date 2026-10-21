@@ -714,6 +714,7 @@ def probe(ws: store.Workspace, cfg: Config, lineage: str, canaries: tuple[str, .
     if mode not in PROBE_MODES:
         raise UsageError(f"unknown probe mode {mode!r}")
     prompt = prompts.assemble("probe", {"schema": "schema:probe"}, artifacts.resolver(ws))
+    prompts.audit(prompt, withheld.load(ws))
     schema_text = artifacts.resolver(ws)("schema:probe")
     lin = cfg.lineage(lineage)
     planted = f"ABXLEAKCONTROL{secrets.token_hex(4).upper()}"

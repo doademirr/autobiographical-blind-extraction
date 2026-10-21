@@ -17,7 +17,7 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
 
-from . import artifacts, capture, invoke, prompts, store
+from . import artifacts, capture, invoke, prompts, store, withheld
 from .config import Config, retained
 from .errors import CallFailed, IsolationError, UsageError
 
@@ -293,7 +293,9 @@ def leak_control(ws: store.Workspace, cfg: Config, lineage: str) -> dict:
 
 
 def qualify(ws: store.Workspace, cfg: Config, out: str = invoke.QUALIFICATION) -> dict:
-    prompt = prompts.assemble("probe", {"schema": "schema:probe"}, artifacts.resolver(ws)).text
+    assembled = prompts.assemble("probe", {"schema": "schema:probe"}, artifacts.resolver(ws))
+    prompts.audit(assembled, withheld.load(ws))
+    prompt = assembled.text
     record = evidence_recorder(ws)
     result = {}
     with Canary() as canary:

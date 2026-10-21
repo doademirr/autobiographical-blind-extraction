@@ -7,6 +7,7 @@ its role declares, so every call's provenance is the id list it records.
 import re
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass
+from functools import cached_property
 from pathlib import Path
 from types import MappingProxyType
 
@@ -28,14 +29,22 @@ SHIPPED_TEMPLATES = Path(__file__).resolve().parents[2] / "prompts"
 
 @dataclass(frozen=True)
 class Prompt:
-    """`supplied` is what filled the template's slots (inputs, schema and labels); `shipped_template` says the
-    template is byte-identical to the one this harness ships, so its own wording is not the user's text."""
+    """A template and the values that fill its slots (inputs, schema and labels); the text sent is derived from
+    them, so the audit's view of what came from the workspace cannot disagree with what is sent."""
 
     role: str
-    text: str
+    template: str
+    values: Mapping[str, str]
     artifacts: Mapping[str, str]  # artifact id -> sha256 of its text
-    supplied: str = ""
-    shipped_template: bool = False
+
+    @cached_property
+    def text(self) -> str:
+        return _SLOT.sub(lambda m: self.values[m.group(1)], self.template)
+
+
+def _shipped_template(role: str) -> str | None:
+    path = SHIPPED_TEMPLATES / f"{role}.md"
+    return path.read_text(encoding="utf-8") if path.exists() else None
 
 
 def check_allowlist(role: str, ids: list[str], rater: tuple[str, int] | None = None,
@@ -86,21 +95,21 @@ def assemble(role: str, slots: dict[str, str], resolve: Callable[[str], str],
     missing = set(_SLOT.findall(template)) - set(values)
     if missing:
         raise UsageError(f"template:{role} has unfilled slots {sorted(missing)}")
-    shipped = SHIPPED_TEMPLATES / f"{role}.md"
-    return Prompt(role, _SLOT.sub(lambda m: values[m.group(1)], template),
-                  MappingProxyType({aid: store.sha256_text(t) for aid, t in texts.items()}),
-                  supplied="\n".join(values[k] for k in sorted(values)),
-                  shipped_template=shipped.exists() and shipped.read_text(encoding="utf-8") == template)
+    return Prompt(role, template, MappingProxyType(values),
+                  MappingProxyType({aid: store.sha256_text(t) for aid, t in texts.items()}))
 
 
 def audit(prompt: Prompt, withheld: Withheld, after_blind_results: bool = False) -> None:
     """Secondary check; the allowlist is the primary guarantee. Approved-redacted names match whole-word, as redaction
-    does, outside an unchanged shipped template; the rest match as exact substrings of the whole prompt."""
+    does, in everything that filled the template, and in the template too unless it is the shipped one unchanged
+    (compared as the text that is sent); the rest match as exact substrings of the whole prompt."""
     def hit(needles):
         return next((n for n in needles if n and n in prompt.text), None)
 
     names = [n for n in withheld.redacted_names if n]
-    if names and name_pattern(names).search(prompt.supplied if prompt.shipped_template else prompt.text):
+    filled = "\n".join(prompt.values[k] for k in sorted(prompt.values))
+    scope = filled if prompt.template == _shipped_template(prompt.role) else prompt.text
+    if names and name_pattern(names).search(scope):
         raise IsolationError(f"{prompt.role} prompt carries an approved-redacted name")
     if get_role(prompt.role).zoned_consumer and hit([s for s in withheld.removed_sentences
                                                      if len(s) >= MIN_REMOVED_LEN]):

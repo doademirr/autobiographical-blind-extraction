@@ -10,8 +10,9 @@ from dataclasses import asdict, dataclass
 from .artifacts import ERA_ID
 from .errors import UsageError
 
-__all__ = ["REMOVED_MARK", "ZONING_CHUNK", "Segment", "Sentence", "as_dicts", "label_coverage", "redact",
-           "render_numbered", "render_zoned", "segment", "sentences", "to_original", "validate_eras", "zoning_chunks"]
+__all__ = ["REMOVED_MARK", "ZONING_CHUNK", "Segment", "Sentence", "as_dicts", "label_coverage", "name_pattern",
+           "redact", "render_numbered", "render_zoned", "segment", "sentences", "to_original", "validate_eras",
+           "zoning_chunks"]
 
 _PARAGRAPH_BREAK = re.compile(r"\n[ \t]*\n\s*")
 # A sentence ends at . ! ? (plus any closing quotes or brackets) followed by whitespace.
