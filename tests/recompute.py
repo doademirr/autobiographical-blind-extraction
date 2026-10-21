@@ -10,6 +10,7 @@ own row.
 import json
 import sys
 from pathlib import Path
+from typing import NamedTuple
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "scripts"))
 
@@ -38,6 +39,11 @@ def _corpus(ws: store.Workspace) -> dict:
     return stats
 
 
+class _Judged(NamedTuple):
+    era: str | None
+    label: str | None
+
+
 def _calibration(ws: store.Workspace) -> tuple[dict, list[str]]:
     """The calibration rebuilt from evidence: each recorded part's labels from both judges' frozen call records, each
     target's zoner label from the frozen zoning. Returns the summary and every way `calibration.json` departs from
@@ -59,19 +65,19 @@ def _calibration(ws: store.Workspace) -> tuple[dict, list[str]]:
             if len(ids) != len(set(ids)) or sorted(ids) != sorted(part["sentence_ids"]):
                 out.append(f"calibration: {lin}'s labels for {part['era']} part {part['part']} do not cover its "
                            "sentences exactly once")
-            judged[lin] |= {lab["sentence_id"]: (part["era"], lab["label"]) for lab in rows}
+            judged[lin] |= {lab["sentence_id"]: _Judged(part["era"], lab["label"]) for lab in rows}
     ids = [t["sentence_id"] for t in rec["targets"]]
     if len(ids) != len(set(ids)):
         out.append("calibration: a target is repeated")
     counts = {"fk": 0, "kept": 0, "fr": 0, "removed": 0, "same": 0, "same_side": 0}
     for t in {t["sentence_id"]: t for t in rec["targets"]}.values():
         sid, era = t["sentence_id"], t["era"]
-        labels = {lin: judged[lin].get(sid, (None, None)) for lin in roster}
+        labels = {lin: judged[lin].get(sid, _Judged(None, None)) for lin in roster}
         if sid not in zoning[era] or t["zoner"] != zoning[era][sid] or sorted(t["judges"]) != roster or \
-                any(labels[lin] != (era, t["judges"][lin]) for lin in roster):
+                any(labels[lin] != _Judged(era, t["judges"][lin]) for lin in roster):
             out.append(f"calibration: target {sid} does not match its zoning and judge records")
             continue
-        votes = [label for _, label in labels.values()]
+        votes = [j.label for j in labels.values()]
         sides = {"keep" if v == "keep" else "removed" for v in votes}
         counts["same"] += len(set(votes)) == 1
         counts["same_side"] += len(sides) == 1
