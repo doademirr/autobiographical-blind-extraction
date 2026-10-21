@@ -46,6 +46,8 @@ _ROLES = [
          params=frozenset({"era_label"})),
     Role("deductive_scorer", frozenset({"ledgers", "facets"}), "scores", zoned_consumer=True,
          rater_bound=frozenset({"ledgers"})),
+    Role("deductive_scorer_lenient", frozenset({"ledgers", "facets"}), "scores", zoned_consumer=True,
+         rater_bound=frozenset({"ledgers"})),
     Role("crosswalk", frozenset({"constructs", "self_prediction", "facets"}), "crosswalk", zoned_consumer=True),
     Role("probe", frozenset(), "probe"),
 ]

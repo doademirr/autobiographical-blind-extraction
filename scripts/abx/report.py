@@ -12,6 +12,8 @@ REASON_TEXT = {"no_units": "there is nothing to rate (an empty codebook)",
                "no_variation": "the ratings do not vary, so agreement is undefined",
                "fewer_lineages": "fewer than two lineages rated",
                "low_pairing": f"fewer than {MIN_PAIRED:.0%} of units carry a value from both lineages"}
+STANCE_REASON_TEXT = {"no_pairable_unit": "no lineage-facet score has a value under both stances",
+                      "no_variation": REASON_TEXT["no_variation"]}
 
 
 def num(value, digits: int = 3) -> str:
@@ -46,6 +48,22 @@ def _arm(name: str, arm: dict) -> list[str]:
     lines.append(f"  - Units with both lineages: {pct(arm['paired_fraction'])}; raw agreement on them: "
                  f"{pct(arm['raw_agreement'])}; missing: {pct(arm['missing_rate'])}; "
                  f"stability α within lineage: {stab}.")
+    return lines
+
+
+def _stances(a: dict) -> list[str]:
+    """The lenient stance as a sensitivity result: never a gate, never a comparison input."""
+    lenient, s = a["deductive_lenient"], a["stances"]
+    stab = ", ".join(f"{lin} {num(v)}" for lin, v in sorted(lenient["stability"].items()))
+    shift = "n/a" if s["mean_shift"] is None else f"{s['mean_shift']:+.2f}"
+    lines = [f"- Deductive facets, lenient stance (sensitivity, not a gate; {lenient['units']} units): "
+             f"α = {num(lenient['alpha'])}; units with both lineages: {pct(lenient['paired_fraction'])}; raw "
+             f"agreement on them: {pct(lenient['raw_agreement'])}; stability α within lineage: {stab}.",
+             f"- Strict against lenient scoring (sensitivity; {s['paired']} of {s['units']} lineage-facet scores "
+             f"paired): α = {num(s['alpha'])}; the same score in {pct(s['equal_rate'])}; lenient minus strict "
+             f"on average: {shift}."]
+    if s["reason"]:
+        lines.append(f"  - Undefined: {STANCE_REASON_TEXT.get(s['reason'], s['reason'])}.")
     return lines
 
 
@@ -199,6 +217,7 @@ def render(r: dict) -> str:
     out += ["", "## Agreement (computed by script)", ""]
     out += _arm("Inductive constructs", r["agreement"]["inductive"])
     out += _arm("Deductive facets (strict)", r["agreement"]["deductive"])
+    out += _stances(r["agreement"])
     d = r["agreement"]["inductive_with_foils"]
     out.append(f"- Constructs plus foils (diagnostic, not a gate; {d['units']} units): α = {num(d['alpha'])}; units "
                f"with both lineages: {pct(d['paired_fraction'])}; raw agreement on them: {pct(d['raw_agreement'])}.")

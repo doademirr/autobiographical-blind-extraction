@@ -9,6 +9,7 @@ failures:
   ABX_FAKE_FAIL         end with a CLI failure
   ABX_FAKE_LEAK         answer the leak probe with this text
   ABX_FAKE_FAIL_AFTER   fail every call after this many successful ones (interruption)
+  ABX_FAKE_FAIL_ROLE    fail every call of this role (interruption at a role boundary)
   ABX_FAKE_RAW          print this string as the final message verbatim
   ABX_FAKE_SLEEP        after printing the stream, sleep this many seconds (timeouts)
   ABX_FAKE_STRAY_CITATION  the deductive scorer cites a sentence id no ledger holds
@@ -16,6 +17,8 @@ failures:
   ABX_FAKE_THINKING     (claude) emit this as a thinking block
   ABX_FAKE_NO_INIT      (claude) omit the init event
   ABX_FAKE_NO_MESSAGE   finish successfully without a final message
+  ABX_FAKE_LENIENT_SAME the lenient scorer gives every rater the same scores
+  ABX_FAKE_STRICT_MIRROR (codex) the strict scorer mirrors its scores around 4
   ABX_FAKE_CROSS_FACET  the deductive scorer scores a facet with no evidence, citing another facet's
   ABX_FAKE_ERROR_NOTICE (codex) emit a top-level error notice with this message
   ABX_FAKE_READ_INSTRUCTIONS  repeat any CLAUDE.md / AGENTS.md found in the working directory, as an
@@ -114,7 +117,8 @@ def main(lineage: str) -> int:
             f.write(json.dumps({"lineage": lineage, "argv": argv, "prompt": prompt,
                                 "config_dir": os.environ.get("CLAUDE_CONFIG_DIR")}) + "\n")
     fail_after = os.environ.get("ABX_FAKE_FAIL_AFTER")
-    failing = bool(os.environ.get("ABX_FAKE_FAIL")) or (fail_after is not None and calls >= int(fail_after))
+    failing = bool(os.environ.get("ABX_FAKE_FAIL")) or (fail_after is not None and calls >= int(fail_after)) or \
+        os.environ.get("ABX_FAKE_FAIL_ROLE") == roles.role_of(prompt)
     if os.environ.get("ABX_FAKE_READ_INSTRUCTIONS") and "--setting-sources" not in argv and "--disable" not in argv:
         planted = [Path(n).read_text() for n in ("CLAUDE.md", "AGENTS.md") if Path(n).exists()]
         text = json.dumps({"answer": " ".join(planted) or "NONE"})

@@ -114,7 +114,7 @@ class InductiveArmTest(unittest.TestCase):
                                                             for i, v in enumerate(vs))
                     for (lin, run), vs in by_rater.items()}
         book = {"constructs": [{"item_id": f"K00000{i}"} for i in (1, 2, 3)]}
-        return extract.arms(extract.Ratings(verdicts, {}), book, ["e1"], [])[0]
+        return extract.arms(extract.Ratings(verdicts, {}, {}), book, ["e1"], [])[0]
 
     def test_absent_and_insufficient_both_map_to_not_present_before_collapse(self):
         # claude's runs on K2: absent, insufficient, present -> mode not_present (2 of 3), not a three-way tie.
@@ -201,6 +201,7 @@ class ExtractPipelineTest(unittest.TestCase):
         self.assertEqual(roles.count("# abx-role: recode"), 12)
         self.assertEqual(roles.count("# abx-role: deductive_ledger"), 12)
         self.assertEqual(roles.count("# abx-role: deductive_scorer"), 6)
+        self.assertEqual(roles.count("# abx-role: deductive_scorer_lenient"), 6)
         self.assertEqual(roles.count("# abx-role: codebook_author"), 1)
 
 
@@ -340,8 +341,9 @@ class ResumeTest(unittest.TestCase):
             resumed = store.read_json(ws.path("run/agreement.json"))
             total = len(model_calls()) - calls_before
             self.assertEqual(failed_attempts, len(records) + 1)
-            self.assertEqual(total, failed_attempts + 46 - len(records))  # 46 extract calls: 2 auditors, 1 facet mapper
-            for key in ("inductive", "deductive", "construct_status"):
+            # 52 extract calls: 2 auditors, 1 facet mapper, a strict and a lenient scorer per rater
+            self.assertEqual(total, failed_attempts + 52 - len(records))
+            for key in ("inductive", "deductive", "deductive_lenient", "stances", "construct_status"):
                 self.assertEqual(resumed[key], clean[key])
         finally:
             fw.close()

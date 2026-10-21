@@ -180,9 +180,31 @@ def scorer(prompt, lineage, occurrence):
             if occurrence == 1 and h(f, "run") % 5 == 0:
                 score -= 1
             score = max(1, min(7, score))
+            if lineage == "codex" and os.environ.get("ABX_FAKE_STRICT_MIRROR"):
+                score = 8 - score
         stray = ["s99999"] if os.environ.get("ABX_FAKE_STRAY_CITATION") and score is not None else []
         scores.append({"facet": f, "score": score, "cited_sentence_ids": (cited[f] + stray)[:12]})
     return {"scores": scores}
+
+
+def lenient_scorer(prompt, lineage, occurrence):
+    """The strict fake's scores, nudged by a hash, plus facets the strict fake left insufficient scored from another
+    facet's evidence, as a charitable reading would."""
+    strict = scorer(prompt, lineage, occurrence)["scores"]
+    donor = next((s["cited_sentence_ids"][:1] for s in strict if s["cited_sentence_ids"]), [])
+    if os.environ.get("ABX_FAKE_LENIENT_SAME"):
+        return {"scores": [{"facet": s["facet"], "score": 1 + h(s["facet"]) % 7, "cited_sentence_ids": donor}
+                           for s in strict]}
+    out = []
+    for s in strict:
+        if s["score"] is None:
+            scored = donor and h(s["facet"], lineage, "lenient") % 2 == 0
+            out.append({"facet": s["facet"], "score": 5 if scored else None,
+                        "cited_sentence_ids": donor if scored else []})
+            continue
+        nudge = (h(s["facet"], lineage, occurrence, "lenient") % 3) - 1 if h(s["facet"]) % 2 else 0
+        out.append({**s, "score": max(1, min(7, s["score"] + nudge))})
+    return {"scores": out}
 
 
 def crosswalk(prompt, lineage, occurrence):
@@ -232,7 +254,7 @@ def calibration_judge(prompt, lineage, occurrence):
 ROLES = {"calibration_judge": calibration_judge, "foil_author": foil_author, "auditor": auditor,
          "facet_mapper": facet_mapper,
          "discovery": discovery, "codebook_author": codebook_author, "recode": recode, "deductive_ledger": ledger,
-         "deductive_scorer": scorer, "crosswalk": crosswalk}
+         "deductive_scorer": scorer, "deductive_scorer_lenient": lenient_scorer, "crosswalk": crosswalk}
 
 
 def respond(prompt: str, lineage: str, occurrence: int, leak: str | None):

@@ -33,13 +33,17 @@ from .errors import AbxError, IntegrityError
 __all__ = [
     "REQUALIFICATION_AUDIT",
     "STAGE",
+    "STANCES",
     "RaterKey",
     "Ratings",
+    "Stance",
     "Unit",
     "arms",
     "estimate",
     "extract",
     "load_ratings",
+    "score_problems",
+    "stance_sensitivity",
     "validate_codebook",
     "with_foils",
 ]
@@ -51,6 +55,17 @@ class RaterKey(NamedTuple):
     lineage: str
     run: int
     era: str | None
+
+
+class Stance(NamedTuple):
+    """A deductive scoring stance: its scorer role and the prefix of its score files."""
+
+    name: str
+    role: str
+    file: str
+
+
+STANCES = (Stance("strict", "deductive_scorer", "scores"), Stance("lenient", "deductive_scorer_lenient", "lenient"))
 
 
 class Unit(NamedTuple):
@@ -93,8 +108,9 @@ def _coverage(items: set[str], got: list[str]) -> list[str]:
 def estimate(ws: store.Workspace) -> lifecycle.Preflight:
     cfg = config.load(ws)
     eras = len(store.read_json(ws.path("prepare/eras.json"))["eras"])
-    return lifecycle.Preflight(len(cfg.lineages) * cfg.runs * (3 * eras + 1) + 2 + eras, 2,
-                               "discovery, recode and ledger per rater and era, one scorer per rater, one codebook "
+    return lifecycle.Preflight(len(cfg.lineages) * cfg.runs * (3 * eras + len(STANCES)) + 2 + eras, 2,
+                               "discovery, recode and ledger per rater and era, a strict and a lenient scorer per "
+                               "rater, one codebook "
                                "author, one facet mapper, one auditor per era; if agreement is very high, one leak "
                                "probe per lineage for the integrity audit")
 
@@ -243,26 +259,34 @@ def _deductive(c: Context) -> None:
             store.write_json(artifacts.path_of(c.ws, f"ledgers:{lineage}:{run}"), ledgers)
 
             by_facet = {f: frozenset(ids) for f, ids in cited.items()}
+            for stance in STANCES:
+                out = invoke.call(c.ws, c.cfg, invoke.CallRequest(
+                    stage="extract", role=stance.role, lineage=lineage, run=run, era=None, generation="C",
+                    slots={"ledgers": f"ledgers:{lineage}:{run}", "facets": "facets:all"},
+                    validate=lambda o, stance=stance, cited=by_facet: score_problems(o, facets, cited, stance.name)))
+                store.write_json(c.ws.path(f"run/deductive/{stance.file}-{lineage}-r{run}.json"),
+                                 {"lineage": lineage, "run": run, "stance": stance.name, "scores": out["scores"]})
 
-            def validate_scores(o, cited=by_facet):
-                """Each score rests on its own facet's ledger evidence; a facet with none must be insufficient."""
-                if sorted(s["facet"] for s in o["scores"]) != facets:
-                    return ["scores must cover all 30 facets once"]
-                problems = []
-                for s in o["scores"]:
-                    if s["score"] is None:
-                        continue
-                    if not cited[s["facet"]]:
-                        problems.append(f"{s['facet']}: scored without ledger evidence for that facet")
-                    elif not s["cited_sentence_ids"] or not set(s["cited_sentence_ids"]) <= cited[s["facet"]]:
-                        problems.append(f"{s['facet']}: citations must come from that facet's ledger evidence")
-                return problems
 
-            out = invoke.call(c.ws, c.cfg, invoke.CallRequest(
-                stage="extract", role="deductive_scorer", lineage=lineage, run=run, era=None, generation="C",
-                slots={"ledgers": f"ledgers:{lineage}:{run}", "facets": "facets:all"}, validate=validate_scores))
-            store.write_json(c.ws.path(f"run/deductive/scores-{lineage}-r{run}.json"),
-                             {"lineage": lineage, "run": run, "scores": out["scores"]})
+def score_problems(out: dict, facets: list[str], cited: Mapping[str, frozenset[str]], stance: str) -> list[str]:
+    """Every facet once; a score cites ledger evidence: the strict stance only that facet's own, which a facet
+    without any must leave insufficient; the lenient stance any of the rater's ledger sentences."""
+    if sorted(s["facet"] for s in out["scores"]) != facets:
+        return ["scores must cover all 30 facets once"]
+    anywhere = frozenset().union(*cited.values())
+    problems = []
+    for s in out["scores"]:
+        if s["score"] is None:
+            continue
+        given = set(s["cited_sentence_ids"])
+        if stance == "lenient":
+            if not given or not given <= anywhere:
+                problems.append(f"{s['facet']}: citations must come from this rater's ledgers")
+        elif not cited[s["facet"]]:
+            problems.append(f"{s['facet']}: scored without ledger evidence for that facet")
+        elif not given or not given <= cited[s["facet"]]:
+            problems.append(f"{s['facet']}: citations must come from that facet's ledger evidence")
+    return problems
 
 
 # --- agreement ---------------------------------------------------------------------------------------------------
@@ -273,6 +297,18 @@ class Ratings:
 
     verdicts: Mapping[RaterKey, tuple[dict, ...]]
     scores: Mapping[RaterKey, Mapping[str, int | None]]
+    lenient: Mapping[RaterKey, Mapping[str, int | None]]
+
+
+def _stance_scores(ws: store.Workspace, stance: Stance) -> Mapping[RaterKey, Mapping[str, int | None]]:
+    scores = {}
+    for path in sorted(ws.root.glob(f"run/deductive/{stance.file}-*.json")):
+        rec = store.read_json(path)
+        if rec.get("stance") != stance.name:
+            raise IntegrityError(f"{ws.rel(path)} holds {rec.get('stance')!r} scores, not {stance.name!r}")
+        scores[RaterKey(rec["lineage"], rec["run"], None)] = MappingProxyType({s["facet"]: s["score"]
+                                                                               for s in rec["scores"]})
+    return MappingProxyType(scores)
 
 
 def load_ratings(ws: store.Workspace) -> Ratings:
@@ -280,12 +316,8 @@ def load_ratings(ws: store.Workspace) -> Ratings:
     for path in sorted(ws.root.glob("run/recode/*.json")):
         rec = store.read_json(path)
         verdicts[RaterKey(rec["lineage"], rec["run"], rec["era"])] = tuple(rec["verdicts"])
-    scores = {}
-    for path in sorted(ws.root.glob("run/deductive/scores-*.json")):
-        rec = store.read_json(path)
-        scores[RaterKey(rec["lineage"], rec["run"], None)] = MappingProxyType({s["facet"]: s["score"]
-                                                                               for s in rec["scores"]})
-    return Ratings(MappingProxyType(verdicts), MappingProxyType(scores))
+    strict, lenient = (_stance_scores(ws, stance) for stance in STANCES)
+    return Ratings(MappingProxyType(verdicts), strict, lenient)
 
 
 def arms(ratings: Ratings, book: dict, era_ids: list[str],
@@ -294,10 +326,32 @@ def arms(ratings: Ratings, book: dict, era_ids: list[str],
     whether the era shows the construct: absent and insufficient verdicts, after the citation rules, are both
     not_present."""
     units = [Unit(con["item_id"], era) for con in book["constructs"] for era in era_ids]
-    druns: dict = {}
-    for key, by_facet in ratings.scores.items():
-        druns.setdefault(key.lineage, {})[key.run] = by_facet
-    return agreement.arm(_binary_runs(ratings), units, "nominal"), agreement.arm(druns, facets, "ordinal")
+    return agreement.arm(_binary_runs(ratings), units, "nominal"), agreement.arm(_score_runs(ratings.scores), facets,
+                                                                                 "ordinal")
+
+
+def _score_runs(scores: Mapping[RaterKey, Mapping[str, int | None]]) -> dict:
+    runs: dict = {}
+    for key, by_facet in scores.items():
+        runs.setdefault(key.lineage, {})[key.run] = by_facet
+    return runs
+
+
+def stance_sensitivity(ratings: Ratings, facets: list[str]) -> tuple[agreement.ArmResult, dict]:
+    """The lenient arm, and strict against lenient: ordinal alpha with the stances as raters over every (lineage,
+    facet), each value that stance's rounded-median collapse, with no coverage threshold; plus the equal share and the
+    mean lenient minus strict score over the paired units. Sensitivity only."""
+    strict = agreement.arm(_score_runs(ratings.scores), facets, "ordinal")
+    lenient = agreement.arm(_score_runs(ratings.lenient), facets, "ordinal")
+    units = [(lin, f) for lin in sorted(set(strict.collapsed) | set(lenient.collapsed)) for f in facets]
+    matrix = {stance: {u: arm.collapsed.get(u[0], {}).get(u[1]) for u in units}
+              for stance, arm in (("strict", strict), ("lenient", lenient))}
+    paired = [u for u in units if matrix["strict"][u] is not None and matrix["lenient"][u] is not None]
+    alpha, reason = agreement.alpha(matrix, "ordinal")
+    shifts = [matrix["lenient"][u] - matrix["strict"][u] for u in paired]
+    return lenient, {"alpha": alpha, "reason": reason, "units": len(units), "paired": len(paired),
+                     "equal_rate": sum(s == 0 for s in shifts) / len(shifts) if shifts else None,
+                     "mean_shift": sum(shifts) / len(shifts) if shifts else None}
 
 
 def with_foils(ratings: Ratings, book: dict, kept: list[dict], era_ids: list[str]) -> agreement.ArmResult:
@@ -336,8 +390,11 @@ def _agree(c: Context, book: dict) -> dict:
               for con in book["constructs"]}
     three_way = agreement.collapse_runs(_runs(ratings, lambda verdict: verdict), inductive.units,
                                         agreement.collapse_mode)
+    lenient, stances = stance_sensitivity(ratings, list(c.facets))
+    sensitivity = {k: v for k, v in _arm_json(lenient).items() if k != "integrity_audit_due"}
     result = {
         "inductive": _arm_json(inductive), "deductive": _arm_json(deductive_arm),
+        "deductive_lenient": sensitivity, "stances": stances,
         "construct_status": status,
         "temporal": temporal.read(book["constructs"], status, three_way, c.ix.era_ids),
         "inductive_collapsed": [{"lineage": lin, "item_id": u.item_id, "era": u.era, "value": v}

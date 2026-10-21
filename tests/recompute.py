@@ -262,6 +262,42 @@ def _arm(arm: agreement.ArmResult) -> dict:
             "units": len(arm.units), "integrity_audit_due": arm.integrity_audit_due}
 
 
+def _stance_runs(ws: store.Workspace, prefix: str, stance: str) -> dict:
+    """{lineage: {run: {facet: score}}} straight from the score files, checking each file's stance."""
+    runs: dict = {}
+    for path in sorted(ws.root.glob(f"run/deductive/{prefix}-*.json")):
+        rec = store.read_json(path)
+        assert rec["stance"] == stance, path
+        runs.setdefault(rec["lineage"], {})[rec["run"]] = {s["facet"]: s["score"] for s in rec["scores"]}
+    return runs
+
+
+def _median(values: list) -> int | None:
+    valid = sorted(v for v in values if v is not None)
+    if len(valid) < 2:
+        return None
+    mid = len(valid) // 2
+    m = Fraction(valid[mid]) if len(valid) % 2 else Fraction(valid[mid - 1] + valid[mid], 2)
+    return int(m + Fraction(1, 2))
+
+
+def _stances(ws: store.Workspace, facets: list[str]) -> tuple[dict, dict]:
+    """The lenient arm and strict against lenient, rebuilt from the score files with their own collapse."""
+    strict, lenient = _stance_runs(ws, "scores", "strict"), _stance_runs(ws, "lenient", "lenient")
+    arm = _arm(agreement.arm(lenient, facets, "ordinal"))
+    del arm["integrity_audit_due"]
+    collapsed = {name: {(lin, f): _median([by_run[r].get(f) for r in by_run]) for lin, by_run in runs.items()
+                        for f in facets} for name, runs in (("strict", strict), ("lenient", lenient))}
+    units = sorted(set(collapsed["strict"]) | set(collapsed["lenient"]))
+    matrix = {name: {u: collapsed[name].get(u) for u in units} for name in collapsed}
+    paired = [u for u in units if matrix["strict"][u] is not None and matrix["lenient"][u] is not None]
+    alpha, reason = agreement.alpha(matrix, "ordinal")
+    shifts = [matrix["lenient"][u] - matrix["strict"][u] for u in paired]
+    return arm, {"alpha": alpha, "reason": reason, "units": len(units), "paired": len(paired),
+                 "equal_rate": sum(1 for s in shifts if s == 0) / len(shifts) if shifts else None,
+                 "mean_shift": sum(shifts) / len(shifts) if shifts else None}
+
+
 def _invalid_outputs(ws: store.Workspace) -> dict[str, int]:
     """Counted from the incidents generations C and D froze, never from whatever the folder holds now."""
     manifest = [json.loads(line) for line in ws.path(store.MANIFEST).read_text().splitlines() if line.strip()]
@@ -375,6 +411,7 @@ def expected(ws: store.Workspace) -> dict:
     preds = list(seal.predictions(ws.path("sealed/self-prediction.md").read_text()))
     audit = _audit(ws, eras) if inductive.integrity_audit_due or deductive_arm.integrity_audit_due else None
     invalid = _invalid_outputs(ws)
+    lenient_arm, stances = _stances(ws, list(instrument["facets"]))
     foiled = _foils(ws, eras, ratings, lineages)
     calibrated, _ = _calibration(ws)
     diag = _with_foils(ratings, book, foiled["kept"], eras)
@@ -384,6 +421,7 @@ def expected(ws: store.Workspace) -> dict:
         "fingerprints": {lin: {k: v for k, v in q.items() if k != "evidence"}
                          for lin, q in store.read_json(ws.path(invoke.QUALIFICATION_A)).items()},
         "agreement": {"inductive": _arm(inductive), "deductive": _arm(deductive_arm),
+                      "deductive_lenient": lenient_arm, "stances": stances,
                       "downgrades": sum(1 for rows in ratings.verdicts.values() for v in rows if v["downgrade"]),
                       "integrity_audit": audit,
                       "inductive_with_foils": {"metric": diag.metric, "alpha": diag.alpha, "units": len(diag.units),
@@ -437,6 +475,15 @@ def _rows(want: dict) -> list[str]:
         rows.append(f"  - Units with both lineages: {_pct(a['paired_fraction'])}; raw agreement on them: "
                     f"{_pct(a['raw_agreement'])}; missing: {_pct(a['missing_rate'])}; stability α within lineage: "
                     + ", ".join(f"{lin} {_num(v)}" for lin, v in sorted(a["stability"].items())) + ".")
+    lenient, st = want["agreement"]["deductive_lenient"], want["agreement"]["stances"]
+    rows.append(f"- Deductive facets, lenient stance (sensitivity, not a gate; {lenient['units']} units): "
+                f"α = {_num(lenient['alpha'])}; units with both lineages: {_pct(lenient['paired_fraction'])}; raw "
+                f"agreement on them: {_pct(lenient['raw_agreement'])}; stability α within lineage: "
+                + ", ".join(f"{lin} {_num(v)}" for lin, v in sorted(lenient["stability"].items())) + ".")
+    shift = "n/a" if st["mean_shift"] is None else f"{st['mean_shift']:+.2f}"
+    rows.append(f"- Strict against lenient scoring (sensitivity; {st['paired']} of {st['units']} lineage-facet scores "
+                f"paired): α = {_num(st['alpha'])}; the same score in {_pct(st['equal_rate'])}; lenient minus strict "
+                f"on average: {shift}.")
     c = want["calibration"]
     rows.append(f"- Zoning calibration: {c['held_out']} held-out sentences labelled blind by "
                 + " and ".join(c["judges"]) + f" judges; where both judges agree, false keeps "

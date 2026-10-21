@@ -74,7 +74,7 @@ class FoilEvidenceTest(unittest.TestCase):
 def _ratings(rows: dict) -> extract.Ratings:
     """{(lineage, run, era): {item_id: verdict}} as named ratings."""
     return extract.Ratings({extract.RaterKey(*k): tuple({"item_id": i, "verdict": v} for i, v in items.items())
-                            for k, items in rows.items()}, {})
+                            for k, items in rows.items()}, {}, {})
 
 
 class FoilRatesTest(unittest.TestCase):
