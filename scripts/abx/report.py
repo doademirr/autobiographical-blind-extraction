@@ -61,6 +61,28 @@ def _calibration(c: dict) -> str:
             "confidence bounds.")
 
 
+def _correspondences(r: dict) -> list[str]:
+    c = r["correspondences"]
+    out = ["## Constructs against your IPIP facets", "",
+           "A separate model mapped each construct to the questionnaire facets it bears on, from the construct's name "
+           "and definition alone, with a direction (+ for the facet's high pole). Each supported construct's facets "
+           "are set against your IPIP facet scores. A construct counts when it is supported in at least one era of "
+           "the record, while the questionnaire describes you now, so a mismatch may be change over time. Narrative "
+           "tends to over-read traits shown in charged scenes and to miss traits that show as absence.", ""]
+    if not c["inductive_reportable"]:
+        out += ["The inductive arm is not reportable; the rows below are descriptive only.", ""]
+    n = c["counts"]
+    out.append(f"- Construct–facet pairs: {n['consistent']} consistent, {n['inconsistent']} inconsistent, "
+               f"{n['neutral']} neutral (mid band), {n['n/a']} without a facet score.")
+    out.append(f"- Supported constructs mapped to no facet: {', '.join(c['unmapped']) or 'none'}.")
+    if c["rows"]:
+        out += ["", "| Construct | Facet | Direction | IPIP (1–5) | Band | Result |", "|---|---|---|---|---|---|"]
+        out += [f"| {row['construct_id']} {row['name']} | {row['facet']} {r['facet_names'][row['facet']]} | "
+                f"{row['polarity']} | {num(row['ipip'], 2)} | {row['band'] or 'n/a'} | {row['result']} |"
+                for row in c["rows"]]
+    return [*out, ""]
+
+
 FOIL_TYPES = (("clear", "Clear foils", "false-positive rate"), ("near_miss", "Near-miss foils", "false-positive rate"),
               ("anchored", "Anchored foils", "recovery rate"))
 
@@ -156,7 +178,7 @@ def render(r: dict) -> str:
         out.append(f"| {r['domain_names'][dom]} | {num(row['observer'], 2)} | {row['observer_band'] or 'n/a'} | "
                    f"{num(row['ipip'], 2)} | {row['ipip_band'] or 'n/a'} | {same} |")
     out += ["", f"Same band in {pct(d['agreement_rate'])} of {d['compared']} domains compared.", "",
-            "## Limits", "",
+            *_correspondences(r), "## Limits", "",
             "- Raters saw one era at a time, so patterns that only show across eras are not captured.",
             "- Discovery used a fixed panel; saturation was not established.",
             "- Narrative over-reads emotionally charged scenes and misses traits that show as absence.",

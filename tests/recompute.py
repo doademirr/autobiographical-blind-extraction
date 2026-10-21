@@ -14,7 +14,7 @@ from typing import NamedTuple
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "scripts"))
 
-from abx import agreement, calibration, config, extract, invoke, ipip, prompts, report, seal, store, unmask
+from abx import agreement, calibration, config, extract, facetmap, invoke, ipip, prompts, report, seal, store, unmask
 from abx.errors import AbxError
 
 __all__ = ["compare", "expected", "problems"]
@@ -109,6 +109,32 @@ def _calibration(ws: store.Workspace) -> tuple[dict, list[str]]:
             "judge_agreement": {"three_label": counts["same"] / n if n else None,
                                 "collapsed": counts["same_side"] / n if n else None, "of": n},
             "judges": roster, "passed": reason is None, "reason": reason}, out
+
+
+def _mapper_output(ws: store.Workspace) -> dict:
+    rec = store.read_json(next(ws.root.glob("run/calls/extract/facet_mapper/*.json")))
+    return {m["construct_id"]: m["facets"] for m in rec["output"]["constructs"]}
+
+
+def _correspondences(ws: store.Workspace, book: dict, supported: set[str], facets: dict, reportable: bool) -> dict:
+    """Rebuilt from the mapper's own call record and the IPIP facet scores."""
+    mapping = _mapper_output(ws)
+    rows, unmapped = [], []
+    for con in sorted(book["constructs"], key=lambda x: x["id"]):
+        if con["id"] not in supported:
+            continue
+        if not mapping[con["id"]]:
+            unmapped.append(con["id"])
+        for f in sorted(mapping[con["id"]], key=lambda x: x["facet"]):
+            score = facets[f["facet"]]
+            band = None if score is None else "low" if score * 3 <= 7 else "high" if score * 3 >= 11 else "mid"
+            result = ("n/a" if band is None else "neutral" if band == "mid"
+                      else "consistent" if (f["polarity"] == "+") == (band == "high") else "inconsistent")
+            rows.append({"construct_id": con["id"], "name": con["name"], "facet": f["facet"],
+                         "polarity": f["polarity"], "ipip": None if score is None else float(score), "band": band,
+                         "result": result})
+    counts = {k: sum(r["result"] == k for r in rows) for k in ("consistent", "inconsistent", "neutral", "n/a")}
+    return {"rows": rows, "counts": counts, "unmapped": unmapped, "inductive_reportable": reportable}
 
 
 # The stages whose call records exist when `extract` runs its integrity audit.
@@ -247,7 +273,9 @@ def expected(ws: store.Workspace) -> dict:
         | {"inductive_reportable": inductive_ok},
         "deductive_vs_ipip": unmask.domain_comparison(unmask.deductive_domains(collapsed, instrument), self_report)
         | {"deductive_reportable": deductive_arm.verdict in unmask.REPORTABLE},
+        "correspondences": _correspondences(ws, book, supported, self_report["facets"], inductive_ok),
         "domain_names": instrument["domains"],
+        "facet_names": instrument["facets"],
         "invalid_outputs": {"by_stage": invalid, "total": sum(invalid.values()), "max_attempts": 3},
     }
 
@@ -336,6 +364,16 @@ def _rows(want: dict) -> list[str]:
         rows.append(f"| {want['domain_names'][dom]} | {_num(row['observer'], 2)} | {row['observer_band'] or 'n/a'} | "
                     f"{_num(row['ipip'], 2)} | {row['ipip_band'] or 'n/a'} | {same} |")
     rows.append(f"Same band in {_pct(d['agreement_rate'])} of {d['compared']} domains compared.")
+    c = want["correspondences"]
+    n = c["counts"]
+    rows.append(f"- Construct–facet pairs: {n['consistent']} consistent, {n['inconsistent']} inconsistent, "
+                f"{n['neutral']} neutral (mid band), {n['n/a']} without a facet score.")
+    rows.append("- Supported constructs mapped to no facet: " + (", ".join(c["unmapped"]) or "none") + ".")
+    for row in c["rows"]:
+        rows.append(f"| {row['construct_id']} {row['name']} | {row['facet']} {want['facet_names'][row['facet']]} | "
+                    f"{row['polarity']} | {_num(row['ipip'], 2)} | {row['band'] or 'n/a'} | {row['result']} |")
+    if not c["inductive_reportable"]:
+        rows.append("The inductive arm is not reportable; the rows below are descriptive only.")
     return rows
 
 
@@ -361,6 +399,8 @@ def problems(ws: store.Workspace) -> list[str]:
     if [h for h in report_md.splitlines() if h.startswith("## ")][:1] != ["## This is not a clinical assessment"]:
         out.append("report's first section is not the non-clinical statement")
     out += _calibration(ws)[1]
+    if store.read_json(ws.path(facetmap.PATH)) != _mapper_output(ws):
+        out.append("facet map: the stored map differs from the mapper's call record")
     return out + compare(store.read_json(ws.path("report/results.json")), report_md, expected(ws))
 
 

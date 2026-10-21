@@ -104,6 +104,17 @@ def auditor(prompt, lineage, occurrence):
     return {"foils": decisions, "flags": flags}
 
 
+def facet_mapper(prompt, lineage, occurrence):
+    """The first construct maps to no facet; the rest to one or two facets by a hash of the name, either polarity."""
+    out = []
+    for i, (cid, name) in enumerate(re.findall(r"^- (C\d{2}): (.+?)\. ", prompt, re.M)):
+        two = [FACETS[h(name) % 30], FACETS[h(name, "b") % 30]][:1 + h(name) % 2]
+        picks = [] if i == 0 else list(dict.fromkeys(two))
+        out.append({"construct_id": cid, "facets": [{"facet": f, "polarity": "+" if h(name, f) % 2 else "-"}
+                                                    for f in picks]})
+    return {"constructs": out}
+
+
 def recode(prompt, lineage, occurrence):
     segs = segments(prompt)
     era = era_label(prompt)
@@ -202,6 +213,7 @@ def calibration_judge(prompt, lineage, occurrence):
 
 
 ROLES = {"calibration_judge": calibration_judge, "foil_author": foil_author, "auditor": auditor,
+         "facet_mapper": facet_mapper,
          "discovery": discovery, "codebook_author": codebook_author, "recode": recode, "deductive_ledger": ledger,
          "deductive_scorer": scorer, "crosswalk": crosswalk}
 

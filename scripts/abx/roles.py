@@ -38,6 +38,8 @@ _ROLES = [
     Role("codebook_author", frozenset({"pool"}), "codebook", zoned_consumer=True, single="codebook_author"),
     Role("auditor", frozenset({"codebook", "foils", "era"}), "audit", zoned_consumer=True, per_era=True,
          params=frozenset({"era_label"}), single="auditor"),
+    Role("facet_mapper", frozenset({"definitions", "facets"}), "facetmap", zoned_consumer=True,
+         single="facet_mapper"),
     Role("recode", frozenset({"card", "era"}), "recode", zoned_consumer=True, per_era=True,
          params=frozenset({"era_label"})),
     Role("deductive_ledger", frozenset({"era", "facets"}), "ledger", zoned_consumer=True, per_era=True,

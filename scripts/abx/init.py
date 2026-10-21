@@ -96,6 +96,7 @@ def default_config(canaries: list[str]) -> dict:
         },
         "runs": 3,
         "roles": {"zoner": "claude", "codebook_author": "claude", "foil_author": "claude", "auditor": "codex",
+                  "facet_mapper": "codex",
                   "crosswalk_coders": ["claude", "codex"]},
         "canaries": list(canaries),
         "env_passthrough": [],

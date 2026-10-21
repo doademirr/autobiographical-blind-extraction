@@ -46,8 +46,8 @@ synced folder.
 4. `python3 scripts/run.py freeze <ws>` — refuses with exit 1 if the zoner failed calibration; otherwise one
    foil-author call per era (test items with a known answer, mixed into
    the card later so rater errors can be measured), then pre-registers the method, substrate and foils.
-5. `python3 scripts/run.py extract <ws>` — prints its call estimate first (discovery, one audit per era, recode,
-   ledgers, scoring). Exit 1 means a reliability gate fired: the run is still
+5. `python3 scripts/run.py extract <ws>` — prints its call estimate first (discovery, a facet map, one audit per era,
+   recode, ledgers, scoring). Exit 1 means a reliability gate fired: the run is still
    valid and the report will say which arm is not reportable.
 6. `python3 scripts/run.py unmask <ws>` — the crosswalk, the IPIP reveal, then `report/report.md`.
 

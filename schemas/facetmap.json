@@ -1,0 +1,32 @@
+{
+ "type": "object",
+ "properties": {
+  "constructs": {
+   "type": "array",
+   "items": {
+    "type": "object",
+    "properties": {
+     "construct_id": {"type": "string", "pattern": "^C[0-9]{2}$"},
+     "facets": {
+      "type": "array",
+      "maxItems": 3,
+      "items": {
+       "type": "object",
+       "properties": {
+        "facet": {"type": "string",
+                  "description": "a facet code; the allowed codes are filled in from the frozen instrument at prepare"},
+        "polarity": {"type": "string", "enum": ["+", "-"]}
+       },
+       "required": ["facet", "polarity"],
+       "additionalProperties": false
+      }
+     }
+    },
+    "required": ["construct_id", "facets"],
+    "additionalProperties": false
+   }
+  }
+ },
+ "required": ["constructs"],
+ "additionalProperties": false
+}

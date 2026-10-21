@@ -6,7 +6,7 @@ frozen files only, never by a model.
 from fractions import Fraction
 from statistics import median
 
-from . import artifacts, calibration, config, invoke, ipip, lifecycle, report, seal, store
+from . import artifacts, calibration, config, facetmap, invoke, ipip, lifecycle, report, seal, store
 
 __all__ = [
     "REPORTABLE",
@@ -140,7 +140,10 @@ def compute(ws: store.Workspace, cfg: config.Config) -> dict:
         | {"inductive_reportable": inductive_ok},
         "deductive_vs_ipip": domain_comparison(observer, self_report)
         | {"deductive_reportable": agree["deductive"]["verdict"] in REPORTABLE},
+        "correspondences": facetmap.correspondences(store.read_json(ws.path(facetmap.PATH)), book["constructs"],
+                                                    supported, self_report["facets"], inductive_ok),
         "domain_names": instrument["domains"],
+        "facet_names": instrument["facets"],
     }
 
 

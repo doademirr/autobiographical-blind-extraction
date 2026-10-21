@@ -71,7 +71,7 @@ Canaries are words only your own profile or instruction files would contain (a n
 | 5 | a model call failed; rerun the stage and completed calls are reused |
 | 70 | an unexpected harness error (a bug; please report it) |
 
-The report lands in `report/report.md`: agreement per arm, foil error rates and the audit's flags, the construct table, how your predictions matched, and the observer estimate against your IPIP-NEO-120 by domain.
+The report lands in `report/report.md`: agreement per arm, foil error rates and the audit's flags, the construct table, how your predictions matched, the observer estimate against your IPIP-NEO-120 by domain, and each supported construct set against the IPIP facets a separate model mapped it to.
 
 ## Behaviour worth knowing
 

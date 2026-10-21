@@ -58,6 +58,7 @@ def fake_config(logins: Logins) -> dict:
         },
         "runs": 3,
         "roles": {"zoner": "claude", "codebook_author": "claude", "foil_author": "claude", "auditor": "codex",
+                  "facet_mapper": "codex",
                   "crosswalk_coders": ["claude", "codex"]},
         "canaries": ["ABXPROFILECANARY"],
         "env_passthrough": FAKE_ENV,

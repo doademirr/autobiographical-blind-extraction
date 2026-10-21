@@ -1,7 +1,7 @@
 """`extract`: the blind engine, from discovery to the agreement gates (generations B and C).
 
 Discovery (lineage x run x era, future-blind) -> pooled candidates -> clean-room codebook
-author + validator -> blind audit per era -> card of constructs and kept foils (generation B)
+author + validator -> blind facet map -> blind audit per era -> card of constructs and kept foils (generation B)
 -> recode -> deductive ledgers and strict scoring -> agreement by script -> integrity audit
 when agreement is very high (generation C). Every model call is a `CallRequest` through `invoke.call`.
 """
@@ -18,6 +18,7 @@ from . import (
     card,
     config,
     evidence,
+    facetmap,
     foils,
     invoke,
     ipip,
@@ -91,10 +92,10 @@ def _coverage(items: set[str], got: list[str]) -> list[str]:
 def estimate(ws: store.Workspace) -> lifecycle.Preflight:
     cfg = config.load(ws)
     eras = len(store.read_json(ws.path("prepare/eras.json"))["eras"])
-    return lifecycle.Preflight(len(cfg.lineages) * cfg.runs * (3 * eras + 1) + 1 + eras, 2,
+    return lifecycle.Preflight(len(cfg.lineages) * cfg.runs * (3 * eras + 1) + 2 + eras, 2,
                                "discovery, recode and ledger per rater and era, one scorer per rater, one codebook "
-                               "author, one auditor per era; if agreement is very high, one leak probe per lineage "
-                               "for the integrity audit")
+                               "author, one facet mapper, one auditor per era; if agreement is very high, one leak "
+                               "probe per lineage for the integrity audit")
 
 
 # --- discovery ---------------------------------------------------------------------------------------------------
@@ -414,13 +415,16 @@ def extract(ws: store.Workspace) -> dict:
     if "B" not in gens:
         _discovery(c)
         candidates = _pool(c)
-        _card(c, _codebook(c, candidates))
+        book = _codebook(c, candidates)
+        facetmap.run(ws, c.cfg, book["constructs"])
+        _card(c, book)
         store.append_generation(ws, "B", [
             "run/discovery/pool.json", "run/discovery/pool.md", "run/codebook/codebook.json",
-            "run/codebook/codebook.md", audit.FOILS, "run/codebook/card.md",
+            "run/codebook/codebook.md", audit.FOILS, "run/codebook/card.md", facetmap.PATH,
+            "run/codebook/definitions.md",
             *(ws.rel(p) for g in ("run/discovery/*-r*-*.json", "run/discovery/*.hypotheses.md", "run/audit/*.json",
                                   "run/calls/extract/discovery/*.json", "run/calls/extract/codebook_author/*.json",
-                                  "run/calls/extract/auditor/*.json")
+                                  "run/calls/extract/auditor/*.json", "run/calls/extract/facet_mapper/*.json")
               for p in sorted(ws.root.glob(g)))])
     if "C" in gens:
         return store.read_json(ws.path("run/agreement.json"))
