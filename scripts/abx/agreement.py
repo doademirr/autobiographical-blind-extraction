@@ -1,8 +1,10 @@
 """Agreement arithmetic. Every number the report states about reliability comes from here.
 
 Matrices are `{rater: {unit: value or None}}`, with any hashable unit (a named tuple in the
-engine); None is a missing value (insufficient, a collapse tie, or no rating) and never takes
-part in the coincidence counts. Undefined results carry a reason code, rendered by the report.
+engine); None is a missing value (a collapse tie, no rating, or a value the caller treats as missing, such as an
+insufficient facet score) and never takes part in the coincidence counts. Which verdicts count as values is the
+caller's choice: the inductive gate reads present vs not-present, the temporal read present, absent or insufficient.
+Undefined results carry a reason code, rendered by the report.
 """
 
 import itertools

@@ -53,6 +53,15 @@ class TrajectoryTest(unittest.TestCase):
                 self.assertEqual(got["eras"], dict(zip(eras, readings, strict=True)))
 
 
+class ShownTest(unittest.TestCase):
+    def test_rows_without_a_decisive_era_are_counted_not_shown(self):
+        rows = [{"construct_id": "C01", "eras": {"e1": OB, "e2": NO}}, {"construct_id": "C02", "eras": {"e1": NO}},
+                {"construct_id": "C03", "eras": {"e1": CO}}]
+        got = temporal.shown(rows)
+        self.assertEqual([r["construct_id"] for r in got["constructs"]], ["C01", "C03"])
+        self.assertEqual(got["undecided"], 1)
+
+
 class ReadTest(unittest.TestCase):
     """Collapse and reading together, as `extract` wires them."""
 

@@ -135,15 +135,13 @@ def _temporal(r: dict) -> list[str]:
            "after an observation is held by assumption: listed in its own column, never counted as observed.", ""]
     if not t["inductive_reportable"]:
         out += ["The inductive arm is not reportable; this section is descriptive only.", ""]
-    decided = [row for row in t["constructs"] if any(row["eras"].values())]
     out += [f"- Fades (observed, then contradicted): {_transitions(t['constructs'], 'fades')}.",
             f"- Emergences (contradicted, then observed): {_transitions(t['constructs'], 'emergences')}.",
             "- Now reads the last era of the record under that assumption: use it for who the writer was at the end "
             "of the record, and support in any era (what every comparison in this report uses) for lifelong traits. "
             "Now cannot establish who you are today; your questionnaire remains the present-day measure.",
-            f"- Constructs with no observed or contradicted era, left out of the table: "
-            f"{len(t['constructs']) - len(decided)}."]
-    if decided:
+            f"- Constructs with no observed or contradicted era, left out of the table: {t['undecided']}."]
+    if t["constructs"]:
         names = {c["id"]: c["name"] for c in r["constructs"]}
 
         def eras(row: dict, reading: str) -> str:
@@ -153,7 +151,7 @@ def _temporal(r: dict) -> list[str]:
                 "|---|---|---|---|---|---|"]
         out += [f"| {row['construct_id']} | {names[row['construct_id']]} | {eras(row, 'observed')} | "
                 f"{eras(row, 'contradicted')} | {', '.join(row['held']) or '—'} | "
-                f"{NOW_TEXT[row['now']['state']].format(era=row['now']['era'])} |" for row in decided]
+                f"{NOW_TEXT[row['now']['state']].format(era=row['now']['era'])} |" for row in t["constructs"]]
     return [*out, ""]
 
 

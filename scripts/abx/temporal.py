@@ -12,8 +12,14 @@ Descriptive only: no rate, no gate.
 """
 
 from collections.abc import Mapping, Sequence
+from typing import NamedTuple
 
-__all__ = ["era_reading", "read", "trajectory"]
+__all__ = ["era_reading", "read", "shown", "trajectory"]
+
+
+class _Decisive(NamedTuple):
+    reading: str
+    era: str
 
 
 def era_reading(status: str, collapsed: Sequence[str | None]) -> str | None:
@@ -28,17 +34,17 @@ def era_reading(status: str, collapsed: Sequence[str | None]) -> str | None:
 def trajectory(readings: Mapping[str, str | None], era_ids: Sequence[str]) -> dict:
     """Fades, emergences, held eras and the current state, walking `era_ids` in order."""
     fades, emergences, held = [], [], []
-    decisive: tuple[str, str] | None = None  # (reading, era) of the latest decisive era so far
+    decisive: _Decisive | None = None  # the latest decisive era so far
     last_observed = None
     for era in era_ids:
         reading = readings[era]
         if reading is None:
-            if decisive and decisive[0] == "observed":
+            if decisive and decisive.reading == "observed":
                 held.append(era)
             continue
-        if decisive and decisive[0] != reading:
-            (fades if reading == "contradicted" else emergences).append({"from": decisive[1], "to": era})
-        decisive = (reading, era)
+        if decisive and decisive.reading != reading:
+            (fades if reading == "contradicted" else emergences).append({"from": decisive.era, "to": era})
+        decisive = _Decisive(reading, era)
         if reading == "observed":
             last_observed = era
     final = era_ids[-1]
@@ -46,7 +52,7 @@ def trajectory(readings: Mapping[str, str | None], era_ids: Sequence[str]) -> di
         now = {"state": "observed", "era": final}
     elif final in held:
         now = {"state": "held", "era": last_observed}
-    elif fades and decisive and decisive[0] == "contradicted":
+    elif fades and decisive and decisive.reading == "contradicted":
         now = {"state": "faded", "era": fades[-1]["to"]}
     else:
         now = {"state": "never observed", "era": None}
@@ -65,3 +71,9 @@ def read(constructs: Sequence[Mapping], status: Mapping[str, Mapping[str, str]],
                     for era in era_ids}
         rows.append({"construct_id": con["id"], **trajectory(readings, era_ids)})
     return rows
+
+
+def shown(rows: Sequence[Mapping]) -> dict:
+    """What the report shows: the rows with at least one decisive era, and how many constructs had none."""
+    decided = [row for row in rows if any(row["eras"].values())]
+    return {"constructs": decided, "undecided": len(rows) - len(decided)}

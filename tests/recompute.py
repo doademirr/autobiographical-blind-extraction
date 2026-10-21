@@ -311,6 +311,11 @@ def _with_foils(ratings: extract.Ratings, book: dict, kept: list[dict], eras: li
     return agreement.arm(runs, units, "nominal")
 
 
+class _EraReading(NamedTuple):
+    era: str
+    reading: str
+
+
 def _temporal(ratings: extract.Ratings, book: dict, eras: list[str], status: dict, reportable: bool) -> dict:
     """The temporal read, rebuilt with its own three-way collapse and its own walk over each construct's eras."""
     votes: dict = {}
@@ -328,23 +333,26 @@ def _temporal(ratings: extract.Ratings, book: dict, eras: list[str], status: dic
     for con in book["constructs"]:
         seq = ["observed" if status[con["id"]][e] == "supported"
                else "contradicted" if all(absent(lin, con["item_id"], e) for lin in lineages) else None for e in eras]
-        decisive = [(e, r) for e, r in zip(eras, seq, strict=True) if r]
+        decisive = [_EraReading(e, r) for e, r in zip(eras, seq, strict=True) if r]
         pairs = list(itertools.pairwise(decisive))
-        fades = [{"from": a[0], "to": b[0]} for a, b in pairs if (a[1], b[1]) == ("observed", "contradicted")]
-        emergences = [{"from": a[0], "to": b[0]} for a, b in pairs if (a[1], b[1]) == ("contradicted", "observed")]
+        fades = [{"from": a.era, "to": b.era} for a, b in pairs
+                 if (a.reading, b.reading) == ("observed", "contradicted")]
+        emergences = [{"from": a.era, "to": b.era} for a, b in pairs
+                      if (a.reading, b.reading) == ("contradicted", "observed")]
         held = [e for i, e in enumerate(eras) if seq[i] is None and [r for r in seq[:i] if r][-1:] == ["observed"]]
         observed = [e for e, r in zip(eras, seq, strict=True) if r == "observed"]
         if seq[-1] == "observed":
             now = {"state": "observed", "era": eras[-1]}
         elif eras[-1] in held:
             now = {"state": "held", "era": observed[-1]}
-        elif decisive and decisive[-1][1] == "contradicted" and observed:
+        elif decisive and decisive[-1].reading == "contradicted" and observed:
             now = {"state": "faded", "era": fades[-1]["to"]}
         else:
             now = {"state": "never observed", "era": None}
-        rows.append({"construct_id": con["id"], "eras": dict(zip(eras, seq, strict=True)), "fades": fades,
-                     "emergences": emergences, "held": held, "now": now})
-    return {"constructs": rows, "inductive_reportable": reportable}
+        if any(seq):
+            rows.append({"construct_id": con["id"], "eras": dict(zip(eras, seq, strict=True)), "fades": fades,
+                         "emergences": emergences, "held": held, "now": now})
+    return {"constructs": rows, "undecided": len(book["constructs"]) - len(rows), "inductive_reportable": reportable}
 
 
 def expected(ws: store.Workspace) -> dict:
@@ -476,11 +484,9 @@ def _rows(want: dict) -> list[str]:
         rows.append(f"- {label}: " + (", ".join(f"{r['construct_id']} {x['from']} → {x['to']}"
                                                 for r in t["constructs"] for x in r[key]) or "none") + ".")
     rows.append("Now cannot establish who you are today; your questionnaire remains the present-day measure.")
-    shown = [r for r in t["constructs"] if any(r["eras"].values())]
-    rows.append(f"- Constructs with no observed or contradicted era, left out of the table: "
-                f"{len(t['constructs']) - len(shown)}.")
+    rows.append(f"- Constructs with no observed or contradicted era, left out of the table: {t['undecided']}.")
     names = {c["id"]: c["name"] for c in want["constructs"]}
-    for r in shown:
+    for r in t["constructs"]:
         state, era = r["now"]["state"], r["now"]["era"]
         now = {"observed": f"observed in {era}", "held": f"held (last observed in {era})", "faded": f"faded in {era}",
                "never observed": "never observed"}[state]
