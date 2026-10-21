@@ -7,11 +7,13 @@ its role declares, so every call's provenance is the id list it records.
 import re
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass
+from pathlib import Path
 from types import MappingProxyType
 
 from . import artifacts, store
 from .errors import IsolationError, UsageError
 from .roles import role as get_role
+from .text import name_pattern
 from .withheld import MIN_REMOVED_LEN, Withheld
 
 __all__ = ["MAX_PARAM_LEN", "Prompt", "assemble", "audit", "check_allowlist"]
@@ -21,11 +23,19 @@ MAX_PARAM_LEN = 200
 _SLOT = re.compile(r"\{\{([a-z_]+)\}\}")
 
 
+SHIPPED_TEMPLATES = Path(__file__).resolve().parents[2] / "prompts"
+
+
 @dataclass(frozen=True)
 class Prompt:
+    """`supplied` is what filled the template's slots (inputs, schema and labels); `shipped_template` says the
+    template is byte-identical to the one this harness ships, so its own wording is not the user's text."""
+
     role: str
     text: str
     artifacts: Mapping[str, str]  # artifact id -> sha256 of its text
+    supplied: str = ""
+    shipped_template: bool = False
 
 
 def check_allowlist(role: str, ids: list[str], rater: tuple[str, int] | None = None,
@@ -76,16 +86,21 @@ def assemble(role: str, slots: dict[str, str], resolve: Callable[[str], str],
     missing = set(_SLOT.findall(template)) - set(values)
     if missing:
         raise UsageError(f"template:{role} has unfilled slots {sorted(missing)}")
-    text = _SLOT.sub(lambda m: values[m.group(1)], template)
-    return Prompt(role, text, MappingProxyType({aid: store.sha256_text(t) for aid, t in texts.items()}))
+    shipped = SHIPPED_TEMPLATES / f"{role}.md"
+    return Prompt(role, _SLOT.sub(lambda m: values[m.group(1)], template),
+                  MappingProxyType({aid: store.sha256_text(t) for aid, t in texts.items()}),
+                  supplied="\n".join(values[k] for k in sorted(values)),
+                  shipped_template=shipped.exists() and shipped.read_text(encoding="utf-8") == template)
 
 
 def audit(prompt: Prompt, withheld: Withheld, after_blind_results: bool = False) -> None:
-    """Secondary check by exact substring; the allowlist is the primary guarantee."""
+    """Secondary check; the allowlist is the primary guarantee. Approved-redacted names match whole-word, as redaction
+    does, outside an unchanged shipped template; the rest match as exact substrings of the whole prompt."""
     def hit(needles):
         return next((n for n in needles if n and n in prompt.text), None)
 
-    if hit(withheld.redacted_names):
+    names = [n for n in withheld.redacted_names if n]
+    if names and name_pattern(names).search(prompt.supplied if prompt.shipped_template else prompt.text):
         raise IsolationError(f"{prompt.role} prompt carries an approved-redacted name")
     if get_role(prompt.role).zoned_consumer and hit([s for s in withheld.removed_sentences
                                                      if len(s) >= MIN_REMOVED_LEN]):

@@ -28,8 +28,9 @@ synced folder.
    Canaries are words that only the user's own profile or instruction files would contain (a nickname, a test
    result). Ask the user for two or three; the leak probe checks no rater knows them.
 2. `python3 scripts/run.py prepare <ws>` — the first run writes `prepare/redactions.json`, `prepare/eras.json` and
-   `prepare/segments-preview.txt`, then stops. **Review point 1:** the user lists third-party names to replace
-   (`"names": {"Full Name": "First L."}`), checks the proposed eras (cut at headings and dated passages within the
+   `prepare/segments-preview.txt`, then stops. **Review point 1:** the user reviews the third-party names a local
+   scan pre-filled (`"names": {"Full Name": "Name 1"}`; `prepare/names-preview.txt` lists every candidate): deletes
+   places and anything that isn't a person to hide, adds names it missed, checks the proposed eras (cut at headings and dated passages within the
    size limits; each era's `"basis"` says why), moves the cuts to life events, writes each era's label without names,
    and sets `"approved": true` in both files. The user decides the eras, not you: help them find the breaks, never
    choose for them. The `"note"` in

@@ -4,7 +4,21 @@ import shutil
 from pathlib import Path
 from typing import NamedTuple
 
-from . import artifacts, calibration, config, eras, invoke, ipip, lifecycle, qualify, sizing, store, text, withheld
+from . import (
+    artifacts,
+    calibration,
+    config,
+    eras,
+    invoke,
+    ipip,
+    lifecycle,
+    names,
+    qualify,
+    sizing,
+    store,
+    text,
+    withheld,
+)
 from .errors import UsageError
 
 __all__ = ["RECEIPT", "STAGE", "estimate", "prepare", "receipt_problems", "review_doc"]
@@ -22,6 +36,10 @@ RECEIPT_OUTPUT_GLOBS = ("prepare/redacted.txt", "prepare/offsets.json", "prepare
 
 REPO = Path(__file__).resolve().parents[2]
 PROPOSAL_RETRIES, PROPOSAL_SHRINK = 5, 0.10
+NAMES_NOTE = ("A local scan pre-filled this list: names seen twice or after a title, each with a placeholder "
+              "(names-preview.txt lists every candidate). Delete anything that is not a person you want hidden (a "
+              "place, an organisation), change replacements as you like, add names it missed (nicknames, lowercase "
+              "spellings, names only ever at the start of a sentence), then approve.")
 PROPOSAL_NOTE = ("This file is a proposal from headings, dated passages and size only; each era's basis says why it "
                  "starts where it does. Move the cuts to life events, and write each label yourself, without names: "
                  "labels are sent to the raters.")
@@ -77,7 +95,11 @@ def _review_files(ws: store.Workspace, cfg: config.Config, original: str) -> dic
     Preparation uses only this snapshot, so a file edited mid-run cannot change what was approved."""
     red, era_file = ws.path("prepare/redactions.json"), ws.path("prepare/eras.json")
     if not red.exists():
-        store.write_json(red, {"approved": False, "names": {}})
+        candidates = names.scan(original, text.sentences(original, text.segment(original)))
+        prefilled = names.prefill(candidates)
+        # The preview first: an interruption leaves no redactions file, so the next run scans again.
+        store.write_text_atomic(ws.path("prepare/names-preview.txt"), names.preview(candidates, prefilled))
+        store.write_json(red, {"approved": False, "note": NAMES_NOTE, "names": prefilled})
     if not era_file.exists():
         segs = text.segment(original)
         sents = text.sentences(original, segs)
@@ -175,13 +197,22 @@ def prepare(ws: store.Workspace) -> dict:
     snapshot = _review_files(ws, cfg, original)
     if snapshot is None:
         return {"status": "review", "next": "approve_review_files"}
-    names = snapshot["redactions.json"].doc["names"]
-    if not all(isinstance(k, str) and isinstance(v, str) for k, v in names.items()):
+    redactions = snapshot["redactions.json"].doc["names"]
+    if not all(isinstance(k, str) and isinstance(v, str) for k, v in redactions.items()):
         raise UsageError("redactions.json: names must map each name to its replacement text")
+    listed = text.name_pattern(redactions) if redactions else None
+    holding = sorted(n for n, r in redactions.items() if listed and listed.search(r))
+    if holding:
+        raise UsageError(f"redactions.json: the replacement for {holding[0]!r} contains a name on the list, so that "
+                         "name would reach every prompt; change the replacement")
     eras = snapshot["eras.json"].doc["eras"]
     if not all(isinstance(e, dict) for e in eras):
         raise UsageError("eras.json: eras must be a list of era objects")
-    redacted, spans = text.redact(original, names)
+    labelled = next((e for e in eras if listed and isinstance(e.get("label"), str) and listed.search(e["label"])), None)
+    if labelled:
+        raise UsageError(f"eras.json: era {labelled.get('id')!r}'s label holds a name on the redaction list; labels "
+                         "are sent to the raters, so take the name out")
+    redacted, spans = text.redact(original, redactions)
     segs = text.segment(redacted)
     sents = text.sentences(redacted, segs)
     text.validate_eras(eras, segs)

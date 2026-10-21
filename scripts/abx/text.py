@@ -44,6 +44,13 @@ def as_dicts(units) -> list[dict]:
     return [asdict(u) for u in units]
 
 
+def name_pattern(names) -> re.Pattern:
+    """Whole-word, case-sensitive matching of any of `names`, longest first: what redaction replaces and what the
+    prompt audit looks for. `names` is non-empty."""
+    alternation = "|".join(re.escape(n) for n in sorted(names, key=len, reverse=True))
+    return re.compile(rf"(?<!\w)(?:{alternation})(?!\w)")
+
+
 def redact(original: str, names: dict[str, str]) -> tuple[str, list[dict]]:
     """Replace whole-word, case-sensitive names, longest first, in one pass.
 
@@ -55,10 +62,8 @@ def redact(original: str, names: dict[str, str]) -> tuple[str, list[dict]]:
     for name in names:
         if not name.strip():
             raise UsageError("redactions.json: empty name")
-    alternation = "|".join(re.escape(n) for n in sorted(names, key=len, reverse=True))
-    pattern = re.compile(rf"(?<!\w)(?:{alternation})(?!\w)")
     pieces, spans, cursor, shift = [], [], 0, 0
-    for m in pattern.finditer(original):
+    for m in name_pattern(names).finditer(original):
         replacement = names[m.group(0)]
         pieces += [original[cursor:m.start()], replacement]
         red_start = m.start() + shift
