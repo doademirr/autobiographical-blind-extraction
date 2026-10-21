@@ -191,8 +191,8 @@ class PrepareProposalTest(unittest.TestCase):
         with mock.patch.object(sizing, "check_eras", side_effect=UsageError("era e3 has too many words")) as check, \
                 mock.patch.object(eras, "propose", side_effect=spy):
             doc = self.proposal(ws)
-        self.assertEqual(check.call_count, prepare.PROPOSAL_RETRIES + 1)
-        self.assertEqual(len(caps), prepare.PROPOSAL_RETRIES + 1)
+        self.assertEqual(check.call_count, 6)
+        self.assertEqual(len(caps), 6)
         for before, after in itertools.pairwise(caps):
             self.assertAlmostEqual(after / before, 0.9, delta=0.01)
         self.assertIn("does not pass the size check: era e3 has too many words", doc["note"])
