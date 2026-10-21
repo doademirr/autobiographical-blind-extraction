@@ -55,6 +55,8 @@ Three review points are yours:
 
    You decide the eras. Aim for at least 5-6, each a period of years with at least 10k words, and no bigger than the maximum the template's note gives. Eras run in order, back to back, and every paragraph sits in exactly one. Cut at life events: a move, a new school or job, a relationship starting or ending, a birth or death, a long gap in the writing. Don't cut around traits you expect to see. `prepare` checks every era's size before anything is sent and names any era that's too big.
 2. **Zoning.** A zoner removes sentences written in hindsight ("looking back, I was…") so raters judge what happened, not your later reading of it. Skim `prepare/retrospective.md` for what went and `prepare/substrate/` for what raters will see.
+
+   The zoner is checked on your own text every run. About 120 sampled sentences, half it kept and half it cut, are labelled blind by a Claude judge and a Codex judge, who see whole paragraphs and never the zoner's labels. If more than 5 % of the sampled kept sentences are reflection, or more than 20 % of the sampled cut ones are events, by the judges' agreed reading (a sentence they split on counts against the zoner), `prepare` and `freeze` stop with exit 1 and no real run is permitted. These are rates on the sample, not confidence bounds.
 3. **Sealed comparators.** Write your predictions in `sealed/self-prediction.md` and answer `sealed/ipip-120.csv` in your own editor, before `seal`.
 
 Canaries are words only your own profile or instruction files would contain (a nickname, a test score). The leak probe checks that no rater knows them.
@@ -62,7 +64,7 @@ Canaries are words only your own profile or instruction files would contain (a n
 | Exit | Meaning |
 |---|---|
 | 0 | stage done |
-| 1 | a reliability gate fired; the run is valid and the report says which arm isn't reportable |
+| 1 | a gate fired: from `prepare` or `freeze`, the zoner failed calibration and the run stops; from `extract`, the run is valid and the report says which arm isn't reportable |
 | 2 | usage or preflight failure (a missing login, a bad config, a probe that could not run) |
 | 3 | isolation or leak failure; stop, don't work around it |
 | 4 | a frozen or sealed file changed, or a CLI changed since qualification; a new run needs a new workspace |

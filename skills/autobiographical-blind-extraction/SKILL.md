@@ -36,11 +36,15 @@ synced folder.
    relationship, a birth or death, a gap in the writing; never around traits the user expects), and the preview
    gives each paragraph's word count. Nothing leaves the machine before that. Run `prepare` again: it checks every
    era's size before any model call (exit 2 names an era that is too big and its maximum; split it), then qualifies
-   both CLIs, zones the text and prints per-era kept ratios. **Review point 2:** ask the user to skim `prepare/retrospective.md` (what was
+   both CLIs, zones the text, has a Claude judge and a Codex judge label a held-out sample blind to check the zoner,
+   and prints per-era kept ratios and the calibration result. Exit 1 from `prepare` means the zoner failed that
+   calibration: stop, show the user the rates in `prepare/calibration.json`, and say no real run is permitted on this
+   zoner. **Review point 2:** ask the user to skim `prepare/retrospective.md` (what was
    removed) and a few eras of `prepare/substrate/` (what raters will see).
 3. **Review point 3:** the user fills in `sealed/self-prediction.md` and answers `sealed/ipip-120.csv` (items are
    in `sealed/ipip-120-items.md`) in their own editor. Then `python3 scripts/run.py seal <ws>`.
-4. `python3 scripts/run.py freeze <ws>` — one foil-author call per era (test items with a known answer, mixed into
+4. `python3 scripts/run.py freeze <ws>` — refuses with exit 1 if the zoner failed calibration; otherwise one
+   foil-author call per era (test items with a known answer, mixed into
    the card later so rater errors can be measured), then pre-registers the method, substrate and foils.
 5. `python3 scripts/run.py extract <ws>` — prints its call estimate first (discovery, one audit per era, recode,
    ledgers, scoring). Exit 1 means a reliability gate fired: the run is still
@@ -54,7 +58,7 @@ synced folder.
 | Code | Meaning | What to do |
 |---|---|---|
 | 0 | stage done | next stage |
-| 1 | a reliability gate fired | continue; the report states it |
+| 1 | a gate fired | from `prepare` or `freeze`: the zoner failed calibration; stop, no real run. From `extract`: an arm is not reportable; continue, the report states it |
 | 2 | usage or preflight failure | read the message; fix and rerun |
 | 3 | isolation or leak failure | stop; show the user the message; do not work around it |
 | 4 | a frozen or sealed file changed | stop; a new run needs a new workspace |
