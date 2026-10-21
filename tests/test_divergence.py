@@ -6,7 +6,7 @@ from abx import divergence, prompts, store, unmask
 from abx.errors import IsolationError
 
 from .helpers import FakeWorkspace, build
-from .recompute import problems
+from .recompute import _record, problems
 
 
 def expected_class(b, s, t):
@@ -105,7 +105,7 @@ class PipelineTest(unittest.TestCase):
         self.assertTrue(results["divergence"]["rows"] and results["divergence"]["ambiguous"])
         self.assertEqual(problems(ws), [])
         for coder in ("claude", "codex"):
-            rec = store.read_json(ws.path(f"run/calls/unmask/crosswalk/{coder}-r0-all.json"))
+            rec = store.read_json(ws.path(_record(ws, "unmask", "crosswalk", coder, "D")))
             self.assertEqual(sorted(rec["input_artifacts"]), ["constructs:all", "facets:all", "schema:crosswalk",
                                                               "self_prediction:sealed", "template:crosswalk"])
         prompts.check_allowlist("crosswalk", ["facets:all"])

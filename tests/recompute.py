@@ -114,7 +114,7 @@ def _calibration(ws: store.Workspace) -> tuple[dict, list[str]]:
 
 def _mapper_output(ws: store.Workspace) -> dict:
     """The configured mapper's own call record, which generation B must have frozen."""
-    rel = f"run/calls/extract/facet_mapper/{config.load(ws).facet_mapper}-r0-all.json"
+    rel = _record(ws, "extract", "facet_mapper", config.load(ws).facet_mapper, "B")
     if rel not in {p for e in store.read_manifest(ws) if e["gen"] == "B" for p in e["artifacts"]}:
         raise AbxError(f"{rel} is not frozen in generation B")
     rec = store.read_json(ws.path(rel))
@@ -147,7 +147,7 @@ def _coder_outputs(ws: store.Workspace) -> dict:
     frozen = {p for e in store.read_manifest(ws) if e["gen"] == "D" for p in e["artifacts"]}
     out = {}
     for coder in config.load(ws).crosswalk_coders:
-        rel = f"run/calls/unmask/crosswalk/{coder}-r0-all.json"
+        rel = _record(ws, "unmask", "crosswalk", coder, "D")
         if rel not in frozen:
             raise AbxError(f"{rel} is not frozen in generation D")
         out[coder] = store.read_json(ws.path(rel))["output"]
@@ -206,6 +206,13 @@ def _divergence(ws: store.Workspace, supported: set[str], by_lineage: dict, face
     rows.sort(key=lambda r: (order.index(r["class"]), r["facet"]))
     return {"rows": rows, "counts": {c: sum(r["class"] == c for r in rows) for c in order}, "ambiguous": ambiguous,
             "inductive_reportable": reportable}
+
+
+def _record(ws: store.Workspace, stage: str, role: str, lineage: str, generation: str) -> str:
+    """Where `invoke` keeps a single-lineage call's record, by the call's own identity."""
+    req = invoke.CallRequest(stage=stage, role=role, lineage=lineage, run=None, era=None, generation=generation,
+                             slots={})
+    return ws.rel(invoke.record_path(ws, req))
 
 
 # The stages whose call records exist when `extract` runs its integrity audit.

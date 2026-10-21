@@ -1,6 +1,5 @@
 """`unmask`: two-coder prediction crosswalk (generation D), then the IPIP reveal, comparisons
-and report (generation E). Every figure is computed here, in `agreement` or in `ipip` from
-frozen files only, never by a model.
+and report (generation E). Every figure is computed by script from frozen files only, never by a model.
 """
 
 from fractions import Fraction
