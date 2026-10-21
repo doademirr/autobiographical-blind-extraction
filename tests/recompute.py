@@ -18,7 +18,7 @@ from typing import NamedTuple
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "scripts"))
 
 from abx import agreement, calibration, config, extract, facetmap, invoke, ipip, prompts, report, seal, store, unmask
-from abx.errors import AbxError
+from abx.errors import AbxError, IntegrityError
 
 __all__ = ["compare", "expected", "problems"]
 
@@ -267,7 +267,8 @@ def _stance_runs(ws: store.Workspace, prefix: str, stance: str) -> dict:
     runs: dict = {}
     for path in sorted(ws.root.glob(f"run/deductive/{prefix}-*.json")):
         rec = store.read_json(path)
-        assert rec["stance"] == stance, path
+        if rec["stance"] != stance:
+            raise IntegrityError(f"{path.name} holds {rec['stance']!r} scores, not {stance!r}")
         runs.setdefault(rec["lineage"], {})[rec["run"]] = {s["facet"]: s["score"] for s in rec["scores"]}
     return runs
 

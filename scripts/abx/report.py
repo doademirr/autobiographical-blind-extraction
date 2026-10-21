@@ -58,8 +58,10 @@ def _stances(a: dict) -> list[str]:
     shift = "n/a" if s["mean_shift"] is None else f"{s['mean_shift']:+.2f}"
     lines = [f"- Deductive facets, lenient stance (sensitivity, not a gate; {lenient['units']} units): "
              f"α = {num(lenient['alpha'])}; units with both lineages: {pct(lenient['paired_fraction'])}; raw "
-             f"agreement on them: {pct(lenient['raw_agreement'])}; stability α within lineage: {stab}.",
-             f"- Strict against lenient scoring (sensitivity; {s['paired']} of {s['units']} lineage-facet scores "
+             f"agreement on them: {pct(lenient['raw_agreement'])}; stability α within lineage: {stab}."]
+    if lenient["reason"]:
+        lines.append(f"  - Undefined: {REASON_TEXT.get(lenient['reason'], lenient['reason'])}.")
+    lines += [f"- Strict against lenient scoring (sensitivity; {s['paired']} of {s['units']} lineage-facet scores "
              f"paired): α = {num(s['alpha'])}; the same score in {pct(s['equal_rate'])}; lenient minus strict "
              f"on average: {shift}."]
     if s["reason"]:
