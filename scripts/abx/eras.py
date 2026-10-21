@@ -15,7 +15,7 @@ from typing import NamedTuple
 
 from .text import Segment
 
-__all__ = ["Boundary", "candidates", "partition", "propose"]
+__all__ = ["Boundary", "Proposal", "candidates", "partition", "propose"]
 
 MAX_HEADING = 80
 TARGET_ERAS = 6
@@ -31,6 +31,23 @@ class Boundary(NamedTuple):
     kind: str
     heading: str
     years: tuple[int, ...]
+
+
+class Proposal(NamedTuple):
+    """The proposed eras; `room` is False when the config leaves no room for era text, and `eras` is then the whole
+    text as one era."""
+
+    eras: list[dict]
+    room: bool
+
+
+class _Cost(NamedTuple):
+    """A partial partition's cost, compared field by field in this order."""
+
+    paragraph_cuts: int
+    dated_cuts: int
+    deviation: int
+    cuts: tuple[int, ...]
 
 
 def _is_heading(line: str) -> bool:
@@ -77,8 +94,8 @@ def _search(prefix: list[int], kinds: Sequence[str], cap: int, n: int, floor: fl
     cuts, the sum of (era words * n - total)^2 (the squared deviation from the target, in integers), then the cut
     positions."""
     size = len(prefix) - 1
-    best: list[dict[int, tuple]] = [{} for _ in range(n + 1)]
-    best[0][0] = (0, 0, 0, ())
+    best: list[dict[int, _Cost]] = [{} for _ in range(n + 1)]
+    best[0][0] = _Cost(0, 0, 0, ())
     for k in range(1, n + 1):
         for start, cost in best[k - 1].items():
             for end in range(start + 1, size - (n - k) + 1):
@@ -87,16 +104,13 @@ def _search(prefix: list[int], kinds: Sequence[str], cap: int, n: int, floor: fl
                     break
                 if words < floor:
                     continue
-                paragraph, dated, deviation, cuts = cost
-                if start:
-                    paragraph += kinds[start] == "paragraph"
-                    dated += kinds[start] == "dated"
-                    cuts = (*cuts, start)
-                candidate = (paragraph, dated, deviation + (words * n - total) ** 2, cuts)
+                cut = kinds[start] if start else None
+                candidate = _Cost(cost.paragraph_cuts + (cut == "paragraph"), cost.dated_cuts + (cut == "dated"),
+                                  cost.deviation + (words * n - total) ** 2, (*cost.cuts, start) if start else ())
                 if end not in best[k] or candidate < best[k][end]:
                     best[k][end] = candidate
     final = best[n].get(size)
-    return None if final is None else [0, *final[3]]
+    return None if final is None else [0, *final.cuts]
 
 
 def _date_range(years: list[int]) -> str:
@@ -118,9 +132,14 @@ def _basis(position: int, boundary: Boundary) -> str:
     return "paragraph break: no heading or dated boundary fits the size limit"
 
 
-def propose(text: str, segments: Sequence[Segment], cap_for: Callable[[int], int]) -> list[dict] | None:
-    """The proposed eras, or None when the config leaves no room for era text. `cap_for(n)` is the per-era word cap
-    when there are `n` eras; it shrinks as `n` grows, so the cap for the final count covers every era."""
+def _era(k: int, segments: Sequence[Segment], bounds: Sequence[Boundary]) -> dict:
+    return {"id": f"e{k + 1}", "label": "", "date_range": _date_range([y for b in bounds for y in b.years]),
+            "segment_ids": [s.id for s in segments], "basis": _basis(k, bounds[0])}
+
+
+def propose(text: str, segments: Sequence[Segment], cap_for: Callable[[int], int]) -> Proposal:
+    """`cap_for(n)` is the per-era word cap when there are `n` eras; it shrinks as `n` grows, so the cap for the final
+    count covers every era."""
     bounds = candidates(text, segments)
     words = [len(text[s.start:s.end].split()) for s in segments]
     kinds = [b.kind for b in bounds]
@@ -128,7 +147,7 @@ def propose(text: str, segments: Sequence[Segment], cap_for: Callable[[int], int
     while True:
         cap = cap_for(assumed)
         if cap <= 0:
-            return None
+            return Proposal([_era(0, segments, bounds)], room=False)
         n = _count(sum(words), cap, len(segments))
         starts = partition(words, kinds, cap, n)
         while starts is None:
@@ -138,7 +157,5 @@ def propose(text: str, segments: Sequence[Segment], cap_for: Callable[[int], int
             break
         assumed = n
     ends = [*starts[1:], len(segments)]
-    return [{"id": f"e{k + 1}", "label": "",
-             "date_range": _date_range([y for bound in bounds[first:end] for y in bound.years]),
-             "segment_ids": [s.id for s in segments[first:end]], "basis": _basis(k, bounds[first])}
-            for k, (first, end) in enumerate(zip(starts, ends, strict=True))]
+    return Proposal([_era(k, segments[first:end], bounds[first:end])
+                     for k, (first, end) in enumerate(zip(starts, ends, strict=True))], room=True)

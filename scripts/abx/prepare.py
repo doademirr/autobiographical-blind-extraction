@@ -2,6 +2,7 @@
 
 import shutil
 from pathlib import Path
+from typing import NamedTuple
 
 from . import artifacts, calibration, config, eras, invoke, ipip, lifecycle, qualify, sizing, store, text, withheld
 from .errors import UsageError
@@ -56,9 +57,23 @@ def _stage_method(ws: store.Workspace) -> None:
         store.write_json(schema_path, schema)
 
 
-def _review_files(ws: store.Workspace, cfg: config.Config, original: str) -> dict[str, tuple[dict, str]] | None:
-    """Write the templates the user edits on first run. Returns each review file read exactly once, as
-    (parsed document, sha256 of the bytes read), when both are approved; None while either is not.
+class _Review(NamedTuple):
+    """A review file as read once: the parsed document and the sha256 of the bytes read."""
+
+    doc: dict
+    sha256: str
+
+
+class _Proposed(NamedTuple):
+    """The eras to write and, when none passes the exact size check, why."""
+
+    eras: list[dict]
+    failure: str | None
+
+
+def _review_files(ws: store.Workspace, cfg: config.Config, original: str) -> dict[str, _Review] | None:
+    """Write the templates the user edits on first run. Returns each review file read exactly once when both are
+    approved; None while either is not.
     Preparation uses only this snapshot, so a file edited mid-run cannot change what was approved."""
     red, era_file = ws.path("prepare/redactions.json"), ws.path("prepare/eras.json")
     if not red.exists():
@@ -68,11 +83,12 @@ def _review_files(ws: store.Workspace, cfg: config.Config, original: str) -> dic
         sents = text.sentences(original, segs)
         chars_per_word = len(text.render_numbered(original, sents)) / max(len(original.split()), 1)
         limit = sizing.max_era_words(ws, cfg, 5, chars_per_word)
-        proposal, failure = _proposal(ws, cfg, original, segs, sents, chars_per_word)
+        proposed = _proposal(ws, cfg, original, segs, sents, chars_per_word)
         note = (f"{ERA_RULE} Maximum, estimated: about {limit} words for the sixth era under this config (earlier "
                 "eras hold a little more, later ones less; `prepare` checks every era exactly before any call). "
-                f"{PROPOSAL_NOTE}" + (f" This proposal does not pass the size check: {failure}" if failure else ""))
-        store.write_json(era_file, {"approved": False, "note": note, "eras": proposal})
+                f"{PROPOSAL_NOTE}"
+                + (f" This proposal does not pass the size check: {proposed.failure}" if proposed.failure else ""))
+        store.write_json(era_file, {"approved": False, "note": note, "eras": proposed.eras})
         kinds = [b.kind for b in eras.candidates(original, segs)]
         preview = [f"{s.id} ({len(original[s.start:s.end].split())} words, {kind}): {original[s.start:s.end][:100]}"
                    for s, kind in zip(segs, kinds, strict=True)]
@@ -80,32 +96,27 @@ def _review_files(ws: store.Workspace, cfg: config.Config, original: str) -> dic
     snapshot = {}
     for name in ("redactions.json", "eras.json"):
         raw = ws.path(f"prepare/{name}").read_bytes()
-        snapshot[name] = (_parse_review(name, raw), store.sha256_bytes(raw))
-    return snapshot if all(doc["approved"] is True for doc, _ in snapshot.values()) else None
+        snapshot[name] = _Review(_parse_review(name, raw), store.sha256_bytes(raw))
+    return snapshot if all(review.doc["approved"] is True for review in snapshot.values()) else None
 
 
 def _proposal(ws: store.Workspace, cfg: config.Config, original: str, segs: list[text.Segment],
-              sents: list[text.Sentence], chars_per_word: float) -> tuple[list[dict], str]:
-    """The era proposal and, when none passes the exact size check, the last failure. The cap is an estimate, so a
+              sents: list[text.Sentence], chars_per_word: float) -> _Proposed:
+    """The era proposal, and the last failure when none passes the exact size check. The cap is an estimate, so a
     failing proposal is redone under a cap 10 % smaller, up to five times."""
-    failure = ""
-    proposal = None
+    failure = None
     for retry in range(PROPOSAL_RETRIES + 1):
         scale = (1 - PROPOSAL_SHRINK) ** retry
         proposal = eras.propose(original, segs,
                                 lambda n, s=scale: int(sizing.max_era_words(ws, cfg, n - 1, chars_per_word) * s))
-        if proposal is None:
-            break
+        if not proposal.room:
+            return _Proposed(proposal.eras, "this config's input budgets leave no room for any era text")
         try:
-            sizing.check_eras(ws, cfg, proposal, sents, original)
-            return proposal, ""
+            sizing.check_eras(ws, cfg, proposal.eras, sents, original)
+            return _Proposed(proposal.eras, None)
         except UsageError as exc:
             failure = str(exc)
-    if proposal is None:
-        whole = [{"id": "e1", "label": "", "date_range": "", "segment_ids": [s.id for s in segs],
-                  "basis": "start of text"}]
-        return whole, "this config's input budgets leave no room for any era text"
-    return proposal, failure
+    return _Proposed(proposal.eras, failure)
 
 
 def review_doc(ws: store.Workspace, name: str) -> dict:
@@ -164,10 +175,10 @@ def prepare(ws: store.Workspace) -> dict:
     snapshot = _review_files(ws, cfg, original)
     if snapshot is None:
         return {"status": "review", "next": "approve_review_files"}
-    names = snapshot["redactions.json"][0]["names"]
+    names = snapshot["redactions.json"].doc["names"]
     if not all(isinstance(k, str) and isinstance(v, str) for k, v in names.items()):
         raise UsageError("redactions.json: names must map each name to its replacement text")
-    eras = snapshot["eras.json"][0]["eras"]
+    eras = snapshot["eras.json"].doc["eras"]
     if not all(isinstance(e, dict) for e in eras):
         raise UsageError("eras.json: eras must be a list of era objects")
     redacted, spans = text.redact(original, names)
@@ -188,7 +199,7 @@ def prepare(ws: store.Workspace) -> dict:
         store.write_json(ws.path(f"prepare/zoning/{era['id']}.json"),
                          {sid: labels[sid] for sid in (s.id for s in era_sents)})
     calibration.run(ws, cfg, eras, sents, redacted, labels)
-    return _substrate(ws, cfg, eras, sents, redacted, labels, {f"prepare/{n}": h for n, (_, h) in snapshot.items()})
+    return _substrate(ws, cfg, eras, sents, redacted, labels, {f"prepare/{n}": r.sha256 for n, r in snapshot.items()})
 
 
 def _substrate(ws, cfg: config.Config, eras, sents, redacted, labels, approved: dict[str, str]) -> dict:

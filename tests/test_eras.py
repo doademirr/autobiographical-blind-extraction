@@ -91,13 +91,13 @@ class PartitionTest(unittest.TestCase):
 class ProposeTest(unittest.TestCase):
     def test_two_paragraphs_cap_the_count(self):
         body, segs = segmented([" ".join(["w"] * 30_000)] * 2)
-        out = eras.propose(body, segs, lambda n: 40_000)
+        out = eras.propose(body, segs, lambda n: 40_000).eras
         self.assertEqual([e["segment_ids"] for e in out], [["p0001"], ["p0002"]])
 
     def test_a_short_text_is_one_era_unless_the_cap_forces_more(self):
         body, segs = segmented([" ".join(["w"] * 3000)] * 5)
-        self.assertEqual(len(eras.propose(body, segs, lambda n: 40_000)), 1)
-        forced = eras.propose(body, segs, lambda n: 7000)
+        self.assertEqual(len(eras.propose(body, segs, lambda n: 40_000).eras), 1)
+        forced = eras.propose(body, segs, lambda n: 7000).eras
         self.assertEqual(len(forced), 3)
         self.assertEqual([e["basis"] for e in forced[1:]],
                          ["paragraph break: no heading or dated boundary fits the size limit"] * 2)
@@ -109,22 +109,24 @@ class ProposeTest(unittest.TestCase):
         def cap_for(n):
             seen.append(n)
             return 12_000 - 500 * n
-        out = eras.propose(body, segs, cap_for)
+        out = eras.propose(body, segs, cap_for).eras
         caps = 12_000 - 500 * len(out)
         self.assertGreater(len(out), 6)
         self.assertIn(len(out), seen)
         self.assertTrue(all(len(e["segment_ids"]) * 1000 <= caps for e in out))
 
-    def test_zero_cap_proposes_nothing(self):
-        body, segs = segmented(["Some text."])
-        self.assertIsNone(eras.propose(body, segs, lambda n: 0))
+    def test_zero_cap_proposes_the_whole_text_as_one_era_without_room(self):
+        body, segs = segmented(["Some text.", "More text."])
+        proposal = eras.propose(body, segs, lambda n: 0)
+        self.assertFalse(proposal.room)
+        self.assertEqual([e["segment_ids"] for e in proposal.eras], [["p0001", "p0002"]])
 
     def test_fields(self):
         paragraphs = ["In 1701 we were born.", *[" ".join(["w"] * 2500)] * 4, "CHAPTER II",
                       "In 1690, 1710, 1712, 1715, 1716, 1717, 1718, 1719, 1720, 1721 and 1790.",
                       *[" ".join(["w"] * 2500)] * 4]
         body, segs = segmented(paragraphs)
-        out = eras.propose(body, segs, lambda n: 15_000)
+        out = eras.propose(body, segs, lambda n: 15_000).eras
         self.assertEqual([e["id"] for e in out], ["e1", "e2"])
         self.assertEqual([e["label"] for e in out], ["", ""])
         self.assertEqual([e["basis"] for e in out], ["start of text", "heading: CHAPTER II"])
