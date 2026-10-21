@@ -7,8 +7,8 @@ from abx.roles import ROLES
 
 from .helpers import FIXTURE, FakeWorkspace
 
-# The per-era rater roles; the zoner is checked per chunk.
-ERA_ROLES = tuple(r for r, p in ROLES.items() if p.per_era and r != "zoner")
+# The per-era roles sized on a whole era; the chunked ones (zoner, calibration judge) are sized per part.
+ERA_ROLES = tuple(r for r, p in ROLES.items() if p.per_era and not p.chunked)
 PARAGRAPH = " ".join(f"He walked to market number {i} and bought bread." for i in range(40))
 
 

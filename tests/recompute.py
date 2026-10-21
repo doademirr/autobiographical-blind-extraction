@@ -46,11 +46,13 @@ def _calibration(ws: store.Workspace) -> tuple[dict, list[str]]:
     rec = store.read_json(ws.path(calibration.PATH))
     eras = store.read_json(ws.path("prepare/eras.json"))["eras"]
     zoning = {e["id"]: store.read_json(ws.path(f"prepare/zoning/{e['id']}.json")) for e in eras}
-    out, judged = [], {lin: {} for lin in rec["judges"]}
+    roster = sorted(config.load(ws).lineages)  # one judge per configured lineage, whatever the record claims
+    out = [] if sorted(rec["judges"]) == roster else [f"calibration: judges {rec['judges']} are not {roster}"]
+    judged = {lin: {} for lin in roster}
     for part in rec["parts"]:
         if not set(part["sentence_ids"]) <= set(zoning[part["era"]]):
             out.append(f"calibration: {part['era']} part {part['part']} holds sentences from another era")
-        for lin in rec["judges"]:
+        for lin in roster:
             path = ws.path(f"run/calls/prepare/calibration_judge/{lin}-r0-{part['era']}.{part['part']}.json")
             rows = store.read_json(path)["output"]["labels"]
             ids = [lab["sentence_id"] for lab in rows]
@@ -64,9 +66,9 @@ def _calibration(ws: store.Workspace) -> tuple[dict, list[str]]:
     counts = {"fk": 0, "kept": 0, "fr": 0, "removed": 0, "same": 0, "same_side": 0}
     for t in {t["sentence_id"]: t for t in rec["targets"]}.values():
         sid, era = t["sentence_id"], t["era"]
-        labels = {lin: judged[lin].get(sid, (None, None)) for lin in rec["judges"]}
-        if sid not in zoning[era] or t["zoner"] != zoning[era][sid] or \
-                any(labels[lin] != (era, t["judges"][lin]) for lin in rec["judges"]):
+        labels = {lin: judged[lin].get(sid, (None, None)) for lin in roster}
+        if sid not in zoning[era] or t["zoner"] != zoning[era][sid] or sorted(t["judges"]) != roster or \
+                any(labels[lin] != (era, t["judges"][lin]) for lin in roster):
             out.append(f"calibration: target {sid} does not match its zoning and judge records")
             continue
         votes = [label for _, label in labels.values()]
@@ -95,7 +97,7 @@ def _calibration(ws: store.Workspace) -> tuple[dict, list[str]]:
     return {"limits": {"false_keep": .05, "false_remove": .2}, "held_out": n, "false_keep": fk, "false_remove": fr,
             "judge_agreement": {"three_label": counts["same"] / n if n else None,
                                 "collapsed": counts["same_side"] / n if n else None, "of": n},
-            "judges": rec["judges"], "passed": reason is None, "reason": reason}, out
+            "judges": roster, "passed": reason is None, "reason": reason}, out
 
 
 # The stages whose call records exist when `extract` runs its integrity audit.

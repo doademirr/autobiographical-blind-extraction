@@ -29,7 +29,7 @@ class Role:
 _ROLES = [
     Role("zoner", frozenset({"chunk"}), "zoner", per_era=True, chunked=True, params=frozenset({"era_label"}),
          single="zoner"),
-    # Labels raw text like the zoner, in the zoner's output schema, on every lineage.
+    # The zoner's output schema, so each judge label lines up one to one with a zoner label.
     Role("calibration_judge", frozenset({"excerpt"}), "zoner", per_era=True, chunked=True),
     Role("discovery", frozenset({"era", "hypotheses"}), "discovery", zoned_consumer=True, per_era=True,
          params=frozenset({"era_label", "hypotheses"}), rater_bound=frozenset({"hypotheses"})),

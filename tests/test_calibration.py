@@ -59,6 +59,8 @@ class AllocateTest(unittest.TestCase):
         self.assertEqual(calibration.allocate({"a": 1, "b": 1}, 1), {"a": 1, "b": 0})
         self.assertEqual(calibration.allocate({"a": 0, "b": 5}, 3), {"a": 0, "b": 3})
         self.assertEqual(calibration.allocate({"a": 4, "b": 4, "c": 4}, 5), {"a": 2, "b": 2, "c": 1})
+        # Equal remainders (39/72 for e1 and e2) tie exactly, so the earlier era wins.
+        self.assertEqual(calibration.allocate({"e1": 7, "e2": 31, "e3": 34}, 60), {"e1": 7, "e2": 25, "e3": 28})
 
 
 def _era_sents(n: int, start: int = 1, per_segment: int = 4) -> list[abx_text.Sentence]:
@@ -219,6 +221,12 @@ class PipelineTest(unittest.TestCase):
         store.write_json(ws.path(calibration.PATH), repeated)
         summary, problems = _calibration(ws)
         self.assertEqual((problems, summary["held_out"]), (["calibration: a target is repeated"], 119))
+        for judges in (["claude"], ["claude", "claude"]):
+            store.write_json(ws.path(calibration.PATH), {**rec, "judges": judges})
+            self.assertIn(f"calibration: judges {judges} are not ['claude', 'codex']", _calibration(ws)[1])
+        one_judge = {**rec, "targets": [{**t, "judges": {"claude": t["judges"]["claude"]}} for t in rec["targets"]]}
+        store.write_json(ws.path(calibration.PATH), one_judge)
+        self.assertEqual(len(_calibration(ws)[1]), len(rec["targets"]))
         store.write_json(ws.path(calibration.PATH), rec)
         self.assertEqual(_calibration(ws), (calibration.summary(rec), []))
         record = sorted(ws.root.glob(JUDGE_RECORDS))[0]

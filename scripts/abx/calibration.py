@@ -46,10 +46,10 @@ def allocate(counts: Mapping[str, int], n: int) -> dict[str, int]:
     while (left := n - sum(alloc.values())) > 0:
         room = [e for e in counts if counts[e] > alloc[e]]
         weight = sum(counts[e] for e in room)
-        shares = {e: left * counts[e] / weight for e in room}
-        grant = {e: min(int(shares[e]), counts[e] - alloc[e]) for e in room}
+        split = {e: divmod(left * counts[e], weight) for e in room}  # integers, so equal remainders tie exactly
+        grant = {e: min(whole, counts[e] - alloc[e]) for e, (whole, _) in split.items()}
         for e in sorted((e for e in room if alloc[e] + grant[e] < counts[e]),
-                        key=lambda e: (-(shares[e] - int(shares[e])), room.index(e)))[:left - sum(grant.values())]:
+                        key=lambda e: (-split[e][1], room.index(e)))[:left - sum(grant.values())]:
             grant[e] += 1
         for e, g in grant.items():
             alloc[e] += g
