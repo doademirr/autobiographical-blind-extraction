@@ -39,10 +39,53 @@
     ],
     "additionalProperties": false
    }
+  },
+  "predictions": {
+   "type": "array",
+   "items": {
+    "type": "object",
+    "properties": {
+     "prediction_id": {
+      "type": "string",
+      "pattern": "^P[0-9]{1,3}$"
+     },
+     "facets": {
+      "type": "array",
+      "maxItems": 3,
+      "items": {
+       "type": "object",
+       "properties": {
+        "facet": {
+         "type": "string",
+         "description": "a facet code; the allowed codes are filled in from the frozen instrument at prepare"
+        },
+        "polarity": {
+         "type": "string",
+         "enum": [
+          "+",
+          "-"
+         ]
+        }
+       },
+       "required": [
+        "facet",
+        "polarity"
+       ],
+       "additionalProperties": false
+      }
+     }
+    },
+    "required": [
+     "prediction_id",
+     "facets"
+    ],
+    "additionalProperties": false
+   }
   }
  },
  "required": [
-  "codes"
+  "codes",
+  "predictions"
  ],
  "additionalProperties": false
 }

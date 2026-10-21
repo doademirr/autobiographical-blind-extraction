@@ -6,7 +6,7 @@ frozen files only, never by a model.
 from fractions import Fraction
 from statistics import median
 
-from . import artifacts, calibration, config, facetmap, invoke, ipip, lifecycle, report, seal, store
+from . import artifacts, calibration, config, divergence, facetmap, invoke, ipip, lifecycle, report, seal, store
 
 __all__ = [
     "REPORTABLE",
@@ -35,13 +35,21 @@ def _crosswalk(ws: store.Workspace, cfg: config.Config, book: dict) -> None:
 
     def validate(out) -> list[str]:
         got = [(x["prediction_id"], x["construct_id"]) for x in out["codes"]]
-        return [] if len(got) == len(set(got)) and set(got) == pairs else ["codes must cover every pair exactly once"]
+        problems = [] if len(got) == len(set(got)) and set(got) == pairs else \
+            ["codes must cover every pair exactly once"]
+        tagged = [x["prediction_id"] for x in out["predictions"]]
+        if sorted(tagged) != sorted(preds):
+            problems.append("tag every prediction exactly once")
+        return problems + [f"{x['prediction_id']} lists a facet twice" for x in out["predictions"]
+                           if len({f["facet"] for f in x["facets"]}) != len(x["facets"])]
 
     for lineage in cfg.crosswalk_coders:
         out = invoke.call(ws, cfg, invoke.CallRequest(
             stage="unmask", role="crosswalk", lineage=lineage, run=None, era=None, generation="D",
-            slots={"constructs": "constructs:all", "predictions": "self_prediction:sealed"}, validate=validate))
-        store.write_json(ws.path(f"run/crosswalk/codes-{lineage}.json"), {"coder": lineage, "codes": out["codes"]})
+            slots={"constructs": "constructs:all", "predictions": "self_prediction:sealed", "facets": "facets:all"},
+            validate=validate))
+        store.write_json(ws.path(f"run/crosswalk/codes-{lineage}.json"),
+                         {"coder": lineage, "codes": out["codes"], "predictions": out["predictions"]})
 
 
 def prediction_rates(codes: dict[str, list[dict]], predictions: list[str], eligible: set[str]) -> dict:
@@ -114,7 +122,8 @@ def compute(ws: store.Workspace, cfg: config.Config) -> dict:
     """Every reported figure, from frozen files only; the recomputation check rebuilds the same way."""
     book = store.read_json(ws.path("run/codebook/codebook.json"))
     agree = store.read_json(ws.path("run/agreement.json"))
-    codes = {c: store.read_json(ws.path(f"run/crosswalk/codes-{c}.json"))["codes"] for c in cfg.crosswalk_coders}
+    coded = {c: store.read_json(ws.path(f"run/crosswalk/codes-{c}.json")) for c in cfg.crosswalk_coders}
+    codes = {c: coded[c]["codes"] for c in cfg.crosswalk_coders}
     preds = list(seal.predictions(ws.path("sealed/self-prediction.md").read_text(encoding="utf-8")))
     inductive_ok = agree["inductive"]["verdict"] in REPORTABLE
     supported = {cid for cid, eras in agree["construct_status"].items() if "supported" in eras.values()}
@@ -122,6 +131,7 @@ def compute(ws: store.Workspace, cfg: config.Config) -> dict:
     self_report = ipip.score(ipip.parse_responses(ws.path("sealed/ipip-120.csv").read_text(encoding="utf-8"),
                                                   instrument), instrument)
     observer = deductive_domains(agree["deductive_collapsed"], instrument)
+    facet_map = store.read_json(ws.path(facetmap.PATH))
     qualification = store.read_json(ws.path(invoke.QUALIFICATION_A))
     invalid = invoke.invalid_outputs(ws)
     return {
@@ -139,8 +149,10 @@ def compute(ws: store.Workspace, cfg: config.Config) -> dict:
         | {"inductive_reportable": inductive_ok},
         "deductive_vs_ipip": domain_comparison(observer, self_report)
         | {"deductive_reportable": agree["deductive"]["verdict"] in REPORTABLE},
-        "correspondences": facetmap.correspondences(store.read_json(ws.path(facetmap.PATH)), book["constructs"],
-                                                    supported, self_report["facets"], inductive_ok),
+        "correspondences": facetmap.correspondences(facet_map, book["constructs"], supported, self_report["facets"],
+                                                    inductive_ok),
+        "divergence": divergence.build_map(facet_map, supported, observer["facets"], self_report["facets"],
+                                           {c: coded[c]["predictions"] for c in cfg.crosswalk_coders}, inductive_ok),
         "domain_names": instrument["domains"],
         "facet_names": instrument["facets"],
     }

@@ -6,6 +6,10 @@ life record. For every pair of prediction and construct, code:
 - none: they are about different things.
 Give the polarity: same direction, opposite, or unclear. Code every pair.
 
+Then, for each prediction on its own, list the questionnaire facets below that it makes a claim about, at most three,
+each with a polarity: "+" when the prediction says the person is at the facet's high pole, "-" at its low pole.
+Judge from the prediction's own words, not from the constructs. List none when no facet fits. Tag every prediction.
+
 Respond with only a JSON object that matches this schema:
 {{schema}}
 
@@ -14,3 +18,6 @@ Constructs:
 
 Predictions:
 {{predictions}}
+
+Facets (code and name):
+{{facets}}

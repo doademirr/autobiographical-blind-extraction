@@ -9,6 +9,7 @@ own row.
 
 import json
 import sys
+from fractions import Fraction
 from pathlib import Path
 from typing import NamedTuple
 
@@ -139,6 +140,72 @@ def _correspondences(ws: store.Workspace, book: dict, supported: set[str], facet
                          "result": result})
     counts = {k: sum(r["result"] == k for r in rows) for k in ("consistent", "inconsistent", "neutral", "n/a")}
     return {"rows": rows, "counts": counts, "unmapped": unmapped, "inductive_reportable": reportable}
+
+
+def _coder_outputs(ws: store.Workspace) -> dict:
+    """Each crosswalk coder's own call output, which generation D must have frozen."""
+    frozen = {p for e in store.read_manifest(ws) if e["gen"] == "D" for p in e["artifacts"]}
+    out = {}
+    for coder in config.load(ws).crosswalk_coders:
+        rel = f"run/calls/unmask/crosswalk/{coder}-r0-all.json"
+        if rel not in frozen:
+            raise AbxError(f"{rel} is not frozen in generation D")
+        out[coder] = store.read_json(ws.path(rel))["output"]
+    return out
+
+
+def _divergence(ws: store.Workspace, supported: set[str], by_lineage: dict, facets: dict, reportable: bool) -> dict:
+    """The three-way map rebuilt from the coders' and the mapper's call records, the collapsed deductive scores and
+    the IPIP facet scores, without `divergence.py`."""
+    mapping = _mapper_output(ws)
+    tags = {coder: {(p["prediction_id"], f["facet"]): f["polarity"] for p in out["predictions"] for f in p["facets"]}
+            for coder, out in _coder_outputs(ws).items()}
+    keys = sorted(set().union(*tags.values()))
+    agreed, ambiguous = {}, []
+    for pid, facet in keys:
+        given = [t.get((pid, facet)) for t in tags.values()]
+        if given.count(given[0]) == len(given):
+            agreed.setdefault(facet, []).append({"prediction_id": pid, "polarity": given[0]})
+        else:
+            ambiguous.append({"prediction_id": pid, "facet": facet})
+
+    def side(signs):
+        poles = {"high" if x == "+" else "low" for x in signs}
+        return None if not poles else "conflict" if len(poles) == 2 else poles.pop()
+
+    def band(value, low, high):
+        return None if value is None else "low" if value <= low else "high" if value >= high else "mid"
+
+    order = ["divergent", "all three", "blind and self", "blind only", "self only", "test only"]
+    rows = []
+    for facet in sorted(facets):
+        constructs = [{"construct_id": cid, "polarity": f["polarity"]} for cid in sorted(supported)
+                      for f in mapping[cid] if f["facet"] == facet]
+        vals = [by_lineage[lin].get(facet) for lin in sorted(by_lineage)]
+        obs = sum(Fraction(v) for v in vals) / len(vals) if vals and None not in vals else None
+        o_band, t_band = band(obs, 3, 5), band(facets[facet], Fraction(7, 3), Fraction(11, 3))
+        ind = side([c["polarity"] for c in constructs])
+        ded = o_band if o_band in ("high", "low") else None
+        blind = "conflict" if ind == "conflict" or (ind and ded and ind != ded) else ind or ded
+        predictions = agreed.get(facet, [])
+        self_ = side([p["polarity"] for p in predictions])
+        test = t_band if t_band in ("high", "low") else None
+        present = [x for x in (blind, self_, test) if x]
+        if not present:
+            continue
+        if "conflict" in present or len(set(present)) > 1:
+            kind = "divergent"
+        elif blind and self_:
+            kind = "all three" if test else "blind and self"
+        else:
+            kind = "blind only" if blind else "self only" if self_ else "test only"
+        rows.append({"facet": facet, "class": kind, "constructs": constructs, "inductive": ind,
+                     "observer": None if obs is None else float(obs), "observer_band": o_band,
+                     "predictions": predictions, "ipip": None if facets[facet] is None else float(facets[facet]),
+                     "ipip_band": t_band, "blind": blind, "self": self_, "test": test})
+    rows.sort(key=lambda r: (order.index(r["class"]), r["facet"]))
+    return {"rows": rows, "counts": {c: sum(r["class"] == c for r in rows) for c in order}, "ambiguous": ambiguous,
+            "inductive_reportable": reportable}
 
 
 # The stages whose call records exist when `extract` runs its integrity audit.
@@ -278,6 +345,7 @@ def expected(ws: store.Workspace) -> dict:
         "deductive_vs_ipip": unmask.domain_comparison(unmask.deductive_domains(collapsed, instrument), self_report)
         | {"deductive_reportable": deductive_arm.verdict in unmask.REPORTABLE},
         "correspondences": _correspondences(ws, book, supported, self_report["facets"], inductive_ok),
+        "divergence": _divergence(ws, supported, deductive_arm.collapsed, self_report["facets"], inductive_ok),
         "domain_names": instrument["domains"],
         "facet_names": instrument["facets"],
         "invalid_outputs": {"by_stage": invalid, "total": sum(invalid.values()), "max_attempts": 3},
@@ -378,6 +446,26 @@ def _rows(want: dict) -> list[str]:
                     f"{row['polarity']} | {_num(row['ipip'], 2)} | {row['band'] or 'n/a'} | {row['result']} |")
     if not c["inductive_reportable"]:
         rows.append("The inductive arm is not reportable; the rows below are descriptive only.")
+    m = want["divergence"]
+    rows.append("- Facets: " + ", ".join(f"{m['counts'][k]} {k}" for k in
+                                          ("divergent", "all three", "blind and self", "blind only", "self only",
+                                           "test only")) + ".")
+    rows.append("- Prediction tags the two coders did not share (placed nowhere): "
+                + (", ".join(f"{a['prediction_id']} {a['facet']}" for a in m["ambiguous"]) or "none") + ".")
+
+    def signed(items, key):
+        return ", ".join(f"{i[key]}{'+' if i['polarity'] == '+' else '−'}" for i in items) or "—"
+
+    def score(value, band):
+        return f"{_num(value, 2)} {band}" if band else _num(value, 2)
+
+    for row in m["rows"]:
+        rows.append(f"| {row['class']} | {row['facet']} {want['facet_names'][row['facet']]} | "
+                    f"{signed(row['constructs'], 'construct_id')} | {score(row['observer'], row['observer_band'])} | "
+                    f"{row['blind'] or '—'} | {signed(row['predictions'], 'prediction_id')} | {row['self'] or '—'} | "
+                    f"{score(row['ipip'], row['ipip_band'])} | {row['test'] or '—'} |")
+    if not m["inductive_reportable"]:
+        rows.append("The inductive arm is not reportable; the constructs below are descriptive only.")
     return rows
 
 
@@ -403,6 +491,9 @@ def problems(ws: store.Workspace) -> list[str]:
     if [h for h in report_md.splitlines() if h.startswith("## ")][:1] != ["## This is not a clinical assessment"]:
         out.append("report's first section is not the non-clinical statement")
     out += _calibration(ws)[1]
+    for coder, output in _coder_outputs(ws).items():
+        if store.read_json(ws.path(f"run/crosswalk/codes-{coder}.json"))["predictions"] != output["predictions"]:
+            out.append(f"crosswalk: {coder}'s stored prediction tags differ from its call record")
     if store.read_json(ws.path(facetmap.PATH)) != _mapper_output(ws):
         out.append("facet map: the stored map differs from the mapper's call record")
     return out + compare(store.read_json(ws.path("report/results.json")), report_md, expected(ws))

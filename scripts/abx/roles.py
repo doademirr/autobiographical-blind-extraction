@@ -46,7 +46,7 @@ _ROLES = [
          params=frozenset({"era_label"})),
     Role("deductive_scorer", frozenset({"ledgers", "facets"}), "scores", zoned_consumer=True,
          rater_bound=frozenset({"ledgers"})),
-    Role("crosswalk", frozenset({"constructs", "self_prediction"}), "crosswalk", zoned_consumer=True),
+    Role("crosswalk", frozenset({"constructs", "self_prediction", "facets"}), "crosswalk", zoned_consumer=True),
     Role("probe", frozenset(), "probe"),
 ]
 ROLES: Mapping[str, Role] = MappingProxyType({r.name: r for r in _ROLES})

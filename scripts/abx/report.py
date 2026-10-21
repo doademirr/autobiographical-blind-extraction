@@ -1,6 +1,7 @@
 """`report.md` from `results.json`. Formatting only: every number arrives already computed."""
 
 from .agreement import MIN_PAIRED, REPORT, TENTATIVE
+from .divergence import CLASSES
 
 __all__ = ["render"]
 
@@ -80,6 +81,40 @@ def _correspondences(r: dict) -> list[str]:
         out += [f"| {row['construct_id']} {row['name']} | {row['facet']} {r['facet_names'][row['facet']]} | "
                 f"{row['polarity']} | {num(row['ipip'], 2)} | {row['band'] or 'n/a'} | {row['result']} |"
                 for row in c["rows"]]
+    return [*out, ""]
+
+
+def _signed(items: list[dict], key: str) -> str:
+    return ", ".join(f"{i[key]}{'+' if i['polarity'] == '+' else '−'}" for i in items) or "—"
+
+
+def _score(value, band: str | None) -> str:
+    return f"{num(value, 2)} {band}" if band else num(value, 2)
+
+
+def _divergence(r: dict) -> list[str]:
+    m = r["divergence"]
+    out = ["## Where the three views meet", "",
+           "Each questionnaire facet gets a direction (high or low) from three views. Blind: the supported constructs "
+           "mapped to it, and the observer estimate (1–7). Self: your predictions, tagged to facets by both crosswalk "
+           "coders and counted only where they agree. Test: your IPIP answers (1–5). Divergent facets come first: any "
+           "two views pointing opposite ways, or a view whose own evidence points both ways (shown, not explained). "
+           "\"Only\" compares the blind view with your predictions; the test column says whether the questionnaire "
+           "agrees. Test-only facets are questionnaire signals neither other view raised, which is no evidence that "
+           "either missed them.", ""]
+    if not m["inductive_reportable"]:
+        out += ["The inductive arm is not reportable; the constructs below are descriptive only.", ""]
+    out.append("- Facets: " + ", ".join(f"{m['counts'][c]} {c}" for c in CLASSES) + ".")
+    shared = ", ".join(f"{a['prediction_id']} {a['facet']}" for a in m["ambiguous"]) or "none"
+    out.append(f"- Prediction tags the two coders did not share (placed nowhere): {shared}.")
+    if m["rows"]:
+        out += ["", "| View | Facet | Constructs | Observer | Blind | Predictions | Self | IPIP | Test |",
+                "|---|---|---|---|---|---|---|---|---|"]
+        out += [f"| {row['class']} | {row['facet']} {r['facet_names'][row['facet']]} | "
+                f"{_signed(row['constructs'], 'construct_id')} | {_score(row['observer'], row['observer_band'])} | "
+                f"{row['blind'] or '—'} | {_signed(row['predictions'], 'prediction_id')} | {row['self'] or '—'} | "
+                f"{_score(row['ipip'], row['ipip_band'])} | {row['test'] or '—'} |"
+                for row in m["rows"]]
     return [*out, ""]
 
 
@@ -178,7 +213,7 @@ def render(r: dict) -> str:
         out.append(f"| {r['domain_names'][dom]} | {num(row['observer'], 2)} | {row['observer_band'] or 'n/a'} | "
                    f"{num(row['ipip'], 2)} | {row['ipip_band'] or 'n/a'} | {same} |")
     out += ["", f"Same band in {pct(d['agreement_rate'])} of {d['compared']} domains compared.", "",
-            *_correspondences(r), "## Limits", "",
+            *_correspondences(r), *_divergence(r), "## Limits", "",
             "- Raters saw one era at a time, so patterns that only show across eras are not captured.",
             "- Discovery used a fixed panel; saturation was not established.",
             "- Narrative over-reads emotionally charged scenes and misses traits that show as absence.",

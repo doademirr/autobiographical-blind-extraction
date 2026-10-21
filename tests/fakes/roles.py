@@ -189,7 +189,16 @@ def crosswalk(prompt, lineage, occurrence):
             if lineage == "codex" and hit and h(pid, cid) % 3 == 0:
                 code = "partial"
             codes.append({"prediction_id": pid, "construct_id": cid, "code": code, "polarity": "same"})
-    return {"codes": codes}
+    # Each prediction tags one or two facets by a hash of its text; the codex coder flips the polarity of the
+    # first prediction's first tag, so the coders disagree there.
+    tags = []
+    for i, (pid, ptext) in enumerate(predictions):
+        picks = list(dict.fromkeys([FACETS[h(ptext) % 30], FACETS[h(ptext, "b") % 30]][:1 + h(ptext) % 2]))
+        facets = [{"facet": f, "polarity": "+" if h(ptext, f) % 2 else "-"} for f in picks]
+        if lineage == "codex" and i == 0 and facets:
+            facets[0]["polarity"] = "-" if facets[0]["polarity"] == "+" else "+"
+        tags.append({"prediction_id": pid, "facets": facets})
+    return {"codes": codes, "predictions": tags}
 
 
 def zoner_label(sentence_id: str) -> str:

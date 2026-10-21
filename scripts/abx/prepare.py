@@ -41,7 +41,8 @@ def _stage_method(ws: store.Workspace) -> None:
     store.write_text_atomic(artifacts.path_of(ws, "facets:all"), "".join(f"- {c} {n}\n" for c, n in facets.items()))
     for name, path in (("ledger", ("facets", "items", "properties", "facet")),
                        ("scores", ("scores", "items", "properties", "facet")),
-                       ("facetmap", ("constructs", "items", "properties", "facets", "items", "properties", "facet"))):
+                       ("facetmap", ("constructs", "items", "properties", "facets", "items", "properties", "facet")),
+                       ("crosswalk", ("predictions", "items", "properties", "facets", "items", "properties", "facet"))):
         schema_path = ws.path(f"prereg/schemas/{name}.json")
         schema = store.read_json(schema_path)
         node = schema["properties"]
