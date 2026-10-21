@@ -91,7 +91,6 @@ Each stage module declares a `lifecycle.Stage` descriptor (name, order, argument
 ## Not yet built
 
 - **Preparation.** No local candidate-name scan (the user writes `redactions.json` unaided); no era proposal from dates and headings (the user writes `eras.json`); no user spot-check of kept and removed sentences; the per-era kept-word band is reported, not enforced; budget confirmation prints the estimate only.
-- **Zoning tuning.** The calibration gate runs on every `prepare`, but the zoner prompt has not yet been tuned against a live calibration on a public-domain fixture, so a live zoner may fail it.
 - **Qualification.** File-read and app/MCP capability classes are qualified with positive controls; the image, web, browser and agent classes are not.
 - **Codebook and audit.** The audit never drops or splits a construct; it drops foils and flags constructs.
 - **Agreement and comparison.** The strict stance only, so no lenient stance or strict-vs-lenient sensitivity α; no Cohen's κ; no facet map or inductive-to-IPIP construct correspondences; domain-level bands only; no temporal read.
