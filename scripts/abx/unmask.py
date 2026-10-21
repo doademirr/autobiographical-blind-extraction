@@ -29,8 +29,7 @@ def estimate(ws: store.Workspace) -> lifecycle.Preflight:
 
 
 def _crosswalk(ws: store.Workspace, cfg: config.Config, book: dict) -> None:
-    store.write_text_atomic(artifacts.path_of(ws, "constructs:all"), "".join(
-        f"- {c['id']}: {c['name']}. {c['definition']}\n" for c in book["constructs"]))
+    store.write_text_atomic(artifacts.path_of(ws, "constructs:all"), facetmap.render_definitions(book["constructs"]))
     preds = seal.predictions(ws.path("sealed/self-prediction.md").read_text(encoding="utf-8"))
     pairs = {(p, c["id"]) for p in preds for c in book["constructs"]}
 

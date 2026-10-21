@@ -18,7 +18,7 @@ RESULTS = ("consistent", "inconsistent", "neutral", "n/a")
 
 
 def render_definitions(constructs: list[Mapping]) -> str:
-    """The mapper's view: each construct's id, name and definition, nothing else."""
+    """The construct view the mapper and the crosswalk coders get: id, name and definition, nothing else."""
     return "".join(f"- {c['id']}: {c['name']}. {c['definition']}\n" for c in constructs)
 
 

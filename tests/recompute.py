@@ -112,7 +112,11 @@ def _calibration(ws: store.Workspace) -> tuple[dict, list[str]]:
 
 
 def _mapper_output(ws: store.Workspace) -> dict:
-    rec = store.read_json(next(ws.root.glob("run/calls/extract/facet_mapper/*.json")))
+    """The configured mapper's own call record, which generation B must have frozen."""
+    rel = f"run/calls/extract/facet_mapper/{config.load(ws).facet_mapper}-r0-all.json"
+    if rel not in {p for e in store.read_manifest(ws) if e["gen"] == "B" for p in e["artifacts"]}:
+        raise AbxError(f"{rel} is not frozen in generation B")
+    rec = store.read_json(ws.path(rel))
     return {m["construct_id"]: m["facets"] for m in rec["output"]["constructs"]}
 
 
