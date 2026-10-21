@@ -3,7 +3,7 @@
 import shutil
 from pathlib import Path
 
-from . import artifacts, calibration, config, invoke, ipip, lifecycle, qualify, sizing, store, text, withheld
+from . import artifacts, calibration, config, eras, invoke, ipip, lifecycle, qualify, sizing, store, text, withheld
 from .errors import UsageError
 
 __all__ = ["RECEIPT", "STAGE", "estimate", "prepare", "receipt_problems", "review_doc"]
@@ -20,6 +20,10 @@ RECEIPT_OUTPUT_GLOBS = ("prepare/redacted.txt", "prepare/offsets.json", "prepare
                         "run/calls/prepare/calibration_judge/*.json")
 
 REPO = Path(__file__).resolve().parents[2]
+PROPOSAL_RETRIES, PROPOSAL_SHRINK = 5, 0.10
+PROPOSAL_NOTE = ("This file is a proposal from headings, dated passages and size only; each era's basis says why it "
+                 "starts where it does. Move the cuts to life events, and write each label yourself, without names: "
+                 "labels are sent to the raters.")
 THIN, STOP = 0.50, 0.25
 ERA_RULE = ("You decide the eras, before any model call. Aim for at least 5-6, each a period of years with at least "
             "10k words and no more than the maximum below. Eras run in order, back to back, and every paragraph "
@@ -56,26 +60,52 @@ def _review_files(ws: store.Workspace, cfg: config.Config, original: str) -> dic
     """Write the templates the user edits on first run. Returns each review file read exactly once, as
     (parsed document, sha256 of the bytes read), when both are approved; None while either is not.
     Preparation uses only this snapshot, so a file edited mid-run cannot change what was approved."""
-    red, eras = ws.path("prepare/redactions.json"), ws.path("prepare/eras.json")
+    red, era_file = ws.path("prepare/redactions.json"), ws.path("prepare/eras.json")
     if not red.exists():
         store.write_json(red, {"approved": False, "names": {}})
-    if not eras.exists():
+    if not era_file.exists():
         segs = text.segment(original)
         sents = text.sentences(original, segs)
-        words = len(original.split())
-        limit = sizing.max_era_words(ws, cfg, 5, len(text.render_numbered(original, sents)) / max(words, 1))
+        chars_per_word = len(text.render_numbered(original, sents)) / max(len(original.split()), 1)
+        limit = sizing.max_era_words(ws, cfg, 5, chars_per_word)
+        proposal, failure = _proposal(ws, cfg, original, segs, sents, chars_per_word)
         note = (f"{ERA_RULE} Maximum, estimated: about {limit} words for the sixth era under this config (earlier "
-                "eras hold a little more, later ones less; `prepare` checks every era exactly before any call).")
-        store.write_json(eras, {"approved": False, "note": note, "eras": [
-            {"id": "e1", "label": "", "date_range": "", "segment_ids": [s.id for s in segs]}]})
-        preview = [f"{s.id} ({len(original[s.start:s.end].split())} words): {original[s.start:s.end][:100]}"
-                   for s in segs]
+                "eras hold a little more, later ones less; `prepare` checks every era exactly before any call). "
+                f"{PROPOSAL_NOTE}" + (f" This proposal does not pass the size check: {failure}" if failure else ""))
+        store.write_json(era_file, {"approved": False, "note": note, "eras": proposal})
+        kinds = [b.kind for b in eras.candidates(original, segs)]
+        preview = [f"{s.id} ({len(original[s.start:s.end].split())} words, {kind}): {original[s.start:s.end][:100]}"
+                   for s, kind in zip(segs, kinds, strict=True)]
         store.write_text_atomic(ws.path("prepare/segments-preview.txt"), "\n".join(preview) + "\n")
     snapshot = {}
     for name in ("redactions.json", "eras.json"):
         raw = ws.path(f"prepare/{name}").read_bytes()
         snapshot[name] = (_parse_review(name, raw), store.sha256_bytes(raw))
     return snapshot if all(doc["approved"] is True for doc, _ in snapshot.values()) else None
+
+
+def _proposal(ws: store.Workspace, cfg: config.Config, original: str, segs: list[text.Segment],
+              sents: list[text.Sentence], chars_per_word: float) -> tuple[list[dict], str]:
+    """The era proposal and, when none passes the exact size check, the last failure. The cap is an estimate, so a
+    failing proposal is redone under a cap 10 % smaller, up to five times."""
+    failure = ""
+    proposal = None
+    for retry in range(PROPOSAL_RETRIES + 1):
+        scale = (1 - PROPOSAL_SHRINK) ** retry
+        proposal = eras.propose(original, segs,
+                                lambda n, s=scale: int(sizing.max_era_words(ws, cfg, n - 1, chars_per_word) * s))
+        if proposal is None:
+            break
+        try:
+            sizing.check_eras(ws, cfg, proposal, sents, original)
+            return proposal, ""
+        except UsageError as exc:
+            failure = str(exc)
+    if proposal is None:
+        whole = [{"id": "e1", "label": "", "date_range": "", "segment_ids": [s.id for s in segs],
+                  "basis": "start of text"}]
+        return whole, "this config's input budgets leave no room for any era text"
+    return proposal, failure
 
 
 def review_doc(ws: store.Workspace, name: str) -> dict:
