@@ -21,29 +21,40 @@ def _t(zoner: str, claude: str, codex: str, sid: str = "s00001") -> calibration.
 
 
 class ScoreTest(unittest.TestCase):
-    def test_rates_are_hand_computed_with_disputes_scored_against_the_zoner(self):
+    def test_rates_are_hand_computed_over_agreed_targets_with_disputes_counted_apart(self):
         targets = [_t("keep", "keep", "keep"), _t("keep", "keep", "mixed"), _t("keep", "remove", "mixed"),
                    _t("keep", "keep", "keep"), _t("remove", "remove", "remove"), _t("mixed", "mixed", "remove"),
-                   _t("remove", "keep", "remove")]
+                   _t("remove", "keep", "remove"), _t("remove", "keep", "keep")]
         got = calibration.score(targets)
-        self.assertEqual(got["false_keep"], {"count": 2, "of": 4, "rate": 0.5})  # one disputed, one agreed removal
-        self.assertEqual(got["false_remove"], {"count": 1, "of": 3, "rate": 1 / 3})  # the disputed one
-        self.assertEqual(got["judge_agreement"], {"three_label": 3 / 7, "collapsed": 5 / 7, "of": 7})
+        self.assertEqual(got["false_keep"], {"count": 1, "of": 3, "rate": 1 / 3})  # the agreed removal; one disputed
+        self.assertEqual(got["false_remove"], {"count": 1, "of": 3, "rate": 1 / 3})  # the agreed keep; one disputed
+        self.assertEqual(got["disputed"], {"keep": 1, "removed": 1})
+        self.assertEqual(got["held_out"], 8)
+        self.assertEqual(got["judge_agreement"], {"three_label": 4 / 8, "collapsed": 6 / 8, "of": 8})
         self.assertEqual((got["passed"], got["reason"]), (False, "too_small"))
 
     def test_limits_hold_at_their_boundary_and_fail_past_it(self):
-        def run(false_keeps: int, false_removes: int) -> dict:
-            keeps = [_t("keep", "remove" if i < false_keeps else "keep", "keep") for i in range(60)]
-            removed = [_t("remove", "keep" if i < false_removes else "remove", "remove") for i in range(60)]
-            return calibration.score(keeps + removed)
+        def run(false_keeps: int, false_removes: int, disputes: int = 0) -> dict:
+            keeps = [_t("keep", *(("remove", "remove") if i < false_keeps else ("keep", "keep"))) for i in range(60)]
+            removed = [_t("remove", *(("keep", "keep") if i < false_removes else ("remove", "remove")))
+                       for i in range(60)]
+            split = [_t("keep", "keep", "remove"), _t("remove", "keep", "remove")] * disputes
+            return calibration.score(keeps + removed + split)
 
         self.assertEqual((run(3, 12)["passed"], run(3, 12)["reason"]), (True, None))  # exactly 5 % and 20 %
         self.assertEqual(run(4, 12)["reason"], "over_limit")
         self.assertEqual(run(3, 13)["reason"], "over_limit")
+        padded = run(3, 12, disputes=10)  # disputes never move a rate, only the counts beside it
+        self.assertEqual((padded["false_keep"], padded["false_remove"]), (run(3, 12)["false_keep"],
+                                                                         run(3, 12)["false_remove"]))
+        self.assertEqual((padded["held_out"], padded["disputed"]), (140, {"keep": 10, "removed": 10}))
 
     def test_an_undefined_denominator_or_a_small_set_fails(self):
         self.assertEqual(calibration.score([_t("keep", "keep", "keep")] * 120)["reason"], "undefined")
         self.assertEqual(calibration.score([_t("remove", "remove", "remove")] * 120)["reason"], "undefined")
+        all_split = [_t("keep", "keep", "keep")] * 100 + [_t("remove", "keep", "remove")] * 20
+        got = calibration.score(all_split)
+        self.assertEqual((got["reason"], got["disputed"]), ("undefined", {"keep": 0, "removed": 20}))
         small = [_t("keep", "keep", "keep")] * 50 + [_t("remove", "remove", "remove")] * 49
         self.assertEqual(calibration.score(small)["reason"], "too_small")
 
@@ -161,6 +172,23 @@ class PipelineTest(unittest.TestCase):
         self.assertEqual(len(judges), 2 * len(rec["parts"]))
         self.assertLessEqual({calibration.PATH, *judges, *(f"{calibration.EXCERPTS}/{p['era']}/{p['part']}.txt"
                                                           for p in rec["parts"])}, frozen)
+
+    def test_disputes_travel_from_judge_records_into_results_and_report(self):
+        from abx import unmask
+
+        from .recompute import problems
+
+        with mock.patch.dict(os.environ, {"ABX_FAKE_JUDGE_FLIP": "codex:7"}):
+            ws = build(self.fw)
+            unmask.unmask(ws)
+        rec = store.read_json(ws.path(calibration.PATH))
+        self.assertTrue(rec["disputed"]["keep"] and rec["disputed"]["removed"], rec["disputed"])
+        self.assertEqual((rec["false_keep"]["count"], rec["false_remove"]["count"]), (0, 0))
+        self.assertEqual(rec["false_keep"]["of"] + rec["false_remove"]["of"] + sum(rec["disputed"].values()), 120)
+        self.assertEqual(store.read_json(ws.path("report/results.json"))["calibration"]["disputed"], rec["disputed"])
+        self.assertIn(f"the judges split on {rec['disputed']['keep']} kept and {rec['disputed']['removed']} cut",
+                      ws.path("report/report.md").read_text())
+        self.assertEqual(problems(ws), [])
 
     def test_a_failing_zoner_stops_prepare_and_freeze_with_exit_1(self):
         sys.path.insert(0, str(REPO / "scripts"))

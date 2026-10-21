@@ -188,11 +188,15 @@ def zoner_label(sentence_id: str) -> str:
 
 def calibration_judge(prompt, lineage, occurrence):
     """Agrees with the fake zoner once collapsed; codex calls mixed sentences remove, so three-label agreement drops.
-    ABX_FAKE_JUDGE (`lineage:label,…`) makes a lineage give every sentence that label."""
+    ABX_FAKE_JUDGE (`lineage:label,…`) makes a lineage give every sentence that label; ABX_FAKE_JUDGE_FLIP
+    (`lineage:n`) makes it flip keep and remove on every nth sentence, so the judges dispute those."""
     forced = dict(item.split(":") for item in filter(None, os.environ.get("ABX_FAKE_JUDGE", "").split(",")))
+    flips = dict(item.split(":") for item in filter(None, os.environ.get("ABX_FAKE_JUDGE_FLIP", "").split(",")))
     labels = []
     for i in SENT.findall(prompt):
         label = forced.get(lineage) or zoner_label(i)
+        if lineage in flips and int(i[1:]) % int(flips[lineage]) == 0:
+            label = "remove" if label == "keep" else "keep"
         labels.append({"sentence_id": i, "label": "remove" if lineage == "codex" and label == "mixed" else label})
     return {"labels": labels}
 

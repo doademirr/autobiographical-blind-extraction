@@ -52,11 +52,13 @@ def _calibration(c: dict) -> str:
     def rate(key: str) -> str:
         x = c[key]
         return f"{x['count']} of {x['of']} ({pct(x['rate'])}; limit {c['limits'][key]:.0%})"
-    a = c["judge_agreement"]
+    a, d = c["judge_agreement"], c["disputed"]
     return (f"- Zoning calibration: {c['held_out']} held-out sentences labelled blind by {' and '.join(c['judges'])} "
-            f"judges; false keeps {rate('false_keep')}; false removals {rate('false_remove')}; the judges gave the "
-            f"same label to {pct(a['three_label'])} and agreed on keep or remove for {pct(a['collapsed'])}. These are "
-            "rates on the sample, against limits fixed in advance, not confidence bounds.")
+            f"judges; where both judges agree, false keeps {rate('false_keep')} and false removals "
+            f"{rate('false_remove')}; the judges split on {d['keep']} kept and {d['removed']} cut sentences, which are "
+            f"left out and unresolved; they gave the same label to {pct(a['three_label'])} and agreed on keep or "
+            f"remove for {pct(a['collapsed'])}. These are rates on the sample, against limits fixed in advance, not "
+            "confidence bounds.")
 
 
 FOIL_TYPES = (("clear", "Clear foils", "false-positive rate"), ("near_miss", "Near-miss foils", "false-positive rate"),

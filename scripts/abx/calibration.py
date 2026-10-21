@@ -2,7 +2,8 @@
 and scored against the zoner. `freeze` refuses a workspace whose zoner failed.
 
 The sample is stratified by the zoner's label (keep, or removed: remove and mixed) and then by era, and the rates are
-conditional on that label. They are sample rates against fixed limits: rounding and the one-per-era minimum give eras
+conditional on that label and counted only where the two judges agree (a target they split on is disputed: in neither
+count, and reported). They are sample rates against fixed limits: rounding and the one-per-era minimum give eras
 unequal inclusion probabilities, so they are neither unbiased whole-text estimates nor confidence bounds.
 
 A judge sees whole paragraphs around the sampled sentences and labels every sentence in them; only the sampled ones
@@ -104,12 +105,13 @@ def _rate(count: int, of: int) -> dict:
 
 
 def score(targets: list[Target]) -> dict:
-    """False keeps over held-out zoner keeps, false removes over held-out zoner removals; a sentence the judges
-    dispute is an error whichever way the zoner went."""
-    kept = [t for t in targets if collapse(t.zoner) == "keep"]
-    removed = [t for t in targets if collapse(t.zoner) == "removed"]
-    rates = {"false_keep": _rate(sum(_consensus(t) != "keep" for t in kept), len(kept)),
-             "false_remove": _rate(sum(_consensus(t) != "removed" for t in removed), len(removed))}
+    """False keeps over the agreed zoner keeps, false removes over the agreed zoner removals. A target the judges
+    dispute is in neither count and is reported per zoner label; `held_out`, its minimum and judge agreement count
+    every target."""
+    by_zoner = {s: [t for t in targets if collapse(t.zoner) == s] for s in STRATA}
+    agreed = {s: [t for t in rows if _consensus(t) != "disputed"] for s, rows in by_zoner.items()}
+    rates = {"false_keep": _rate(sum(_consensus(t) == "removed" for t in agreed["keep"]), len(agreed["keep"])),
+             "false_remove": _rate(sum(_consensus(t) == "keep" for t in agreed["removed"]), len(agreed["removed"]))}
     if len(targets) < MIN_HELD_OUT:
         reason = "too_small"
     elif any(r["rate"] is None for r in rates.values()):
@@ -121,6 +123,7 @@ def score(targets: list[Target]) -> dict:
     agreement = {"three_label": sum(len(set(t.judges.values())) == 1 for t in targets),
                  "collapsed": sum(_consensus(t) != "disputed" for t in targets)}
     return {"limits": dict(LIMITS), "held_out": len(targets), **rates,
+            "disputed": {s: len(by_zoner[s]) - len(agreed[s]) for s in STRATA},
             "judge_agreement": {**{k: v / len(targets) if targets else None for k, v in agreement.items()},
                                 "of": len(targets)},
             "passed": reason is None, "reason": reason}
@@ -158,7 +161,8 @@ def run(ws: store.Workspace, cfg: config.Config, eras: list[dict], sents: list[t
     return record
 
 
-SUMMARY_KEYS = ("limits", "held_out", "false_keep", "false_remove", "judge_agreement", "judges", "passed", "reason")
+SUMMARY_KEYS = ("limits", "held_out", "false_keep", "false_remove", "disputed", "judge_agreement", "judges", "passed",
+                "reason")
 
 
 def summary(rec: dict) -> dict:

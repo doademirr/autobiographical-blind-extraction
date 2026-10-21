@@ -69,7 +69,7 @@ def _calibration(ws: store.Workspace) -> tuple[dict, list[str]]:
     ids = [t["sentence_id"] for t in rec["targets"]]
     if len(ids) != len(set(ids)):
         out.append("calibration: a target is repeated")
-    counts = {"fk": 0, "kept": 0, "fr": 0, "removed": 0, "same": 0, "same_side": 0}
+    counts = {"fk": 0, "kept": 0, "fr": 0, "removed": 0, "same": 0, "same_side": 0, "kept_all": 0, "removed_all": 0}
     for t in {t["sentence_id"]: t for t in rec["targets"]}.values():
         sid, era = t["sentence_id"], t["era"]
         labels = {lin: judged[lin].get(sid, _Judged(None, None)) for lin in roster}
@@ -81,13 +81,16 @@ def _calibration(ws: store.Workspace) -> tuple[dict, list[str]]:
         sides = {"keep" if v == "keep" else "removed" for v in votes}
         counts["same"] += len(set(votes)) == 1
         counts["same_side"] += len(sides) == 1
-        if zoning[era][sid] == "keep":
-            counts["kept"] += 1
-            counts["fk"] += sides != {"keep"}
+        stratum = "kept" if zoning[era][sid] == "keep" else "removed"
+        counts[f"{stratum}_all"] += 1
+        if len(sides) > 1:
+            continue  # disputed: in neither rate
+        counts[stratum] += 1
+        if stratum == "kept":
+            counts["fk"] += sides == {"removed"}
         else:
-            counts["removed"] += 1
-            counts["fr"] += sides != {"removed"}
-    n = counts["kept"] + counts["removed"]
+            counts["fr"] += sides == {"keep"}
+    n = counts["kept_all"] + counts["removed_all"]
     fk = {"count": counts["fk"], "of": counts["kept"],
           "rate": counts["fk"] / counts["kept"] if counts["kept"] else None}
     fr = {"count": counts["fr"], "of": counts["removed"],
@@ -101,6 +104,8 @@ def _calibration(ws: store.Workspace) -> tuple[dict, list[str]]:
     else:
         reason = None
     return {"limits": {"false_keep": .05, "false_remove": .2}, "held_out": n, "false_keep": fk, "false_remove": fr,
+            "disputed": {"keep": counts["kept_all"] - counts["kept"],
+                         "removed": counts["removed_all"] - counts["removed"]},
             "judge_agreement": {"three_label": counts["same"] / n if n else None,
                                 "collapsed": counts["same_side"] / n if n else None, "of": n},
             "judges": roster, "passed": reason is None, "reason": reason}, out
@@ -280,11 +285,13 @@ def _rows(want: dict) -> list[str]:
                     + ", ".join(f"{lin} {_num(v)}" for lin, v in sorted(a["stability"].items())) + ".")
     c = want["calibration"]
     rows.append(f"- Zoning calibration: {c['held_out']} held-out sentences labelled blind by "
-                + " and ".join(c["judges"]) + f" judges; false keeps {c['false_keep']['count']} of "
-                f"{c['false_keep']['of']} ({_pct(c['false_keep']['rate'])}; limit 5%); false removals "
-                f"{c['false_remove']['count']} of {c['false_remove']['of']} ({_pct(c['false_remove']['rate'])}; limit "
-                f"20%); the judges gave the same label to {_pct(c['judge_agreement']['three_label'])} and agreed on "
-                f"keep or remove for {_pct(c['judge_agreement']['collapsed'])}.")
+                + " and ".join(c["judges"]) + f" judges; where both judges agree, false keeps "
+                f"{c['false_keep']['count']} of {c['false_keep']['of']} ({_pct(c['false_keep']['rate'])}; limit 5%) "
+                f"and false removals {c['false_remove']['count']} of {c['false_remove']['of']} "
+                f"({_pct(c['false_remove']['rate'])}; limit 20%); the judges split on {c['disputed']['keep']} kept and "
+                f"{c['disputed']['removed']} cut sentences, which are left out and unresolved; they gave the same "
+                f"label to {_pct(c['judge_agreement']['three_label'])} and agreed on keep or remove for "
+                f"{_pct(c['judge_agreement']['collapsed'])}.")
     rows.append(f"rules: {want['agreement']['downgrades']}.")
     n = want["invalid_outputs"]["by_stage"]
     rows.append(f"up to 3 attempts): {sum(n.values())} (prepare {n['prepare']}, freeze {n['freeze']}, "
