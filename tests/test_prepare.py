@@ -116,7 +116,8 @@ class PrepareTest(unittest.TestCase):
                 self.assertEqual(labelled, mine)
                 self.assertEqual(sorted(store.read_json(self.ws.path(f"prepare/zoning/{era['id']}.json"))), mine)
             # Preflight sizes exactly the prompt the zoner is sent.
-            first = json.loads(self.fw.prompts_logged()[-len(records)])["prompt"]
+            first = next(p for p in map(json.loads, self.fw.prompts_logged())
+                         if p["prompt"].startswith("# abx-role: zoner"))["prompt"]
             redacted = self.ws.path("prepare/redacted.txt").read_text()
             era = store.read_json(self.ws.path("prepare/eras.json"))["eras"][0]
             mine = [abx_text.Sentence(s["id"], s["segment_id"], s["start"], s["end"]) for s in sentences

@@ -48,6 +48,17 @@ def _arm(name: str, arm: dict) -> list[str]:
     return lines
 
 
+def _calibration(c: dict) -> str:
+    def rate(key: str) -> str:
+        x = c[key]
+        return f"{x['count']} of {x['of']} ({pct(x['rate'])}; limit {c['limits'][key]:.0%})"
+    a = c["judge_agreement"]
+    return (f"- Zoning calibration: {c['held_out']} held-out sentences labelled blind by {' and '.join(c['judges'])} "
+            f"judges; false keeps {rate('false_keep')}; false removals {rate('false_remove')}; the judges gave the "
+            f"same label to {pct(a['three_label'])} and agreed on keep or remove for {pct(a['collapsed'])}. These are "
+            "rates on the sample, against limits fixed in advance, not confidence bounds.")
+
+
 FOIL_TYPES = (("clear", "Clear foils", "false-positive rate"), ("near_miss", "Near-miss foils", "false-positive rate"),
               ("anchored", "Anchored foils", "recovery rate"))
 
@@ -86,6 +97,7 @@ def render(r: dict) -> str:
         out.append(f"- Era {era}: {s['sentences']} sentences in {s['segments']} segments; zoning kept "
                    f"{pct(s['kept_ratio'])} of {s['words']} words ({s['band']}); {s['mixed']} mixed and "
                    f"{s['removed']} reflective sentences removed.")
+    out.append(_calibration(r["calibration"]))
     for lin, fp in sorted(r["fingerprints"].items()):
         out.append(f"- {lin}: {fp['cli_version']}, model {fp['resolved_model']}.")
     out += ["", "## Agreement (computed by script)", ""]

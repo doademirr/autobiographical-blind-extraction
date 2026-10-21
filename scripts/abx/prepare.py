@@ -1,9 +1,9 @@
-"""`prepare`: local redaction and eras (review point 1), qualification, zoning, the substrate."""
+"""`prepare`: local redaction and eras (review point 1), qualification, zoning, zoning calibration, the substrate."""
 
 import shutil
 from pathlib import Path
 
-from . import artifacts, config, invoke, ipip, lifecycle, qualify, sizing, store, text, withheld
+from . import artifacts, calibration, config, invoke, ipip, lifecycle, qualify, sizing, store, text, withheld
 from .errors import UsageError
 
 __all__ = ["RECEIPT", "STAGE", "estimate", "prepare", "receipt_problems", "review_doc"]
@@ -15,7 +15,9 @@ RECEIPT_INPUTS = ("text/original.txt", "config.json", "prepare/redactions.json",
 RECEIPT_METHOD_GLOBS = ("prereg/prompts/*.md", "prereg/schemas/*.json")
 RECEIPT_OUTPUT_GLOBS = ("prepare/redacted.txt", "prepare/offsets.json", "prepare/segments.json",
                         "prepare/sentences.json", "prepare/stats.json", "prepare/removed-sentences.json",
-                        "prepare/substrate/*.md", "prepare/chunks/*/*.txt", "prepare/zoning/*.json")
+                        "prepare/substrate/*.md", "prepare/chunks/*/*.txt", "prepare/zoning/*.json",
+                        calibration.PATH, f"{calibration.EXCERPTS}/*/*.txt",
+                        "run/calls/prepare/calibration_judge/*.json")
 
 REPO = Path(__file__).resolve().parents[2]
 THIN, STOP = 0.50, 0.25
@@ -101,8 +103,10 @@ def estimate(ws: store.Workspace) -> lifecycle.Preflight:
     sents = text.sentences(original, segs)
     chunks = sum(len(text.zoning_chunks([s for s in sents if s.segment_id in set(e.get("segment_ids", []))]))
                  for e in eras)
-    return lifecycle.Preflight(chunks + 2, 0, f"one zoning call per chunk of up to {text.ZONING_CHUNK} sentences "
-                                              "plus one leak probe per lineage")
+    return lifecycle.Preflight(chunks + 2 + 2 * len(eras), 0,
+                               f"one zoning call per chunk of up to {text.ZONING_CHUNK} sentences, one leak probe per "
+                               "lineage, and one calibration-judge call per era per lineage (more if an era's "
+                               f"calibration excerpt runs past {text.ZONING_CHUNK} sentences)")
 
 
 def _zone(ws: store.Workspace, cfg: config.Config, era: dict, sents: list[text.Sentence],
@@ -111,22 +115,17 @@ def _zone(ws: store.Workspace, cfg: config.Config, era: dict, sents: list[text.S
     for part, chunk in enumerate(text.zoning_chunks(sents), start=1):
         aid = f"chunk:{era['id']}:{part}"
         store.write_text_atomic(artifacts.path_of(ws, aid), text.render_numbered(redacted, chunk))
-        expected = {s.id for s in chunk}
-
-        def validate(out, expected=expected) -> list[str]:
-            got = [lab["sentence_id"] for lab in out["labels"]]
-            if len(got) != len(set(got)) or set(got) != expected:
-                return [f"labels must cover the chunk's {len(expected)} sentence ids exactly once"]
-            return []
-
         req = invoke.CallRequest(stage="prepare", role="zoner", lineage=cfg.zoner, run=None, era=era["id"],
-                                 generation="A", slots={"chunk": aid}, validate=validate, part=part)
+                                 generation="A", slots={"chunk": aid},
+                                 validate=calibration.label_validator({s.id for s in chunk}), part=part)
         labels |= {lab["sentence_id"]: lab["label"] for lab in invoke.call(ws, cfg, req)["labels"]}
     return labels
 
 
 def prepare(ws: store.Workspace) -> dict:
     lifecycle.enter(ws, STAGE)
+    if ws.path(invoke.QUALIFICATION).exists():
+        invoke.check_method(ws)  # a resumed older workspace lacks this method's staged prompts
     cfg = config.load(ws)
     original = ws.path("text/original.txt").read_text(encoding="utf-8")
     _stage_method(ws)
@@ -156,6 +155,7 @@ def prepare(ws: store.Workspace) -> dict:
         labels |= _zone(ws, cfg, era, era_sents, redacted)
         store.write_json(ws.path(f"prepare/zoning/{era['id']}.json"),
                          {sid: labels[sid] for sid in (s.id for s in era_sents)})
+    calibration.run(ws, cfg, eras, sents, redacted, labels)
     return _substrate(ws, cfg, eras, sents, redacted, labels, {f"prepare/{n}": h for n, (_, h) in snapshot.items()})
 
 
@@ -188,7 +188,9 @@ def _substrate(ws, cfg: config.Config, eras, sents, redacted, labels, approved: 
     if changed:
         raise UsageError(f"{', '.join(changed)} changed while `prepare` ran; rerun it")
     store.write_json(ws.path(RECEIPT), receipt)
-    return {"status": "done", "stats": stats}
+    calibration.check(ws)  # after the receipt, so a failed calibration's evidence stays checked at `freeze`
+    return {"status": "done", "stats": stats,
+            "calibration": calibration.summary_text(store.read_json(ws.path(calibration.PATH)))}
 
 
 def _receipt(ws: store.Workspace) -> dict:
@@ -205,5 +207,6 @@ def receipt_problems(ws: store.Workspace) -> list[str]:
     return sorted(rel for rel in set(recorded) | set(current) if recorded.get(rel) != current.get(rel))
 
 
-STAGE = lifecycle.Stage("prepare", 1, "redaction and eras review, qualification, zoning", prepare, estimate,
+STAGE = lifecycle.Stage("prepare", 1, "redaction and eras review, qualification, zoning and its calibration", prepare,
+                        estimate,
                         closed_after="A", verifies_seal=False)

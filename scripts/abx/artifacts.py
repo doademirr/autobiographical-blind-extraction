@@ -30,6 +30,7 @@ _KINDS: dict[str, tuple[tuple[str, ...], str]] = {
     "facets": (("=all",), "prereg/facets.md"),
     "chunk": (("era", "part"), "prepare/chunks/{era}/{part}.txt"),
     "era": (("era",), "prepare/substrate/{era}.md"),
+    "excerpt": (("era", "part"), "prepare/calibration/{era}/{part}.txt"),
     "foils": (("era",), "prereg/foils/{era}.md"),
     "discovery": (("lineage", "run", "era"), "run/discovery/{lineage}-r{run}-{era}.json"),
     "hypotheses": (("lineage", "run", "era"), "run/discovery/{lineage}-r{run}-{era}.hypotheses.md"),

@@ -181,8 +181,25 @@ def crosswalk(prompt, lineage, occurrence):
     return {"codes": codes}
 
 
-ROLES = {"foil_author": foil_author, "auditor": auditor, "discovery": discovery, "codebook_author": codebook_author,
-         "recode": recode, "deductive_ledger": ledger, "deductive_scorer": scorer, "crosswalk": crosswalk}
+def zoner_label(sentence_id: str) -> str:
+    n = int(sentence_id[1:])
+    return "remove" if n % 9 == 0 else "mixed" if n % 9 == 1 else "keep"
+
+
+def calibration_judge(prompt, lineage, occurrence):
+    """Agrees with the fake zoner once collapsed; codex calls mixed sentences remove, so three-label agreement drops.
+    ABX_FAKE_JUDGE (`lineage:label,…`) makes a lineage give every sentence that label."""
+    forced = dict(item.split(":") for item in filter(None, os.environ.get("ABX_FAKE_JUDGE", "").split(",")))
+    labels = []
+    for i in SENT.findall(prompt):
+        label = forced.get(lineage) or zoner_label(i)
+        labels.append({"sentence_id": i, "label": "remove" if lineage == "codex" and label == "mixed" else label})
+    return {"labels": labels}
+
+
+ROLES = {"calibration_judge": calibration_judge, "foil_author": foil_author, "auditor": auditor,
+         "discovery": discovery, "codebook_author": codebook_author, "recode": recode, "deductive_ledger": ledger,
+         "deductive_scorer": scorer, "crosswalk": crosswalk}
 
 
 def respond(prompt: str, lineage: str, occurrence: int, leak: str | None):
@@ -192,9 +209,7 @@ def respond(prompt: str, lineage: str, occurrence: int, leak: str | None):
     if role == "echo":
         return {"answer": f"{lineage}:{occurrence}"}
     if role == "zoner":
-        ids = SENT.findall(prompt)
-        labels = ["remove" if int(i[1:]) % 9 == 0 else "mixed" if int(i[1:]) % 9 == 1 else "keep" for i in ids]
-        return {"labels": [{"sentence_id": i, "label": lab} for i, lab in zip(ids, labels, strict=True)]}
+        return {"labels": [{"sentence_id": i, "label": zoner_label(i)} for i in SENT.findall(prompt)]}
     if role in ROLES:
         return ROLES[role](prompt, lineage, occurrence)
     raise SystemExit(f"fake: no response for role {role!r}")

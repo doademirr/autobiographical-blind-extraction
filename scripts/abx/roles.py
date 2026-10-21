@@ -19,14 +19,18 @@ class Role:
     kinds: frozenset[str]          # artifact kinds the role may receive, besides its template and schema
     schema: str
     zoned_consumer: bool = False   # reads zoned material, so must never carry text the zoner removed
-    per_era: bool = False          # calls per era (the zoner per chunk); each must fit the budget at `prepare`
+    per_era: bool = False          # calls per era; each must fit the budget at `prepare`
+    chunked: bool = False          # per era in parts of at most 300 sentences, sized per part, never per era
     params: frozenset[str] = frozenset()   # labels the call boundary derives from the workspace, never callers
     rater_bound: frozenset[str] = frozenset()  # kinds that must belong to the calling rater
     single: str | None = None      # the config role naming the one lineage it runs on; None runs on every rater
 
 
 _ROLES = [
-    Role("zoner", frozenset({"chunk"}), "zoner", per_era=True, params=frozenset({"era_label"}), single="zoner"),
+    Role("zoner", frozenset({"chunk"}), "zoner", per_era=True, chunked=True, params=frozenset({"era_label"}),
+         single="zoner"),
+    # Labels raw text like the zoner, in the zoner's output schema, on every lineage.
+    Role("calibration_judge", frozenset({"excerpt"}), "zoner", per_era=True, chunked=True),
     Role("discovery", frozenset({"era", "hypotheses"}), "discovery", zoned_consumer=True, per_era=True,
          params=frozenset({"era_label", "hypotheses"}), rater_bound=frozenset({"hypotheses"})),
     Role("foil_author", frozenset({"era"}), "foils", zoned_consumer=True, per_era=True,

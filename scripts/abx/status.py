@@ -1,6 +1,6 @@
 """`status`: where a workspace stands and the next step, as a code the CLI renders. Never opens sealed/."""
 
-from . import lifecycle, store
+from . import calibration, lifecycle, store
 
 __all__ = ["STAGE", "status"]
 
@@ -12,6 +12,8 @@ def status(ws: store.Workspace) -> dict:
         calls[path.parent.parent.name] = calls.get(path.parent.parent.name, 0) + 1
     if not ws.path("prepare/stats.json").exists():
         nxt = "prepare"
+    elif ws.path(calibration.PATH).exists() and not store.read_json(ws.path(calibration.PATH))["passed"]:
+        nxt = "calibration_failed"
     elif not ws.path(lifecycle.HASHES).exists():
         nxt = "seal"
     else:

@@ -24,6 +24,8 @@ NEXT_TEXT = {
     "review_config": "review config.json, then run `prepare`",
     "approve_review_files": "edit and approve prepare/redactions.json and prepare/eras.json, then run `prepare`",
     "prepare": "run `prepare` (first approve prepare/redactions.json and prepare/eras.json)",
+    "calibration_failed": "zoning calibration failed (prepare/calibration.json); no real run is permitted on this "
+                          "zoner",
     "seal": "fill in sealed/self-prediction.md and sealed/ipip-120.csv in your own editor, then run `seal`",
     "freeze": "run `freeze`", "extract": "run `extract`", "unmask": "run `unmask`",
     "done": "done: read report/report.md",

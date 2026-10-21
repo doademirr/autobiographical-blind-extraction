@@ -13,7 +13,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "scripts"))
 
-from abx import agreement, config, extract, invoke, ipip, prompts, report, seal, store, unmask
+from abx import agreement, calibration, config, extract, invoke, ipip, prompts, report, seal, store, unmask
 from abx.errors import AbxError
 
 __all__ = ["compare", "expected", "problems"]
@@ -36,6 +36,49 @@ def _corpus(ws: store.Workspace) -> dict:
                             "removed": sum(1 for lab in labels.values() if lab == "remove"),
                             "band": "normal" if ratio >= 0.5 else "thin" if ratio >= 0.25 else "stop"}
     return stats
+
+
+def _calibration(ws: store.Workspace) -> tuple[dict, list[str]]:
+    """The calibration rebuilt from evidence: each recorded part's labels from both judges' frozen call records, each
+    target's zoner label from the frozen zoning. Returns the summary and every way `calibration.json` departs from
+    it."""
+    rec = store.read_json(ws.path(calibration.PATH))
+    zoning = {e["id"]: store.read_json(ws.path(f"prepare/zoning/{e['id']}.json"))
+              for e in store.read_json(ws.path("prepare/eras.json"))["eras"]}
+    out, judged = [], {lin: {} for lin in rec["judges"]}
+    for part in rec["parts"]:
+        for lin in rec["judges"]:
+            path = ws.path(f"run/calls/prepare/calibration_judge/{lin}-r0-{part['era']}.{part['part']}.json")
+            labels = {lab["sentence_id"]: lab["label"] for lab in store.read_json(path)["output"]["labels"]}
+            if sorted(labels) != sorted(part["sentence_ids"]):
+                out.append(f"calibration: {lin}'s labels for {part['era']} part {part['part']} miss its sentences")
+            judged[lin] |= {sid: (part["era"], label) for sid, label in labels.items()}
+    counts = {"fk": 0, "kept": 0, "fr": 0, "removed": 0, "same": 0, "same_side": 0}
+    for t in rec["targets"]:
+        sid, era = t["sentence_id"], t["era"]
+        labels = {lin: judged[lin].get(sid, (None, None)) for lin in rec["judges"]}
+        if t["zoner"] != zoning[era][sid] or any(labels[lin] != (era, t["judges"][lin]) for lin in rec["judges"]):
+            out.append(f"calibration: target {sid} does not match its zoning and judge records")
+        votes = [label for _, label in labels.values()]
+        sides = {"keep" if v == "keep" else "removed" for v in votes}
+        counts["same"] += len(set(votes)) == 1
+        counts["same_side"] += len(sides) == 1
+        if zoning[era][sid] == "keep":
+            counts["kept"] += 1
+            counts["fk"] += sides != {"keep"}
+        else:
+            counts["removed"] += 1
+            counts["fr"] += sides != {"removed"}
+    n = len(rec["targets"])
+    fk = {"count": counts["fk"], "of": counts["kept"],
+          "rate": counts["fk"] / counts["kept"] if counts["kept"] else None}
+    fr = {"count": counts["fr"], "of": counts["removed"],
+          "rate": counts["fr"] / counts["removed"] if counts["removed"] else None}
+    passed = n >= 100 and fk["rate"] is not None and fr["rate"] is not None and fk["rate"] <= .05 and fr["rate"] <= .2
+    return {"limits": {"false_keep": .05, "false_remove": .2}, "held_out": n, "false_keep": fk, "false_remove": fr,
+            "judge_agreement": {"three_label": counts["same"] / n if n else None,
+                                "collapsed": counts["same_side"] / n if n else None, "of": n},
+            "judges": rec["judges"], "passed": passed, "reason": rec["reason"] if not passed else None}, out
 
 
 # The stages whose call records exist when `extract` runs its integrity audit.
@@ -153,9 +196,11 @@ def expected(ws: store.Workspace) -> dict:
     audit = _audit(ws, eras) if inductive.integrity_audit_due or deductive_arm.integrity_audit_due else None
     invalid = _invalid_outputs(ws)
     foiled = _foils(ws, eras, ratings, lineages)
+    calibrated, _ = _calibration(ws)
     diag = _with_foils(ratings, book, foiled["kept"], eras)
     return {
         "corpus": _corpus(ws),
+        "calibration": calibrated,
         "fingerprints": {lin: {k: v for k, v in q.items() if k != "evidence"}
                          for lin, q in store.read_json(ws.path(invoke.QUALIFICATION_A)).items()},
         "agreement": {"inductive": _arm(inductive), "deductive": _arm(deductive_arm),
@@ -208,6 +253,13 @@ def _rows(want: dict) -> list[str]:
         rows.append(f"  - Units with both lineages: {_pct(a['paired_fraction'])}; raw agreement on them: "
                     f"{_pct(a['raw_agreement'])}; missing: {_pct(a['missing_rate'])}; stability α within lineage: "
                     + ", ".join(f"{lin} {_num(v)}" for lin, v in sorted(a["stability"].items())) + ".")
+    c = want["calibration"]
+    rows.append(f"- Zoning calibration: {c['held_out']} held-out sentences labelled blind by "
+                + " and ".join(c["judges"]) + f" judges; false keeps {c['false_keep']['count']} of "
+                f"{c['false_keep']['of']} ({_pct(c['false_keep']['rate'])}; limit 5%); false removals "
+                f"{c['false_remove']['count']} of {c['false_remove']['of']} ({_pct(c['false_remove']['rate'])}; limit "
+                f"20%); the judges gave the same label to {_pct(c['judge_agreement']['three_label'])} and agreed on "
+                f"keep or remove for {_pct(c['judge_agreement']['collapsed'])}.")
     rows.append(f"rules: {want['agreement']['downgrades']}.")
     n = want["invalid_outputs"]["by_stage"]
     rows.append(f"up to 3 attempts): {sum(n.values())} (prepare {n['prepare']}, freeze {n['freeze']}, "
@@ -276,6 +328,7 @@ def problems(ws: store.Workspace) -> list[str]:
     report_md = ws.path("report/report.md").read_text()
     if [h for h in report_md.splitlines() if h.startswith("## ")][:1] != ["## This is not a clinical assessment"]:
         out.append("report's first section is not the non-clinical statement")
+    out += _calibration(ws)[1]
     return out + compare(store.read_json(ws.path("report/results.json")), report_md, expected(ws))
 
 

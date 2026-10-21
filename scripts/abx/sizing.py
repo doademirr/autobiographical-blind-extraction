@@ -4,7 +4,9 @@ The check is an upper bound on what a call will send, built by the same `prompts
 placeholder expands as it will: the era rendered as if zoning kept every sentence (the substrate's own format, ids
 and segment headers included), the staged template and schema, the hypotheses of every earlier era for discovery, for
 recode the largest card the codebook and foil schemas allow, and for the auditor the largest codebook and foils. The
-zoner is checked per chunk. A failure names the era, its words, the role and the most words an era can hold.
+chunked roles (zoner, calibration judge) send at most 300 of an era's sentences per call, so they are checked against
+the era's 300 longest rendered sentences, which no chunk or excerpt part can exceed. A failure names the era, its
+words, the role and the most words an era can hold.
 """
 
 from . import audit, card, config, foils, invoke, prompts, store, text
@@ -57,8 +59,10 @@ def _prompt(ws: store.Workspace, role: str, era_ids: list[str], position: int, l
 def _largest_input(ws: store.Workspace, kind: str, era_ids: list[str], position: int, body: str) -> tuple[str, str]:
     """(artifact id, text) for one input kind of the call at `position`, at its largest."""
     era = era_ids[position]
-    if kind in {"chunk", "era"}:
-        return (f"chunk:{era}:1" if kind == "chunk" else f"era:{era}"), body
+    if kind in {"chunk", "excerpt"}:
+        return f"{kind}:{era}:1", body
+    if kind == "era":
+        return f"era:{era}", body
     if kind == "card":
         return "card:B", _largest_card(ws, len(era_ids))
     if kind == "codebook":
@@ -103,8 +107,14 @@ def max_era_words(ws: store.Workspace, cfg: config.Config, position: int, chars_
     era_ids = [f"e{k + 1}" for k in range(position + 1)]
     label = "x" * prompts.MAX_PARAM_LEN
     return min(_words_that_fit(ws, role, era_ids, position, label, lin, chars_per_word)
-               for role, policy in ROLES.items() if policy.per_era and role != "zoner"
+               for role, policy in ROLES.items() if policy.per_era and not policy.chunked
                for lin in _lineages(cfg, role))
+
+
+def _longest_part(redacted: str, era_sents: list[text.Sentence]) -> str:
+    """At least as long as any zoning chunk or calibration excerpt part of the era: its 300 longest rendered lines."""
+    lines = sorted((text.render_numbered(redacted, [s]) for s in era_sents), key=len, reverse=True)
+    return "".join(lines[:text.ZONING_CHUNK])
 
 
 def check_eras(ws: store.Workspace, cfg: config.Config, eras: list[dict], sents: list[text.Sentence],
@@ -118,14 +128,14 @@ def check_eras(ws: store.Workspace, cfg: config.Config, eras: list[dict], sents:
         for role, policy in ROLES.items():
             if not policy.per_era:
                 continue
-            bodies = ([text.render_numbered(redacted, chunk) for chunk in text.zoning_chunks(era_sents)]
-                      if role == "zoner" else [body])
+            sized = _longest_part(redacted, era_sents) if policy.chunked else body
             for lin in _lineages(cfg, role):
-                if all(_fits(_prompt(ws, role, era_ids, position, label, b), lin) for b in bodies):
+                if _fits(_prompt(ws, role, era_ids, position, label, sized), lin):
                     continue
-                if role == "zoner":
-                    raise UsageError(f"era {era['id']}: a zoning chunk is too large for {lin.name}'s budget "
-                                     f"({lin.input_budget_tokens} tokens); its sentences are unusually long")
+                if policy.chunked:
+                    raise UsageError(f"era {era['id']}: its {text.ZONING_CHUNK} longest sentences are too large for "
+                                     f"{role} on {lin.name} ({lin.input_budget_tokens} tokens); its sentences are "
+                                     "unusually long")
                 fits = _words_that_fit(ws, role, era_ids, position, label, lin, len(body) / max(words, 1))
                 raise UsageError(f"era {era['id']} has {words} words; {role} on {lin.name} fits about {fits} words "
                                  f"in this era ({lin.input_budget_tokens} tokens, {lin.reserve_output_tokens} kept for "
