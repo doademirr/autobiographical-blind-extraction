@@ -10,9 +10,9 @@ def status(ws: store.Workspace) -> dict:
     calls: dict[str, int] = {}
     for path in ws.root.glob("run/calls/*/*/*.json"):
         calls[path.parent.parent.name] = calls.get(path.parent.parent.name, 0) + 1
-    if not ws.path("prepare/stats.json").exists():
+    if not ws.path("prepare/stats.json").exists() or not ws.path(calibration.PATH).exists():
         nxt = "prepare"
-    elif ws.path(calibration.PATH).exists() and not store.read_json(ws.path(calibration.PATH))["passed"]:
+    elif not store.read_json(ws.path(calibration.PATH))["passed"]:
         nxt = "calibration_failed"
     elif not ws.path(lifecycle.HASHES).exists():
         nxt = "seal"

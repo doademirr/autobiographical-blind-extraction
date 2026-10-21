@@ -215,8 +215,19 @@ class PipelineTest(unittest.TestCase):
                                       *rec["targets"][1:]]}
         store.write_json(ws.path(calibration.PATH), flipped)
         self.assertEqual(len(_calibration(ws)[1]), 1)
+        repeated = {**rec, "targets": [rec["targets"][0], *rec["targets"][:-1]]}
+        store.write_json(ws.path(calibration.PATH), repeated)
+        summary, problems = _calibration(ws)
+        self.assertEqual((problems, summary["held_out"]), (["calibration: a target is repeated"], 119))
         store.write_json(ws.path(calibration.PATH), rec)
+        self.assertEqual(_calibration(ws), (calibration.summary(rec), []))
         record = sorted(ws.root.glob(JUDGE_RECORDS))[0]
+        doubled = store.read_json(record)
+        doubled["output"]["labels"].append(doubled["output"]["labels"][0])
+        original = record.read_bytes()
+        store.write_json(record, doubled)
+        self.assertIn("exactly once", _calibration(ws)[1][0])
+        record.write_bytes(original)
         record.write_text(record.read_text().replace('"keep"', '"mixed"', 1))
         self._seal(ws)
         with self.assertRaisesRegex(UsageError, "calibration_judge"):

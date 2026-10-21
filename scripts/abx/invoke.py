@@ -326,9 +326,8 @@ def cli_version(cli: str) -> str:
 # version 2). It is part of the fingerprint, so a qualification or call record made under an older policy is never
 # held to, or reused under, the current one.
 ISOLATION_POLICY = 2
-# Bumped whenever how verdicts are coded, resampled or counted, or what preparation must pass, changes (binary
-# inductive reading and bounded resample are version 2; foils on the card version 3; the zoning calibration gate
-# version 4), so a workspace prepared under older rules can never be finished under these.
+# Bumped whenever how verdicts are coded, resampled or counted, or what preparation must pass, changes, so a workspace
+# prepared under older rules can never be finished under these.
 METHOD_VERSION = 4
 # What a requalification compares against the baseline: any change means the lineage moved.
 FINGERPRINT_KEYS = ("cli", "cli_version", "invocation_hash", "config_hash", "isolation_policy", "method_version",

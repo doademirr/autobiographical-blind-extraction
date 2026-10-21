@@ -41,24 +41,34 @@ def _corpus(ws: store.Workspace) -> dict:
 def _calibration(ws: store.Workspace) -> tuple[dict, list[str]]:
     """The calibration rebuilt from evidence: each recorded part's labels from both judges' frozen call records, each
     target's zoner label from the frozen zoning. Returns the summary and every way `calibration.json` departs from
-    it."""
+    it: a part or target outside its era, a judge labelling a sentence twice or not at all, a repeated target, or a
+    stored label that differs from its record."""
     rec = store.read_json(ws.path(calibration.PATH))
-    zoning = {e["id"]: store.read_json(ws.path(f"prepare/zoning/{e['id']}.json"))
-              for e in store.read_json(ws.path("prepare/eras.json"))["eras"]}
+    eras = store.read_json(ws.path("prepare/eras.json"))["eras"]
+    zoning = {e["id"]: store.read_json(ws.path(f"prepare/zoning/{e['id']}.json")) for e in eras}
     out, judged = [], {lin: {} for lin in rec["judges"]}
     for part in rec["parts"]:
+        if not set(part["sentence_ids"]) <= set(zoning[part["era"]]):
+            out.append(f"calibration: {part['era']} part {part['part']} holds sentences from another era")
         for lin in rec["judges"]:
             path = ws.path(f"run/calls/prepare/calibration_judge/{lin}-r0-{part['era']}.{part['part']}.json")
-            labels = {lab["sentence_id"]: lab["label"] for lab in store.read_json(path)["output"]["labels"]}
-            if sorted(labels) != sorted(part["sentence_ids"]):
-                out.append(f"calibration: {lin}'s labels for {part['era']} part {part['part']} miss its sentences")
-            judged[lin] |= {sid: (part["era"], label) for sid, label in labels.items()}
+            rows = store.read_json(path)["output"]["labels"]
+            ids = [lab["sentence_id"] for lab in rows]
+            if len(ids) != len(set(ids)) or sorted(ids) != sorted(part["sentence_ids"]):
+                out.append(f"calibration: {lin}'s labels for {part['era']} part {part['part']} do not cover its "
+                           "sentences exactly once")
+            judged[lin] |= {lab["sentence_id"]: (part["era"], lab["label"]) for lab in rows}
+    ids = [t["sentence_id"] for t in rec["targets"]]
+    if len(ids) != len(set(ids)):
+        out.append("calibration: a target is repeated")
     counts = {"fk": 0, "kept": 0, "fr": 0, "removed": 0, "same": 0, "same_side": 0}
-    for t in rec["targets"]:
+    for t in {t["sentence_id"]: t for t in rec["targets"]}.values():
         sid, era = t["sentence_id"], t["era"]
         labels = {lin: judged[lin].get(sid, (None, None)) for lin in rec["judges"]}
-        if t["zoner"] != zoning[era][sid] or any(labels[lin] != (era, t["judges"][lin]) for lin in rec["judges"]):
+        if sid not in zoning[era] or t["zoner"] != zoning[era][sid] or \
+                any(labels[lin] != (era, t["judges"][lin]) for lin in rec["judges"]):
             out.append(f"calibration: target {sid} does not match its zoning and judge records")
+            continue
         votes = [label for _, label in labels.values()]
         sides = {"keep" if v == "keep" else "removed" for v in votes}
         counts["same"] += len(set(votes)) == 1
@@ -69,16 +79,23 @@ def _calibration(ws: store.Workspace) -> tuple[dict, list[str]]:
         else:
             counts["removed"] += 1
             counts["fr"] += sides != {"removed"}
-    n = len(rec["targets"])
+    n = counts["kept"] + counts["removed"]
     fk = {"count": counts["fk"], "of": counts["kept"],
           "rate": counts["fk"] / counts["kept"] if counts["kept"] else None}
     fr = {"count": counts["fr"], "of": counts["removed"],
           "rate": counts["fr"] / counts["removed"] if counts["removed"] else None}
-    passed = n >= 100 and fk["rate"] is not None and fr["rate"] is not None and fk["rate"] <= .05 and fr["rate"] <= .2
+    if n < 100:
+        reason = "too_small"
+    elif fk["rate"] is None or fr["rate"] is None:
+        reason = "undefined"
+    elif fk["rate"] > .05 or fr["rate"] > .2:
+        reason = "over_limit"
+    else:
+        reason = None
     return {"limits": {"false_keep": .05, "false_remove": .2}, "held_out": n, "false_keep": fk, "false_remove": fr,
             "judge_agreement": {"three_label": counts["same"] / n if n else None,
                                 "collapsed": counts["same_side"] / n if n else None, "of": n},
-            "judges": rec["judges"], "passed": passed, "reason": rec["reason"] if not passed else None}, out
+            "judges": rec["judges"], "passed": reason is None, "reason": reason}, out
 
 
 # The stages whose call records exist when `extract` runs its integrity audit.

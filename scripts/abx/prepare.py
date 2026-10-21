@@ -117,7 +117,7 @@ def _zone(ws: store.Workspace, cfg: config.Config, era: dict, sents: list[text.S
         store.write_text_atomic(artifacts.path_of(ws, aid), text.render_numbered(redacted, chunk))
         req = invoke.CallRequest(stage="prepare", role="zoner", lineage=cfg.zoner, run=None, era=era["id"],
                                  generation="A", slots={"chunk": aid},
-                                 validate=calibration.label_validator({s.id for s in chunk}), part=part)
+                                 validate=text.label_coverage({s.id for s in chunk}), part=part)
         labels |= {lab["sentence_id"]: lab["label"] for lab in invoke.call(ws, cfg, req)["labels"]}
     return labels
 
@@ -190,7 +190,7 @@ def _substrate(ws, cfg: config.Config, eras, sents, redacted, labels, approved: 
     store.write_json(ws.path(RECEIPT), receipt)
     calibration.check(ws)  # after the receipt, so a failed calibration's evidence stays checked at `freeze`
     return {"status": "done", "stats": stats,
-            "calibration": calibration.summary_text(store.read_json(ws.path(calibration.PATH)))}
+            "calibration": calibration.summary(store.read_json(ws.path(calibration.PATH)))}
 
 
 def _receipt(ws: store.Workspace) -> dict:

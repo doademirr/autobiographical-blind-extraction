@@ -10,8 +10,8 @@ from dataclasses import asdict, dataclass
 from .artifacts import ERA_ID
 from .errors import UsageError
 
-__all__ = ["REMOVED_MARK", "ZONING_CHUNK", "Segment", "Sentence", "as_dicts", "redact", "render_numbered",
-           "render_zoned", "segment", "sentences", "to_original", "validate_eras", "zoning_chunks"]
+__all__ = ["REMOVED_MARK", "ZONING_CHUNK", "Segment", "Sentence", "as_dicts", "label_coverage", "redact",
+           "render_numbered", "render_zoned", "segment", "sentences", "to_original", "validate_eras", "zoning_chunks"]
 
 _PARAGRAPH_BREAK = re.compile(r"\n[ \t]*\n\s*")
 # A sentence ends at . ! ? (plus any closing quotes or brackets) followed by whitespace.
@@ -166,6 +166,17 @@ def zoning_chunks(sents: list[Sentence], limit: int | None = None) -> list[list[
             continue
         chunks += [seg[i:i + limit] for i in range(0, len(seg), limit)]
     return chunks
+
+
+def label_coverage(expected: set[str]):
+    """The validator for a sentence-label output (the zoner's, a calibration judge's): every sentence it was shown
+    labelled exactly once, and nothing else."""
+    def validate(out: dict) -> list[str]:
+        got = [lab["sentence_id"] for lab in out["labels"]]
+        if len(got) != len(set(got)) or set(got) != expected:
+            return [f"labels must cover the chunk's {len(expected)} sentence ids exactly once"]
+        return []
+    return validate
 
 
 def render_numbered(text: str, sents: list[Sentence]) -> str:

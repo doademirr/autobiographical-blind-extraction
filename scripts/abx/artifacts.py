@@ -12,7 +12,7 @@ from pathlib import Path
 from . import store
 from .errors import UsageError
 
-__all__ = ["ERA_ID", "Ref", "parse", "path_of", "resolver"]
+__all__ = ["ERA_ID", "Ref", "directory", "parse", "path_of", "resolver"]
 
 ERA_ID = re.compile(r"(?!all\Z)[A-Za-z0-9][A-Za-z0-9_-]{0,31}")
 _PART = {
@@ -81,6 +81,11 @@ def parse(artifact_id: str) -> Ref:
         else:
             named[field] = int(part) if field in {"run", "part"} else part
     return Ref(kind, **named)
+
+
+def directory(kind: str) -> str:
+    """The workspace directory every artifact of `kind` lives under (the fixed part of its file pattern)."""
+    return _KINDS[kind][1].split("{")[0].rstrip("/")
 
 
 def path_of(ws: store.Workspace, artifact_id: str) -> Path:

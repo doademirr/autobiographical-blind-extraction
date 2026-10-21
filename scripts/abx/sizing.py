@@ -5,8 +5,8 @@ placeholder expands as it will: the era rendered as if zoning kept every sentenc
 and segment headers included), the staged template and schema, the hypotheses of every earlier era for discovery, for
 recode the largest card the codebook and foil schemas allow, and for the auditor the largest codebook and foils. The
 chunked roles (zoner, calibration judge) send at most 300 of an era's sentences per call, so they are checked against
-the era's 300 longest rendered sentences, which no chunk or excerpt part can exceed. A failure names the era, its
-words, the role and the most words an era can hold.
+the era's 300 longest rendered sentences, which no chunk or excerpt part can exceed. A failure names the era and the
+role, and for a whole-era role also its words and the most words an era can hold.
 """
 
 from . import audit, card, config, foils, invoke, prompts, store, text

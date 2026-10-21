@@ -52,7 +52,8 @@ def check_allowlist(role: str, ids: list[str], rater: tuple[str, int] | None = N
             order = era_order or []
             if era not in order or ref.era not in order or order.index(ref.era) >= order.index(era):
                 raise IsolationError(f"discovery for era {era} may not receive {aid}")
-        if ref.kind in {"era", "chunk", "excerpt", "foils"} and era is not None and ref.era != era:
+        # Every input named by era belongs to the call's own era; hypotheses (earlier eras) are checked above.
+        if ref.kind != "hypotheses" and ref.era is not None and era is not None and ref.era != era:
             raise IsolationError(f"{role} call for era {era} may not receive {aid}")
 
 

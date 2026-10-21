@@ -86,7 +86,7 @@ The report lands in `report/report.md`: agreement per arm, foil error rates and 
 
 ```bash
 python3 -m unittest                  # offline: fake CLIs, plus model-free checks against the real binaries
-tests/live_smoke.sh "$TMPDIR/abx-live"   # live: the Franklin pipeline on your subscriptions (~55 calls)
+tests/live_smoke.sh "$TMPDIR/abx-live"   # live: the Franklin pipeline on your subscriptions (~60 calls)
 ```
 
 [`ARCHITECTURE.md`](ARCHITECTURE.md) is the as-built structure, and its [Not yet built](ARCHITECTURE.md#not-yet-built) section lists what this version leaves out.

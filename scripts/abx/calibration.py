@@ -11,7 +11,7 @@ are scored, so nothing in a judge's input shows which sentences count or how the
 
 import random
 import shutil
-from collections.abc import Callable, Mapping
+from collections.abc import Mapping
 from types import MappingProxyType
 from typing import NamedTuple
 
@@ -19,10 +19,10 @@ from . import artifacts, config, invoke, store, text
 from .errors import GateFired, UsageError
 
 __all__ = ["EXCERPTS", "LIMITS", "MIN_HELD_OUT", "PATH", "Draw", "Target", "allocate", "check", "collapse",
-           "excerpt_parts", "label_validator", "run", "sample", "score", "summary", "summary_text"]
+           "excerpt_parts", "run", "sample", "score", "summary"]
 
 PATH = "prepare/calibration.json"
-EXCERPTS = "prepare/calibration"
+EXCERPTS = artifacts.directory("excerpt")
 HELD_OUT = 120
 REMOVED_TARGETS = 60
 MIN_HELD_OUT = 100
@@ -33,16 +33,6 @@ STRATA = ("keep", "removed")
 def collapse(label: str) -> str:
     """Remove and mixed are both removal (SPEC)."""
     return "keep" if label == "keep" else "removed"
-
-
-def label_validator(expected: set[str]) -> Callable[[dict], list[str]]:
-    """Labels must cover exactly the sentences the call was shown: the zoner's chunk or a judge's excerpt part."""
-    def validate(out: dict) -> list[str]:
-        got = [lab["sentence_id"] for lab in out["labels"]]
-        if len(got) != len(set(got)) or set(got) != expected:
-            return [f"labels must cover the chunk's {len(expected)} sentence ids exactly once"]
-        return []
-    return validate
 
 
 def allocate(counts: Mapping[str, int], n: int) -> dict[str, int]:
@@ -139,7 +129,7 @@ def score(targets: list[Target]) -> dict:
 def _judge(ws: store.Workspace, cfg: config.Config, lineage: str, era: str, part: int, ids: set[str]) -> dict:
     req = invoke.CallRequest(stage="prepare", role="calibration_judge", lineage=lineage, run=None, era=era,
                              generation="A", slots={"excerpt": f"excerpt:{era}:{part}"},
-                             validate=label_validator(ids), part=part)
+                             validate=text.label_coverage(ids), part=part)
     return {lab["sentence_id"]: lab["label"] for lab in invoke.call(ws, cfg, req)["labels"]}
 
 
@@ -147,7 +137,8 @@ def run(ws: store.Workspace, cfg: config.Config, eras: list[dict], sents: list[t
         labels: Mapping[str, str]) -> dict:
     """Draw, excerpt, judge on every lineage, score; the record is written only once every judge call finished."""
     ws.path(PATH).unlink(missing_ok=True)
-    shutil.rmtree(ws.path(EXCERPTS), ignore_errors=True)
+    if ws.path(EXCERPTS).exists():
+        shutil.rmtree(ws.path(EXCERPTS))
     era_sents = {e["id"]: [s for s in sents if s.segment_id in set(e["segment_ids"])] for e in eras}
     draw = sample(era_sents, labels, "calibration:" + store.sha256_text(redacted))
     judged: dict[str, dict[str, str]] = {lin: {} for lin in cfg.lineages}
@@ -175,19 +166,13 @@ def summary(rec: dict) -> dict:
     return {k: rec[k] for k in SUMMARY_KEYS}
 
 
-def summary_text(rec: dict) -> str:
-    def rate(key: str) -> str:
-        r = rec[key]
-        shown = "n/a" if r["rate"] is None else f"{r['rate']:.1%}"
-        return f"{key.replace('_', '-')} {r['count']} of {r['of']} ({shown}, limit {rec['limits'][key]:.0%})"
-    return f"{rec['held_out']} held-out sentences; {rate('false_keep')}; {rate('false_remove')}"
-
-
 def check(ws: store.Workspace) -> None:
     """The gate: no real run on a zoner that failed calibration."""
     if not ws.path(PATH).exists():
         raise UsageError("zoning calibration has not run; rerun `prepare`")
     rec = store.read_json(ws.path(PATH))
     if not rec["passed"]:
-        raise GateFired(f"zoning calibration failed ({rec['reason']}: {summary_text(rec)}); no real run is "
-                        "permitted on this zoner")
+        fk, fr = rec["false_keep"], rec["false_remove"]
+        raise GateFired(f"zoning calibration failed ({rec['reason']}: {rec['held_out']} held-out sentences, false "
+                        f"keeps {fk['count']} of {fk['of']}, false removals {fr['count']} of {fr['of']}; see "
+                        f"{PATH}); no real run is permitted on this zoner")
