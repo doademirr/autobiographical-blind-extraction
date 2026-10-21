@@ -44,6 +44,14 @@ class ScanTest(unittest.TestCase):
             with self.subTest(absent=absent):
                 self.assertNotIn(absent, found)
 
+    def test_every_title_with_and_without_a_full_stop(self):
+        for title in sorted(names.TITLES):
+            for stop in ("", "."):
+                with self.subTest(title=title + stop):
+                    found = scanned(f"I met {title}{stop} Alice by the gate.")
+                    self.assertEqual(list(found), ["Alice"])
+                    self.assertTrue(found["Alice"].titled)
+
     def test_accented_names_are_whole_words(self):
         found = scanned("I met Dr. José. Later I saw José and Émile, then Émile again.")
         self.assertEqual(set(found), {"Émile", "José"})

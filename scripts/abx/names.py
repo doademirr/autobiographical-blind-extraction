@@ -32,6 +32,7 @@ _TOKEN = re.compile(r"[^\W\d_](?:[^\W\d_]|['’\-])*")
 _OPENERS = " \t\n\"'“‘([{"
 # A capital after one of these inside a sentence starts a clause, not a name.
 _CLAUSE_BREAKS = ":;—–-"
+_ENDS_IN_TITLE = re.compile(rf"(?<!\w)(?:{'|'.join(sorted(TITLES))})\.$")
 
 
 class Candidate(NamedTuple):
@@ -96,13 +97,28 @@ def _sightings(body: str) -> list[tuple[str, bool]]:
     return out
 
 
+def _units(text: str, sentences: Sequence[Sentence]) -> list[tuple[str, str]]:
+    """(segment id, text) per sentence, with a sentence that ends in a dotted title joined to the next one in its
+    paragraph: the splitter ends a sentence at `Miss.` but the scan must see the name after it."""
+    units: list[tuple[str, str]] = []
+    joining = False
+    for sent in sentences:
+        body = text[sent.start:sent.end]
+        if joining and units and units[-1][0] == sent.segment_id:
+            units[-1] = (sent.segment_id, units[-1][1] + " " + body)
+        else:
+            units.append((sent.segment_id, body))
+        joining = bool(_ENDS_IN_TITLE.search(units[-1][1]))
+    return units
+
+
 def scan(text: str, sentences: Sequence[Sentence]) -> list[Candidate]:
     """Every candidate, in order of first sighting."""
     first: dict[str, str] = {}
     titled: set[str] = set()
-    for sent in sentences:
-        for name, was_titled in _sightings(text[sent.start:sent.end]):
-            first.setdefault(name, sent.segment_id)
+    for segment_id, body in _units(text, sentences):
+        for name, was_titled in _sightings(body):
+            first.setdefault(name, segment_id)
             if was_titled:
                 titled.add(name)
     return [Candidate(name, len(name_pattern([name]).findall(text)), name in titled, segment)

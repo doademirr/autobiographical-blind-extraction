@@ -92,7 +92,8 @@ class _Proposed(NamedTuple):
 def _review_files(ws: store.Workspace, cfg: config.Config, original: str) -> dict[str, _Review] | None:
     """Write the templates the user edits on first run. Returns each review file read exactly once when both are
     approved; None while either is not.
-    Preparation uses only this snapshot, so a file edited mid-run cannot change what was approved."""
+    Preparation's redaction, size check and zoning use only this snapshot; a later stage's calls read the era
+    labels from the file again, which the receipt then holds to the approved bytes."""
     red, era_file = ws.path("prepare/redactions.json"), ws.path("prepare/eras.json")
     if not red.exists():
         candidates = names.scan(original, text.sentences(original, text.segment(original)))
@@ -209,11 +210,11 @@ def prepare(ws: store.Workspace) -> dict:
     if not all(isinstance(e, dict) for e in eras):
         raise UsageError("eras.json: eras must be a list of era objects")
     # An empty label is sent as the era id, so the id is what to check then.
-    labelled = next((e for e in eras if listed and isinstance(e.get("label") or e.get("id"), str)
+    labelled = next((k + 1 for k, e in enumerate(eras) if listed and isinstance(e.get("label") or e.get("id"), str)
                      and listed.search(e.get("label") or e.get("id"))), None)
     if labelled:
-        raise UsageError(f"eras.json: era {labelled.get('id')!r}'s label holds a name on the redaction list; labels "
-                         "are sent to the raters, so take the name out")
+        raise UsageError(f"eras.json: era entry {labelled}'s label (or its id, when the label is empty) holds a name "
+                         "on the redaction list; labels are sent to the raters, so take the name out")
     redacted, spans = text.redact(original, redactions)
     segs = text.segment(redacted)
     sents = text.sentences(redacted, segs)

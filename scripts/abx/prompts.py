@@ -1,4 +1,5 @@
-"""Prompt assembly from artifact ids, the allowlist check, and the secondary substring audit.
+"""Prompt assembly from artifact ids, the allowlist check, and the secondary audit (names whole-word, the rest as
+substrings).
 
 A prompt is built only from artifact ids (resolved to workspace files) plus the short labels
 its role declares, so every call's provenance is the id list it records.
@@ -99,8 +100,7 @@ def assemble(role: str, slots: dict[str, str], resolve: Callable[[str], str],
     missing = set(_SLOT.findall(template)) - set(values)
     if missing:
         raise UsageError(f"template:{role} has unfilled slots {sorted(missing)}")
-    return Prompt(role, template, MappingProxyType(values),
-                  MappingProxyType({aid: store.sha256_text(t) for aid, t in texts.items()}))
+    return Prompt(role, template, values, {aid: store.sha256_text(t) for aid, t in texts.items()})
 
 
 def audit(prompt: Prompt, withheld: Withheld, after_blind_results: bool = False) -> None:
