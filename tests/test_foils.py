@@ -5,7 +5,7 @@ from unittest import mock
 from abx import config, evidence, extract, foils, freeze, invoke, schema, seal, store
 from abx.errors import CallFailed, IntegrityError, UsageError
 
-from .helpers import FIXTURE, FakeWorkspace, build
+from .helpers import FIXTURE, FakeWorkspace, approve_spot_check, build
 
 
 def _index() -> evidence.Index:
@@ -127,6 +127,7 @@ class FreezeAuthorsFoilsTest(unittest.TestCase):
         for name in ("self-prediction.md", "ipip-120.csv"):
             self.ws.path(f"sealed/{name}").write_text((FIXTURE / name).read_text())
         seal.seal(self.ws)
+        approve_spot_check(self.ws)
 
     def tearDown(self):
         self.fw.close()

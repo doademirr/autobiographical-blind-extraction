@@ -104,6 +104,12 @@ class FakeWorkspace:
 FIXTURE = REPO / "fixtures" / "franklin"
 
 
+def approve_spot_check(ws: store.Workspace) -> None:
+    """The fixture's spot check, approved with no marks, as a reader satisfied with the zoning would."""
+    path = ws.path("prepare/spot-check.json")
+    store.write_json(path, {**store.read_json(path), "approved": True})
+
+
 def build(fw: FakeWorkspace, until: str = "extract") -> store.Workspace:
     """Run the pipeline on the Franklin fixture with fakes, up to and including `until`."""
     from abx import extract, freeze, prepare, seal
@@ -115,6 +121,7 @@ def build(fw: FakeWorkspace, until: str = "extract") -> store.Workspace:
     prepare.prepare(ws)
     if until == "prepare":
         return ws
+    approve_spot_check(ws)
     for name in ("self-prediction.md", "ipip-120.csv"):
         ws.path(f"sealed/{name}").write_text((FIXTURE / name).read_text())
     seal.seal(ws)

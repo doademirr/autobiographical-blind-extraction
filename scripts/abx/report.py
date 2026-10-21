@@ -214,6 +214,10 @@ def render(r: dict) -> str:
                    f"{pct(s['kept_ratio'])} of {s['words']} words ({s['band']}); {s['mixed']} mixed and "
                    f"{s['removed']} reflective sentences removed.")
     out.append(_calibration(r["calibration"]))
+    sc = r["spot_check"]
+    out.append(f"- Your spot check of zoning: you read {sc['kept']['shown']} kept and {sc['removed']['shown']} removed "
+               f"sentences and marked {sc['kept']['marked']} kept and {sc['removed']['marked']} removed as wrongly "
+               "labelled. Marks are reported, never applied.")
     for lin, fp in sorted(r["fingerprints"].items()):
         out.append(f"- {lin}: {fp['cli_version']}, model {fp['resolved_model']}.")
     out += ["", "## Agreement (computed by script)", ""]

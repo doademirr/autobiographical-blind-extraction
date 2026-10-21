@@ -15,6 +15,7 @@ from . import (
     names,
     qualify,
     sizing,
+    spotcheck,
     store,
     text,
     withheld,
@@ -260,6 +261,7 @@ def _substrate(ws, cfg: config.Config, eras, sents, redacted, labels, approved: 
             "band": "normal" if ratio >= THIN else "thin" if ratio >= STOP else "stop",
         }
     store.write_json(ws.path("prepare/stats.json"), stats)
+    spotcheck.write(ws, eras, sents, labels, redacted)  # a review file: the user edits it, so not in the receipt
     receipt = _receipt(ws)
     changed = [rel for rel, digest in approved.items() if receipt[rel] != digest]
     if changed:

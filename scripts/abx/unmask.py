@@ -16,6 +16,7 @@ from . import (
     lifecycle,
     report,
     seal,
+    spotcheck,
     store,
     temporal,
 )
@@ -149,6 +150,7 @@ def compute(ws: store.Workspace, cfg: config.Config) -> dict:
     return {
         "corpus": store.read_json(ws.path("prepare/stats.json")),
         "calibration": calibration.summary(store.read_json(ws.path(calibration.PATH))),
+        "spot_check": spotcheck.summary(store.read_json(ws.path(spotcheck.PATH))),
         "fingerprints": {lin: {k: v for k, v in q.items() if k != "evidence"} for lin, q in qualification.items()},
         "agreement": {k: agree[k] for k in ("inductive", "deductive", "deductive_lenient", "stances", "downgrades",
                                        "inductive_with_foils")}

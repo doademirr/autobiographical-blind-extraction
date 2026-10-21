@@ -1,6 +1,6 @@
 """`status`: where a workspace stands and the next step, as a code the CLI renders. Never opens sealed/."""
 
-from . import calibration, lifecycle, store
+from . import calibration, lifecycle, spotcheck, store
 
 __all__ = ["STAGE", "status"]
 
@@ -14,6 +14,8 @@ def status(ws: store.Workspace) -> dict:
         nxt = "prepare"
     elif not store.read_json(ws.path(calibration.PATH))["passed"]:
         nxt = "calibration_failed"
+    elif "A" not in gens and not spotcheck.approved(ws):
+        nxt = "approve_spot_check"
     elif not ws.path(lifecycle.HASHES).exists():
         nxt = "seal"
     else:

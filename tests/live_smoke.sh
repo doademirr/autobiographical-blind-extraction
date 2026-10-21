@@ -28,6 +28,13 @@ stage prepare "$WS"
 cp "$FIX/eras.json" "$WS/prepare/"
 printf '{"approved": true, "names": {}}\n' > "$WS/prepare/redactions.json"
 stage prepare "$WS"
+# A developer smoke test on a public fixture approves its own spot check, as it does the redaction list above; a real
+# run never does: the user reads and marks it.
+python3 - "$WS/prepare/spot-check.json" <<'PY'
+import json, sys
+doc = json.load(open(sys.argv[1]))
+json.dump({**doc, "approved": True}, open(sys.argv[1], "w"), indent=1)
+PY
 cp "$FIX/self-prediction.md" "$FIX/ipip-120.csv" "$WS/sealed/"
 stage seal "$WS"
 

@@ -8,7 +8,7 @@ calibration-judge and foil-author calls' records.
 
 import shutil
 
-from . import calibration, config, evidence, foils, invoke, ipip, lifecycle, prepare, qualify, store
+from . import calibration, config, evidence, foils, invoke, ipip, lifecycle, prepare, qualify, spotcheck, store
 from .errors import IntegrityError, UsageError
 
 __all__ = ["STAGE", "estimate", "freeze"]
@@ -16,7 +16,7 @@ __all__ = ["STAGE", "estimate", "freeze"]
 GEN_A_FILES = ("config.json", lifecycle.HASHES, ipip.FROZEN_COPY, invoke.QUALIFICATION_A, "prereg/facets.md",
                "prepare/redacted.txt", "prepare/offsets.json", "prepare/removed-sentences.json",
                "prepare/segments.json", "prepare/sentences.json", "prepare/eras.json", "prepare/redactions.json",
-               "prepare/stats.json", "prepare/receipt.json", calibration.PATH)
+               "prepare/stats.json", "prepare/receipt.json", calibration.PATH, spotcheck.PATH)
 GEN_A_GLOBS = ("prereg/prompts/*.md", "prereg/schemas/*.json", "prepare/substrate/*.md", "prepare/chunks/*/*.txt",
                f"{calibration.EXCERPTS}/*/*.txt",
                "prepare/zoning/*.json", "run/calls/prepare/**/*.json", "prereg/foils/*.json", "prereg/foils/*.md",
@@ -41,6 +41,8 @@ def freeze(ws: store.Workspace) -> dict:
     invoke.check_method(ws)  # before the receipt: an older workspace's receipt lists files the current layout lacks
     _check_inputs(ws)
     calibration.check(ws)
+    if not spotcheck.check(ws):
+        return {"status": "review", "next": "approve_spot_check"}
     cfg = config.load(ws)
     requalified = False
     try:
@@ -52,6 +54,8 @@ def freeze(ws: store.Workspace) -> dict:
     shutil.copy(ws.path(invoke.QUALIFICATION), ws.path(invoke.QUALIFICATION_A))
     foils.author(ws, cfg, evidence.load(ws), store.sha256_file(ws.path("prepare/redacted.txt")))
     _check_inputs(ws)  # authoring takes a while; an input changed meanwhile must not be frozen under these foils
+    if not spotcheck.check(ws):
+        raise UsageError(f"{spotcheck.PATH} was unapproved while `freeze` ran; approve it and rerun `freeze`")
     paths = [*GEN_A_FILES, *(ws.rel(p) for g in GEN_A_GLOBS for p in sorted(ws.root.glob(g)))]
     entry = store.append_generation(ws, "A", paths)
     return {"generation": "A", "artifacts": len(entry["artifacts"]), "requalified": requalified}

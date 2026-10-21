@@ -46,9 +46,19 @@ class EndToEndTest(unittest.TestCase):
         for name in ("redactions.json", "eras.json"):
             shutil.copy(FIXTURE / name, cls.ws_path / "prepare" / name)
         cls.run_stage("prepare")
+        cls.status_before_approval = cls.stage_output("status")
         for name in ("self-prediction.md", "ipip-120.csv"):
             shutil.copy(FIXTURE / name, cls.ws_path / "sealed" / name)
-        for stage in ("seal", "freeze", "extract", "unmask"):
+        cls.run_stage("seal")
+        cls.unapproved_freeze = cls.stage_output("freeze")
+        cls.generations_before_approval = len(store.read_manifest(store.Workspace(cls.ws_path)))
+        spot = cls.ws_path / "prepare" / "spot-check.json"
+        doc = json.loads(spot.read_text())
+        doc["kept"][0]["wrong"] = True
+        for item in doc["removed"][:2]:
+            item["wrong"] = True
+        spot.write_text(json.dumps({**doc, "approved": True}, indent=1))
+        for stage in ("freeze", "extract", "unmask"):
             cls.run_stage(stage)
         cls.ws = store.Workspace(cls.ws_path)
         cls.results = store.read_json(cls.ws.path("report/results.json"))
@@ -60,10 +70,16 @@ class EndToEndTest(unittest.TestCase):
         shutil.rmtree(cls.tmp, ignore_errors=True)
 
     @classmethod
+    def stage_output(cls, stage: str) -> str:
+        cls.run_stage(stage)
+        return cls.last_output
+
+    @classmethod
     def run_stage(cls, stage: str, *extra: str):
         p = subprocess.run([sys.executable, str(RUN), stage, str(cls.ws_path), *extra], env=cls.env,
                            capture_output=True, text=True, timeout=600, check=False)
         cls.codes[stage] = p.returncode
+        cls.last_output = p.stdout + p.stderr
         if p.returncode != 0:
             raise AssertionError(f"{stage} exited {p.returncode}: {p.stderr[-2000:]}")
 
@@ -100,6 +116,15 @@ class EndToEndTest(unittest.TestCase):
             self.assertEqual(recompute.problems(self.ws), [])
         finally:
             stray.unlink()
+
+    def test_freeze_waits_for_the_spot_check_and_the_report_counts_the_marks(self):
+        self.assertIn("spot-check.json", self.status_before_approval)
+        self.assertIn("spot-check.json", self.unapproved_freeze)
+        self.assertEqual(self.generations_before_approval, 0)
+        self.assertEqual(self.results["spot_check"], {"kept": {"shown": 20, "marked": 1},
+                                                      "removed": {"shown": 20, "marked": 2}})
+        frozen = {path for e in store.verify_manifest(self.ws) for path in e["artifacts"]}
+        self.assertIn("prepare/spot-check.json", frozen)
 
     def test_report_first_section_is_non_clinical(self):
         headings = [line for line in self.report.splitlines() if line.startswith("## ")]

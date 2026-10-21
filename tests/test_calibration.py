@@ -10,7 +10,7 @@ from abx import text as abx_text
 from abx.errors import CallFailed, GateFired, IsolationError, UsageError
 
 from . import REPO
-from .helpers import FIXTURE, FakeWorkspace, build
+from .helpers import FIXTURE, FakeWorkspace, approve_spot_check, build
 from .recompute import _calibration
 
 JUDGE_RECORDS = "run/calls/prepare/calibration_judge/*.json"
@@ -150,6 +150,7 @@ class PipelineTest(unittest.TestCase):
         for name in ("self-prediction.md", "ipip-120.csv"):
             ws.path(f"sealed/{name}").write_text((FIXTURE / name).read_text())
         seal.seal(ws)
+        approve_spot_check(ws)
 
     def test_a_passing_zoner_is_calibrated_and_frozen_with_its_evidence(self):
         ws = build(self.fw, until="prepare")

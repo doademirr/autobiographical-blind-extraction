@@ -42,8 +42,10 @@ synced folder.
    both CLIs, zones the text, has a Claude judge and a Codex judge label a held-out sample blind to check the zoner,
    and prints per-era kept ratios and the calibration result. Exit 1 from `prepare` means the zoner failed that
    calibration: stop, show the user the rates in `prepare/calibration.json`, and say no real run is permitted on this
-   zoner. **Review point 2:** ask the user to skim `prepare/retrospective.md` (what was
-   removed) and a few eras of `prepare/substrate/` (what raters will see).
+   zoner. **Review point 2:** ask the user to read `prepare/spot-check.json` (20 kept and 20 removed sentences), mark
+   any that are wrongly labelled (`"wrong": true`) and set `"approved": true`; the note in the file says what counts as
+   wrong. Never fill it in for them. They may also skim `prepare/retrospective.md` (what was removed) and a few eras of
+   `prepare/substrate/` (what raters will see). `freeze` waits for the approval.
 3. **Review point 3:** the user fills in `sealed/self-prediction.md` and answers `sealed/ipip-120.csv` (items are
    in `sealed/ipip-120-items.md`) in their own editor. Then `python3 scripts/run.py seal <ws>`.
 4. `python3 scripts/run.py freeze <ws>` — refuses with exit 1 if the zoner failed calibration; otherwise one

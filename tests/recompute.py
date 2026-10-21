@@ -262,6 +262,13 @@ def _arm(arm: agreement.ArmResult) -> dict:
             "units": len(arm.units), "integrity_audit_due": arm.integrity_audit_due}
 
 
+def _spot_check(ws: store.Workspace) -> dict:
+    """The user's marks, counted straight from the frozen file."""
+    doc = store.read_json(ws.path("prepare/spot-check.json"))
+    return {group: {"shown": len(doc[group]), "marked": [x["wrong"] for x in doc[group]].count(True)}
+            for group in ("kept", "removed")}
+
+
 def _stance_runs(ws: store.Workspace, prefix: str, stance: str) -> dict:
     """{lineage: {run: {facet: score}}} straight from the score files, checking each file's stance."""
     runs: dict = {}
@@ -419,6 +426,7 @@ def expected(ws: store.Workspace) -> dict:
     return {
         "corpus": _corpus(ws),
         "calibration": calibrated,
+        "spot_check": _spot_check(ws),
         "fingerprints": {lin: {k: v for k, v in q.items() if k != "evidence"}
                          for lin, q in store.read_json(ws.path(invoke.QUALIFICATION_A)).items()},
         "agreement": {"inductive": _arm(inductive), "deductive": _arm(deductive_arm),
@@ -476,6 +484,10 @@ def _rows(want: dict) -> list[str]:
         rows.append(f"  - Units with both lineages: {_pct(a['paired_fraction'])}; raw agreement on them: "
                     f"{_pct(a['raw_agreement'])}; missing: {_pct(a['missing_rate'])}; stability α within lineage: "
                     + ", ".join(f"{lin} {_num(v)}" for lin, v in sorted(a["stability"].items())) + ".")
+    sc = want["spot_check"]
+    rows.append(f"- Your spot check of zoning: you read {sc['kept']['shown']} kept and {sc['removed']['shown']} "
+                f"removed sentences and marked {sc['kept']['marked']} kept and {sc['removed']['marked']} removed as "
+                "wrongly labelled. Marks are reported, never applied.")
     lenient, st = want["agreement"]["deductive_lenient"], want["agreement"]["stances"]
     rows.append(f"- Deductive facets, lenient stance (sensitivity, not a gate; {lenient['units']} units): "
                 f"α = {_num(lenient['alpha'])}; units with both lineages: {_pct(lenient['paired_fraction'])}; raw "
