@@ -92,8 +92,8 @@ class _Proposed(NamedTuple):
 def _review_files(ws: store.Workspace, cfg: config.Config, original: str) -> dict[str, _Review] | None:
     """Write the templates the user edits on first run. Returns each review file read exactly once when both are
     approved; None while either is not.
-    Preparation's redaction, size check and zoning use only this snapshot; a later stage's calls read the era
-    labels from the file again, which the receipt then holds to the approved bytes."""
+    Redaction and the size check use only this snapshot; model calls, zoning's included, read era labels from the
+    file again, and the receipt holds that file to the approved bytes."""
     red, era_file = ws.path("prepare/redactions.json"), ws.path("prepare/eras.json")
     if not red.exists():
         candidates = names.scan(original, text.sentences(original, text.segment(original)))
