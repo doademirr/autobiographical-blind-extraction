@@ -2,11 +2,11 @@
 
 Discovery (lineage x run x era, future-blind) -> pooled candidates -> clean-room codebook
 author + validator -> blind facet map -> blind audit per era -> card of constructs and kept foils (generation B)
--> recode -> deductive ledgers and strict scoring -> agreement by script -> integrity audit
-when agreement is very high (generation C). Every model call is a `CallRequest` through `invoke.call`.
+-> recode -> deductive ledgers and strict scoring -> agreement and the temporal read by script -> integrity
+audit when agreement is very high (generation C). Every model call is a `CallRequest` through `invoke.call`.
 """
 
-from collections.abc import Mapping
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from types import MappingProxyType
 from typing import NamedTuple
@@ -26,6 +26,7 @@ from . import (
     prompts,
     qualify,
     store,
+    temporal,
 )
 from .errors import AbxError, IntegrityError
 
@@ -305,13 +306,18 @@ def with_foils(ratings: Ratings, book: dict, kept: list[dict], era_ids: list[str
     return agreement.arm(_binary_runs(ratings), units, "nominal")
 
 
-def _binary_runs(ratings: Ratings) -> dict:
+def _runs(ratings: Ratings, value: Callable[[str], str]) -> dict:
+    """{lineage: {run: {unit: value(verdict)}}} over every rated item."""
     runs: dict = {}
     for key, rows in ratings.verdicts.items():
         cell = runs.setdefault(key.lineage, {}).setdefault(key.run, {})
         for v in rows:
-            cell[Unit(v["item_id"], key.era)] = "present" if v["verdict"] == "present" else "not_present"
+            cell[Unit(v["item_id"], key.era)] = value(v["verdict"])
     return runs
+
+
+def _binary_runs(ratings: Ratings) -> dict:
+    return _runs(ratings, lambda verdict: "present" if verdict == "present" else "not_present")
 
 
 def _arm_json(arm: agreement.ArmResult) -> dict:
@@ -325,11 +331,15 @@ def _agree(c: Context, book: dict) -> dict:
     ratings = load_ratings(c.ws)
     inductive, deductive_arm = arms(ratings, book, c.ix.era_ids, list(c.facets))
     lineages = sorted(inductive.collapsed)
+    status = {con["id"]: {era: agreement.status([inductive.collapsed[lin][Unit(con["item_id"], era)]
+                                                for lin in lineages]) for era in c.ix.era_ids}
+              for con in book["constructs"]}
+    three_way = agreement.collapse_runs(_runs(ratings, lambda verdict: verdict), inductive.units,
+                                        agreement.collapse_mode)
     result = {
         "inductive": _arm_json(inductive), "deductive": _arm_json(deductive_arm),
-        "construct_status": {con["id"]: {era: agreement.status([inductive.collapsed[lin][Unit(con["item_id"], era)]
-                                                               for lin in lineages]) for era in c.ix.era_ids}
-                             for con in book["constructs"]},
+        "construct_status": status,
+        "temporal": temporal.read(book["constructs"], status, three_way, c.ix.era_ids),
         "inductive_collapsed": [{"lineage": lin, "item_id": u.item_id, "era": u.era, "value": v}
                                 for lin in lineages for u, v in inductive.collapsed[lin].items()],
         "deductive_collapsed": [{"lineage": lin, "facet": f, "value": v} for lin in sorted(deductive_arm.collapsed)

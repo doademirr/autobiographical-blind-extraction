@@ -2,8 +2,8 @@
 
 Deterministic in (prompt, lineage, occurrence), and shaped so the offline smoke exercises
 every path: lineage-specific traits (one-lineage discovery), contested and not-shown verdicts
-(insufficient and absent agree under the binary reading), run-to-run drift, insufficient
-facets, and prediction matches.
+(insufficient and absent agree under the binary reading), run-to-run drift, a fade, an emergence
+and a held era, insufficient facets, and prediction matches.
 """
 
 import hashlib
@@ -16,6 +16,10 @@ SENT = re.compile(r"^\[(s\d{5})\]", re.M)
 TRAITS = ["Thrift with money", "Love of reading", "Drive to argue", "Self-directed study", "Resentment of authority",
           "Practical ingenuity", "Concern for reputation", "Willingness to leave home"]
 FACETS = [f"{d}{i}" for d in "NEOAC" for i in range(1, 7)]
+# Verdicts in the first era and in every later one, for both lineages and every run, so the temporal read has a fade,
+# an emergence and a held era whatever the hashes give.
+TRAJECTORIES = {"Thrift with money": ("present", "absent"), "Concern for reputation": ("absent", "present"),
+                "Willingness to leave home": ("present", "insufficient")}
 
 
 def h(*parts) -> int:
@@ -118,6 +122,7 @@ def facet_mapper(prompt, lineage, occurrence):
 def recode(prompt, lineage, occurrence):
     segs = segments(prompt)
     era = era_label(prompt)
+    first_era = re.search(r"^## p0001$", prompt, re.M) is not None
     verdicts = []
     for item, name in re.findall(r"^- (K[0-9a-f]{6}): (.+?)\. ", prompt, re.M):
         base = "present" if h(name, era) % 3 else "absent"
@@ -127,6 +132,8 @@ def recode(prompt, lineage, occurrence):
             base = "insufficient"  # insufficient and absent agree under the binary reading
         if occurrence == 2 and h(name, era, "drift") % 4 == 0 and base != "insufficient":
             base = "absent" if base == "present" else "present"
+        if name in TRAJECTORIES:
+            base = TRAJECTORIES[name][0 if first_era else 1]
         episodes = _two_episodes(segs)
         if name == "Practical ingenuity" and lineage == "claude" and occurrence == 1:
             episodes = [{"sentence_ids": [segs[0][0]]}, {"sentence_ids": [segs[1][0]]}]  # one scene, adjacent

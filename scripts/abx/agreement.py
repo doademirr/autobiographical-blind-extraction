@@ -15,7 +15,7 @@ from typing import NamedTuple
 from .errors import AbxError
 
 __all__ = ["INTEGRITY_TRIGGER", "MIN_PAIRED", "REPORT", "TENTATIVE", "ArmResult", "Check", "alpha", "arm", "band",
-           "collapse_median", "collapse_mode", "integrity_audit", "status"]
+           "collapse_median", "collapse_mode", "collapse_runs", "integrity_audit", "status"]
 
 REPORT = 0.80
 TENTATIVE = 0.667
@@ -82,6 +82,13 @@ def collapse_median(values: list) -> int | None:
     return math.floor(median + 0.5)
 
 
+def collapse_runs(runs: dict[str, dict[int, dict[Hashable, object]]], units: list[Hashable],
+                  collapse: Callable[[list], object]) -> dict[str, dict[Hashable, object]]:
+    """Each lineage's runs collapsed per unit: {lineage: {unit: value or None}}."""
+    return {lineage: {u: collapse([by_run[r].get(u) for r in sorted(by_run)]) for u in units}
+            for lineage, by_run in sorted(runs.items())}
+
+
 def band(value: float | None) -> str:
     if value is None:
         return "not_reportable"
@@ -114,11 +121,7 @@ class ArmResult:
 
 def arm(runs: dict[str, dict[int, dict[Hashable, object]]], units: list[Hashable], metric: str) -> ArmResult:
     """`runs` is {lineage: {run: {unit: value}}}; units outside `units` are ignored."""
-    collapse = collapse_mode if metric == "nominal" else collapse_median
-    collapsed = {
-        lineage: {u: collapse([by_run[r].get(u) for r in sorted(by_run)]) for u in units}
-        for lineage, by_run in sorted(runs.items())
-    }
+    collapsed = collapse_runs(runs, units, collapse_mode if metric == "nominal" else collapse_median)
     lineages = list(collapsed)
     paired = [u for u in units if all(collapsed[lin][u] is not None for lin in lineages)]
     paired_fraction = len(paired) / len(units) if units else 0.0

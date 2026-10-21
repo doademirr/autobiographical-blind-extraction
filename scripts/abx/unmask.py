@@ -144,6 +144,7 @@ def compute(ws: store.Workspace, cfg: config.Config) -> dict:
         "invalid_outputs": {"by_stage": invalid, "total": sum(invalid.values()), "max_attempts": invoke.MAX_ATTEMPTS},
         "constructs": [{"id": c["id"], "name": c["name"], "definition": c["definition"], "lineages": c["lineages"],
                         "status": agree["construct_status"][c["id"]]} for c in book["constructs"]],
+        "temporal": {"constructs": agree["temporal"], "inductive_reportable": inductive_ok},
         "predictions": prediction_rates(codes, preds, supported if inductive_ok else set())
         | {"inductive_reportable": inductive_ok},
         "deductive_vs_ipip": domain_comparison(observer, self_report)

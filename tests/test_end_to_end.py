@@ -113,6 +113,16 @@ class EndToEndTest(unittest.TestCase):
         self.assertGreater(self.results["deductive_vs_ipip"]["compared"], 0)
         self.assertGreater(self.results["agreement"]["downgrades"], 0)
 
+    def test_temporal_read_is_not_vacuous_and_observation_is_whole_record_support(self):
+        rows = self.results["temporal"]["constructs"]
+        self.assertTrue(any(r["fades"] for r in rows))
+        self.assertTrue(any(r["emergences"] for r in rows))
+        self.assertTrue(any(r["held"] for r in rows))
+        observed = {r["construct_id"] for r in rows if "observed" in r["eras"].values()}
+        supported = {c["id"] for c in self.results["constructs"] if "supported" in c["status"].values()}
+        self.assertEqual(observed, supported)
+        self.assertIn("## Over time", self.report)
+
     def test_every_report_figure_recomputes_from_frozen_files(self):
         self.assertEqual(recompute.problems(self.ws), [])
 
@@ -124,8 +134,10 @@ class EndToEndTest(unittest.TestCase):
         bad["deductive_vs_ipip"]["compared"] += 1
         bad["predictions"]["coder_agreement"] = 0.5
         bad["corpus"]["e1"]["kept_ratio"] = 0.01
+        bad["temporal"]["constructs"][0]["held"] = ["e9"]
         found = recompute.compare(bad, self.report, exp)
-        for field in ("raw_agreement", "missing_rate", "deductive_vs_ipip.compared", "coder_agreement", "corpus"):
+        for field in ("raw_agreement", "missing_rate", "deductive_vs_ipip.compared", "coder_agreement", "corpus",
+                      "temporal"):
             self.assertTrue(any(field in f for f in found), (field, found))
         audit = self.results["agreement"]["integrity_audit"]
         if audit:

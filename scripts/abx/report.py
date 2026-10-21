@@ -118,6 +118,45 @@ def _divergence(r: dict) -> list[str]:
     return [*out, ""]
 
 
+NOW_TEXT = {"observed": "observed in {era}", "held": "held (last observed in {era})", "faded": "faded in {era}",
+            "never observed": "never observed"}
+
+
+def _transitions(rows: list[dict], key: str) -> str:
+    return ", ".join(f"{row['construct_id']} {t['from']} → {t['to']}" for row in rows for t in row[key]) or "none"
+
+
+def _temporal(r: dict) -> list[str]:
+    t = r["temporal"]
+    out = ["## Over time", "",
+           "An era counts as observed for a construct when both lineages find it there, and as contradicted only when "
+           "both find evidence against it there. Anything else (silence, a split, a missing verdict) is evidence "
+           "neither way. A trait stated once and then taken for granted stops producing scenes, so an undecided era "
+           "after an observation is held by assumption: listed in its own column, never counted as observed.", ""]
+    if not t["inductive_reportable"]:
+        out += ["The inductive arm is not reportable; this section is descriptive only.", ""]
+    decided = [row for row in t["constructs"] if any(row["eras"].values())]
+    out += [f"- Fades (observed, then contradicted): {_transitions(t['constructs'], 'fades')}.",
+            f"- Emergences (contradicted, then observed): {_transitions(t['constructs'], 'emergences')}.",
+            "- Now reads the last era of the record under that assumption: use it for who the writer was at the end "
+            "of the record, and support in any era (what every comparison in this report uses) for lifelong traits. "
+            "Now cannot establish who you are today; your questionnaire remains the present-day measure.",
+            f"- Constructs with no observed or contradicted era, left out of the table: "
+            f"{len(t['constructs']) - len(decided)}."]
+    if decided:
+        names = {c["id"]: c["name"] for c in r["constructs"]}
+
+        def eras(row: dict, reading: str) -> str:
+            return ", ".join(e for e, v in row["eras"].items() if v == reading) or "—"
+
+        out += ["", "| Id | Construct | Observed in | Contradicted in | Held by assumption | Now |",
+                "|---|---|---|---|---|---|"]
+        out += [f"| {row['construct_id']} | {names[row['construct_id']]} | {eras(row, 'observed')} | "
+                f"{eras(row, 'contradicted')} | {', '.join(row['held']) or '—'} | "
+                f"{NOW_TEXT[row['now']['state']].format(era=row['now']['era'])} |" for row in decided]
+    return [*out, ""]
+
+
 FOIL_TYPES = (("clear", "Clear foils", "false-positive rate"), ("near_miss", "Near-miss foils", "false-positive rate"),
               ("anchored", "Anchored foils", "recovery rate"))
 
@@ -184,7 +223,7 @@ def render(r: dict) -> str:
                    + " | ".join(c["status"][e] for e in eras) + " |")
     out += ["", "Supported: both lineages find the construct in the era. Contested: they disagree. Not-shown: "
             "neither finds it. One-lineage: one side has no verdict; never counted as supported. No-verdict: neither "
-            "lineage has one (tied or missing runs).", ""]
+            "lineage has one (tied or missing runs).", "", *_temporal(r)]
     p = r["predictions"]
     out += ["## Your predictions", ""]
     if not p["inductive_reportable"]:
