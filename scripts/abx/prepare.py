@@ -208,7 +208,9 @@ def prepare(ws: store.Workspace) -> dict:
     eras = snapshot["eras.json"].doc["eras"]
     if not all(isinstance(e, dict) for e in eras):
         raise UsageError("eras.json: eras must be a list of era objects")
-    labelled = next((e for e in eras if listed and isinstance(e.get("label"), str) and listed.search(e["label"])), None)
+    # An empty label is sent as the era id, so the id is what to check then.
+    labelled = next((e for e in eras if listed and isinstance(e.get("label") or e.get("id"), str)
+                     and listed.search(e.get("label") or e.get("id"))), None)
     if labelled:
         raise UsageError(f"eras.json: era {labelled.get('id')!r}'s label holds a name on the redaction list; labels "
                          "are sent to the raters, so take the name out")

@@ -72,6 +72,10 @@ class PrefillTest(unittest.TestCase):
         candidates = [names.Candidate("Name", 2, False, "p1"), names.Candidate("Ada", 2, False, "p1")]
         self.assertEqual(names.prefill(candidates), {"Name": "Person 1", "Ada": "Person 2"})
 
+    def test_every_stem_taken_falls_back_to_one_no_scanned_word_can_be(self):
+        candidates = [names.Candidate(n, 2, False, "p1") for n in ("Name", "Person", "Someone", "Party")]
+        self.assertEqual(names.prefill(candidates)["Name"], "Name0 1")
+
     def test_preview_lists_every_candidate(self):
         candidates = [names.Candidate("Ann Lee", 2, False, "p0001"), names.Candidate("Once", 1, False, "p0002")]
         text = names.preview(candidates, names.prefill(candidates))
@@ -91,6 +95,14 @@ class NameAuditTest(unittest.TestCase):
         with self.assertRaises(IsolationError):
             prompts.audit(prompt("we met Ann's sister"), self.withheld)
         prompts.audit(prompt("Anna came by"), self.withheld)
+
+    def test_a_prompt_keeps_its_own_copy_of_the_values(self):
+        values = {**self.slots, "chunk": "we met Ann"}
+        prompt = prompts.Prompt("zoner", self.zoner, values, {})
+        self.assertIn("Ann", prompt.text)
+        values["chunk"] = "nobody"
+        with self.assertRaises(IsolationError):
+            prompts.audit(prompt, self.withheld)
 
     def test_shipped_template_wording_is_exempt_and_an_edited_template_is_not(self):
         self.assertIsNotNone(re.search(r"(?<!\w)Boston(?!\w)", self.zoner))
@@ -179,6 +191,17 @@ class PrepareScanTest(unittest.TestCase):
         zoner.write_text(zoner.read_text() + "\nRemember Boston.\n")
         with self.assertRaises(IsolationError):
             prepare.prepare(self.ws)
+
+    def test_an_era_id_standing_in_for_an_empty_label_is_checked_too(self):
+        prepare.prepare(self.ws)
+        doc = store.read_json(self.ws.path("prepare/redactions.json"))
+        store.write_json(self.ws.path("prepare/redactions.json"), {**doc, "approved": True})
+        eras = unlabelled()
+        eras["eras"][0]["id"] = "Boston"
+        store.write_json(self.ws.path("prepare/eras.json"), eras)
+        with self.assertRaises(UsageError):
+            prepare.prepare(self.ws)
+        self.assertEqual(self.fw.prompts_logged(), [])
 
     def test_the_probes_are_audited_before_anything_is_sent(self):
         prepare.prepare(self.ws)

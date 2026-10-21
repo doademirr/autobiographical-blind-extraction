@@ -19,7 +19,7 @@ from .withheld import MIN_REMOVED_LEN, Withheld
 
 __all__ = ["MAX_PARAM_LEN", "Prompt", "assemble", "audit", "check_allowlist"]
 
-FRAME_KINDS = {"template", "schema"}
+FRAME_KINDS = frozenset({"template", "schema"})
 MAX_PARAM_LEN = 200
 _SLOT = re.compile(r"\{\{([a-z_]+)\}\}")
 
@@ -36,6 +36,10 @@ class Prompt:
     template: str
     values: Mapping[str, str]
     artifacts: Mapping[str, str]  # artifact id -> sha256 of its text
+
+    def __post_init__(self):
+        object.__setattr__(self, "values", MappingProxyType(dict(self.values)))
+        object.__setattr__(self, "artifacts", MappingProxyType(dict(self.artifacts)))
 
     @cached_property
     def text(self) -> str:

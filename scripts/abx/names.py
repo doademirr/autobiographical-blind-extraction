@@ -16,8 +16,9 @@ from .text import Sentence, name_pattern
 __all__ = ["Candidate", "prefill", "preview", "scan"]
 
 MAX_RUN = 3
-# The first stem no chosen name uses, so no placeholder contains a name on the list.
-PLACEHOLDER_STEMS = ("Name", "Person", "Someone", "Party")
+# The first stem no chosen name uses, so no placeholder contains a name on the list. The last holds a digit, which no
+# scanned word does, so it can never collide.
+PLACEHOLDER_STEMS = ("Name", "Person", "Someone", "Party", "Name0")
 TITLES = frozenset({"Mr", "Mrs", "Ms", "Miss", "Dr", "Sir", "Lady", "Lord", "Aunt", "Uncle", "Captain", "Rev", "St"})
 FUNCTION_WORDS = frozenset({"The", "A", "An", "And", "But", "Or", "In", "On", "At", "To", "Of", "For", "With", "My",
                             "Our", "His", "Her", "Their", "That", "This", "These", "Those", "Without", "When", "If",

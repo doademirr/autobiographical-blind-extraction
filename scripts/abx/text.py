@@ -19,9 +19,9 @@ _PARAGRAPH_BREAK = re.compile(r"\n[ \t]*\n\s*")
 _CLOSERS = "\"'\u2019\u201d)]"
 _SENTENCE_END = re.compile(rf"[.!?]+[{re.escape(_CLOSERS)}]*(?=\s)")
 # Tokens whose trailing full stop is not a sentence end.
-_ABBREVIATIONS = {
+_ABBREVIATIONS = frozenset({
     "mr", "mrs", "ms", "dr", "st", "capt", "col", "gen", "rev", "esq", "jr", "sr", "vs", "etc", "&c",
-}
+})
 
 REMOVED_MARK = "[…]"
 
