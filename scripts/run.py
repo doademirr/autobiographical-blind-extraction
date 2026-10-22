@@ -88,9 +88,17 @@ def _version() -> str:
     return f"{found.group(1) if found else 'unknown'} ({sha or 'unknown'})"
 
 
+class _Version(argparse.Action):
+    """Looks the version up only when asked, so ordinary runs never spawn git."""
+
+    def __call__(self, parser, namespace, values, option_string=None):
+        print(_version())
+        parser.exit()
+
+
 def _parser() -> argparse.ArgumentParser:
     ap = argparse.ArgumentParser(prog="run.py", description=__doc__, formatter_class=argparse.RawTextHelpFormatter)
-    ap.add_argument("--version", action="version", version=_version())
+    ap.add_argument("--version", action=_Version, nargs=0, help="print the harness version and commit, then exit")
     sub = ap.add_subparsers(dest="cmd", required=True)
     for stage in STAGES.values():
         cmd = sub.add_parser(stage.name, help=stage.help)
