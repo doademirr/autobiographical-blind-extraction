@@ -28,6 +28,7 @@ __all__ = [
     "deductive_domains",
     "domain_comparison",
     "estimate",
+    "facet_comparison",
     "prediction_rates",
     "unmask",
 ]
@@ -131,6 +132,20 @@ def domain_comparison(observer: dict, self_report: dict) -> dict:
             "agreement_rate": sum(r["same_band"] for r in compared) / len(compared) if compared else None}
 
 
+def facet_comparison(observer: dict, self_report: dict, instrument: dict) -> dict:
+    """Every facet, observer estimate against IPIP score by band: descriptive, never a headline result."""
+    rows = {}
+    for f in instrument["facets"]:
+        obs, own = observer["facets"].get(f), self_report["facets"].get(f)
+        o_band, s_band = ipip.observer_band(obs), ipip.ipip_band(own)
+        rows[f] = {"observer": _num(obs), "observer_band": o_band, "ipip": _num(own), "ipip_band": s_band,
+                   "same_band": (o_band == s_band) if o_band and s_band else None}
+    compared = [r for r in rows.values() if r["same_band"] is not None]
+    return {"facets": rows, "observer_missing": sum(r["observer"] is None for r in rows.values()),
+            "ipip_missing": sum(r["ipip"] is None for r in rows.values()), "compared": len(compared),
+            "same_band_rate": sum(r["same_band"] for r in compared) / len(compared) if compared else None}
+
+
 def compute(ws: store.Workspace, cfg: config.Config) -> dict:
     """Every reported figure, from frozen files only; the recomputation check rebuilds the same way."""
     book = store.read_json(ws.path("run/codebook/codebook.json"))
@@ -163,6 +178,7 @@ def compute(ws: store.Workspace, cfg: config.Config) -> dict:
         "temporal": temporal.shown(agree["temporal"]) | {"inductive_reportable": inductive_ok},
         "predictions": prediction_rates(codes, preds, supported if inductive_ok else set())
         | {"inductive_reportable": inductive_ok},
+        "facet_bands": facet_comparison(observer, self_report, instrument),
         "deductive_vs_ipip": domain_comparison(observer, self_report)
         | {"deductive_reportable": agree["deductive"]["verdict"] in REPORTABLE},
         "correspondences": facetmap.correspondences(facet_map, book["constructs"], supported, self_report["facets"],

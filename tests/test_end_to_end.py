@@ -131,6 +131,8 @@ class EndToEndTest(unittest.TestCase):
         self.assertGreater(p["supported_eligible"], 0)
         self.assertGreater(len(p["matched"]), 0)
         self.assertGreater(self.results["deductive_vs_ipip"]["compared"], 0)
+        self.assertGreater(self.results["facet_bands"]["compared"], 0)
+        self.assertIn("### Facets, descriptive", self.report)
         self.assertGreater(self.results["agreement"]["downgrades"], 0)
 
     def test_temporal_read_is_not_vacuous_and_observation_is_whole_record_support(self):

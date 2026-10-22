@@ -262,6 +262,26 @@ def _arm(arm: agreement.ArmResult) -> dict:
             "units": len(arm.units), "integrity_audit_due": arm.integrity_audit_due}
 
 
+def _facet_bands(by_lineage: dict, self_report: dict, instrument: dict) -> dict:
+    """Facet bands rebuilt from the lineage collapses and the IPIP facet scores with their own median and thresholds."""
+    def band(value, low, high):
+        return None if value is None else "low" if value <= low else "high" if value >= high else "mid"
+
+    rows = {}
+    for f in instrument["facets"]:
+        vals = [by_lineage[lin].get(f) for lin in sorted(by_lineage)]
+        obs = sum(Fraction(v) for v in vals) / len(vals) if vals and None not in vals else None
+        own = self_report["facets"].get(f)
+        o_band, s_band = band(obs, 3, 5), band(own, Fraction(7, 3), Fraction(11, 3))
+        rows[f] = {"observer": None if obs is None else float(obs), "observer_band": o_band,
+                   "ipip": None if own is None else float(own), "ipip_band": s_band,
+                   "same_band": o_band == s_band if o_band and s_band else None}
+    compared = [r["same_band"] for r in rows.values() if r["same_band"] is not None]
+    return {"facets": rows, "observer_missing": [r["observer"] for r in rows.values()].count(None),
+            "ipip_missing": [r["ipip"] for r in rows.values()].count(None), "compared": len(compared),
+            "same_band_rate": compared.count(True) / len(compared) if compared else None}
+
+
 def _spot_check(ws: store.Workspace) -> dict:
     """The user's marks, counted straight from the frozen file."""
     doc = store.read_json(ws.path("prepare/spot-check.json"))
@@ -443,6 +463,7 @@ def expected(ws: store.Workspace) -> dict:
         "temporal": _temporal(ratings, book, eras, status, inductive_ok),
         "predictions": unmask.prediction_rates(codes, preds, supported if inductive_ok else set())
         | {"inductive_reportable": inductive_ok},
+        "facet_bands": _facet_bands(deductive_arm.collapsed, self_report, instrument),
         "deductive_vs_ipip": unmask.domain_comparison(unmask.deductive_domains(collapsed, instrument), self_report)
         | {"deductive_reportable": deductive_arm.verdict in unmask.REPORTABLE},
         "correspondences": _correspondences(ws, book, supported, self_report["facets"], inductive_ok),
@@ -568,6 +589,14 @@ def _rows(want: dict) -> list[str]:
         rows.append(f"| {want['domain_names'][dom]} | {_num(row['observer'], 2)} | {row['observer_band'] or 'n/a'} | "
                     f"{_num(row['ipip'], 2)} | {row['ipip_band'] or 'n/a'} | {same} |")
     rows.append(f"Same band in {_pct(d['agreement_rate'])} of {d['compared']} domains compared.")
+    fb = want["facet_bands"]
+    rows.append(f"- Observer estimates missing for {fb['observer_missing']} of {len(fb['facets'])} facets; IPIP scores "
+                f"missing for {fb['ipip_missing']} of {len(fb['facets'])}. Same band in {_pct(fb['same_band_rate'])} "
+                f"of {fb['compared']} facets compared.")
+    for f, row in fb["facets"].items():
+        same = "n/a" if row["same_band"] is None else ("yes" if row["same_band"] else "no")
+        rows.append(f"| {f} {want['facet_names'][f]} | {_num(row['observer'], 2)} | {row['observer_band'] or 'n/a'} | "
+                    f"{_num(row['ipip'], 2)} | {row['ipip_band'] or 'n/a'} | {same} |")
     c = want["correspondences"]
     n = c["counts"]
     rows.append(f"- Construct–facet pairs: {n['consistent']} consistent, {n['inconsistent']} inconsistent, "

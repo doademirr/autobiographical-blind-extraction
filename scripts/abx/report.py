@@ -104,6 +104,23 @@ def _correspondences(r: dict) -> list[str]:
     return [*out, ""]
 
 
+def _facet_bands(r: dict) -> list[str]:
+    fb = r["facet_bands"]
+    n = len(fb["facets"])
+    out = ["### Facets, descriptive", "",
+           "The same comparison for each facet. Descriptive only, not a headline result: a facet rests on fewer "
+           "scores than a domain, and the domain table above is the comparison this report stands on.", "",
+           f"- Observer estimates missing for {fb['observer_missing']} of {n} facets; IPIP scores missing for "
+           f"{fb['ipip_missing']} of {n}. Same band in {pct(fb['same_band_rate'])} of {fb['compared']} facets "
+           "compared.", "",
+           "| Facet | Observer (1–7) | Band | IPIP (1–5) | Band | Same band |", "|---|---|---|---|---|---|"]
+    for f, row in fb["facets"].items():
+        same = "n/a" if row["same_band"] is None else ("yes" if row["same_band"] else "no")
+        out.append(f"| {f} {r['facet_names'][f]} | {num(row['observer'], 2)} | {row['observer_band'] or 'n/a'} | "
+                   f"{num(row['ipip'], 2)} | {row['ipip_band'] or 'n/a'} | {same} |")
+    return [*out, ""]
+
+
 def _signed(items: list[dict], key: str) -> str:
     return ", ".join(f"{i[key]}{'+' if i['polarity'] == '+' else '−'}" for i in items) or "—"
 
@@ -275,7 +292,7 @@ def render(r: dict) -> str:
         out.append(f"| {r['domain_names'][dom]} | {num(row['observer'], 2)} | {row['observer_band'] or 'n/a'} | "
                    f"{num(row['ipip'], 2)} | {row['ipip_band'] or 'n/a'} | {same} |")
     out += ["", f"Same band in {pct(d['agreement_rate'])} of {d['compared']} domains compared.", "",
-            *_correspondences(r), *_divergence(r), "## Limits", "",
+            *_facet_bands(r), *_correspondences(r), *_divergence(r), "## Limits", "",
             "- Raters saw one era at a time, so patterns that only show across eras are not captured.",
             "- Discovery used a fixed panel; saturation was not established.",
             "- Narrative over-reads emotionally charged scenes and misses traits that show as absence.",

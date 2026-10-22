@@ -71,7 +71,7 @@ Canaries are words only your own profile or instruction files would contain (a n
 | 5 | a model call failed; rerun the stage and completed calls are reused |
 | 70 | an unexpected harness error (a bug; please report it) |
 
-The report lands in `report/report.md`: agreement per arm, foil error rates and the audit's flags, the construct table, how each construct changes across eras (fades and emergences both model families see, eras held only by assumption, and its state at the end of the record), how your predictions matched, the observer estimate against your IPIP-NEO-120 by domain, each supported construct set against the IPIP facets a separate model mapped it to, and a facet-by-facet map of where the blind extraction, your predictions and your questionnaire agree and diverge.
+The report lands in `report/report.md`: agreement per arm, foil error rates and the audit's flags, the construct table, how each construct changes across eras (fades and emergences both model families see, eras held only by assumption, and its state at the end of the record), how your predictions matched, the observer estimate against your IPIP-NEO-120 by domain (and, as descriptive detail, by facet), each supported construct set against the IPIP facets a separate model mapped it to, and a facet-by-facet map of where the blind extraction, your predictions and your questionnaire agree and diverge.
 
 ## Behaviour worth knowing
 
