@@ -22,7 +22,7 @@ from . import (
 )
 from .errors import TooLarge, UsageError
 
-__all__ = ["RECEIPT", "STAGE", "estimate", "prepare", "receipt_problems", "review_doc"]
+__all__ = ["RECEIPT", "STAGE", "estimate", "prepare", "receipt_problems", "review_doc", "stage_method"]
 
 RECEIPT = "prepare/receipt.json"
 RECEIPT_INPUTS = ("text/original.txt", "config.json", "prepare/redactions.json", "prepare/eras.json",
@@ -52,7 +52,7 @@ ERA_RULE = ("You decide the eras, before any model call. Aim for at least 5-6, e
             "segments-preview.txt gives each paragraph's word count.")
 
 
-def _stage_method(ws: store.Workspace) -> None:
+def stage_method(ws: store.Workspace) -> None:
     """Copy the repo's prompts, schemas and IPIP instrument in, and derive the facet catalog raters see
     (codes and names only, never questionnaire items); freeze hashes them all in generation A."""
     for name in ("prompts", "schemas"):
@@ -192,7 +192,7 @@ def prepare(ws: store.Workspace) -> dict:
         invoke.check_method(ws)  # a resumed older workspace lacks this method's staged prompts
     cfg = config.load(ws)
     original = ws.path("text/original.txt").read_text(encoding="utf-8")
-    _stage_method(ws)
+    stage_method(ws)
     snapshot = _review_files(ws, cfg, original)
     if snapshot is None:
         return {"status": "review", "next": "approve_review_files"}
@@ -282,6 +282,7 @@ def receipt_problems(ws: store.Workspace) -> list[str]:
     return sorted(rel for rel in set(recorded) | set(current) if recorded.get(rel) != current.get(rel))
 
 
-STAGE = lifecycle.Stage("prepare", 1, "redaction and eras review, qualification, zoning and its calibration", prepare,
+STAGE = lifecycle.Stage("prepare", 1, "redaction and eras review, qualification, zoning and its calibration",
+                        lifecycle.returns(prepare),
                         estimate,
                         closed_after="A", verifies_seal=False)

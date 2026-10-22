@@ -31,26 +31,9 @@ from . import (
 )
 from .errors import AbxError, IntegrityError
 
-__all__ = [
-    "REQUALIFICATION_AUDIT",
-    "STAGE",
-    "STANCES",
-    "RaterKey",
-    "Ratings",
-    "Stance",
-    "StanceComparison",
-    "StanceName",
-    "StanceUnit",
-    "Unit",
-    "arms",
-    "estimate",
-    "extract",
-    "load_ratings",
-    "score_problems",
-    "stance_sensitivity",
-    "validate_codebook",
-    "with_foils",
-]
+__all__ = ["REQUALIFICATION_AUDIT", "STAGE", "STANCES", "RaterKey", "Ratings", "Stance", "StanceComparison",
+           "StanceName", "StanceUnit", "Unit", "arms", "context", "coverage", "estimate", "extract", "load_ratings",
+           "score_problems", "stance_sensitivity", "validate_codebook", "with_foils"]
 
 REQUALIFICATION_AUDIT = "run/requalification-audit.json"
 
@@ -112,11 +95,12 @@ class Context:
         return range(1, self.cfg.runs + 1)
 
 
-def _context(ws: store.Workspace) -> Context:
+def context(ws: store.Workspace) -> Context:
+    """What every extract step reads: the workspace, its config, the era index and the facet codes."""
     return Context(ws=ws, cfg=config.load(ws), ix=evidence.load(ws), facets=tuple(ipip.load_instrument(ws)["facets"]))
 
 
-def _coverage(items: set[str], got: list[str]) -> list[str]:
+def coverage(items: set[str], got: list[str]) -> list[str]:
     """Each card item exactly once, naming what is missing, repeated or not on the card."""
     missing = sorted(items - set(got))
     repeated = sorted({i for i in got if got.count(i) > 1})
@@ -243,7 +227,7 @@ def _recode(c: Context, book: dict) -> None:
             for era in c.ix.era_ids:
 
                 def validate(o, era=era):
-                    return _coverage(items, [v["item_id"] for v in o["verdicts"]]) or \
+                    return coverage(items, [v["item_id"] for v in o["verdicts"]]) or \
                         c.ix.outside(era, evidence.cited(o, ("sentence_ids", "counter_sentence_ids")))
 
                 out = invoke.call(c.ws, c.cfg, invoke.CallRequest(
@@ -508,7 +492,7 @@ def integrity_audit(c: Context) -> dict:
 def extract(ws: store.Workspace) -> dict:
     gens = lifecycle.enter(ws, STAGE)
     invoke.check_method(ws)
-    c = _context(ws)
+    c = context(ws)
     if "B" not in gens:
         _discovery(c)
         candidates = _pool(c)
@@ -538,5 +522,13 @@ def extract(ws: store.Workspace) -> dict:
     return result
 
 
-STAGE = lifecycle.Stage("extract", 4, "the blind engine, to generation C", extract, estimate, needs="A",
+def _cli(ws: store.Workspace, args) -> lifecycle.CliResult:
+    """The gates and their alpha; a gate that fired (an arm not reportable) is exit 1, a result, not a crash."""
+    result = extract(ws)
+    gates = {arm: result[arm]["verdict"] for arm in ("inductive", "deductive")}
+    return lifecycle.CliResult({"gates": gates, "alpha": {arm: result[arm]["alpha"] for arm in gates}},
+                               1 if "not_reportable" in gates.values() else 0)
+
+
+STAGE = lifecycle.Stage("extract", 4, "the blind engine, to generation C", _cli, estimate, needs="A",
                         closed_after="E", checks_method=True)

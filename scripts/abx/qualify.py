@@ -21,8 +21,8 @@ from . import artifacts, capture, invoke, prompts, store, withheld
 from .config import Config, retained
 from .errors import CallFailed, IsolationError, UsageError
 
-__all__ = ["Canary", "Run", "leak_control", "leak_probe", "qualify", "qualify_claude",
-           "qualify_codex"]
+__all__ = ["Canary", "Run", "codex_transport", "leak_control", "leak_probe", "locked_problems", "qualify",
+           "qualify_claude", "qualify_codex", "transport_problems"]
 
 MCP_SCRIPT = Path(__file__).with_name("mcp_canary.py")
 CAPTURE_KEY_ENV = "ABX_CAPTURE_KEY"
@@ -68,7 +68,7 @@ INFERENCE_PATH = "/codex-up/responses"
 ANALYTICS_PATH = "/backend-api/codex/analytics-events/events"
 
 
-def _transport_problems(evidence: capture.Evidence) -> list[str]:
+def transport_problems(evidence: capture.Evidence) -> list[str]:
     """A registry built after failed or unexpected discovery traffic proves nothing. An allowlist: inference
     POSTs captured, metadata GETs forwarded with a 2xx, the inference websocket upgrade refused (Codex falls back
     to HTTP) and the analytics POST refused. Every other method, path or outcome is a problem."""
@@ -88,7 +88,7 @@ def _transport_problems(evidence: capture.Evidence) -> list[str]:
     return bad
 
 
-def _locked_problems(lineage: str, cfg: Config, run: Run, canary: Canary,
+def locked_problems(lineage: str, cfg: Config, run: Run, canary: Canary,
                      scripted: tuple[str, str] | None, baseline: tuple[str, ...] | None = None) -> list[str]:
     """The complete predicate for a locked capture; `scripted` is (call id, pinned result).
 
@@ -116,7 +116,7 @@ def _locked_problems(lineage: str, cfg: Config, run: Run, canary: Canary,
             problems.append("the tool list differs from the baseline capture's")
         problems += ["a request named another model" for r in requests if r.get("model") != lin.model][:1]
         if lin.capture_forward:
-            problems += _transport_problems(run.evidence)
+            problems += transport_problems(run.evidence)
         allowed_events = frozenset()
     else:
         try:
@@ -137,7 +137,7 @@ def _locked_problems(lineage: str, cfg: Config, run: Run, canary: Canary,
     return problems
 
 
-def _codex_transport(cfg: Config, cap: capture.Capture) -> tuple[list[str], dict[str, str]]:
+def codex_transport(cfg: Config, cap: capture.Capture) -> tuple[list[str], dict[str, str]]:
     """Provider overrides for one capture run. Compression is off on every run, unlocked controls included:
     on a ChatGPT login Codex zstd-compresses request bodies, which the capture cannot read."""
     if cfg.lineage("codex").capture_forward:
@@ -169,7 +169,7 @@ def _captured(cfg: Config, lineage: str, cap: capture.Capture, prompt: str, unlo
 
 def _run_codex(cfg: Config, prompt: str, tool_item: dict | None = None, unlocked_argv=None, extra=()) -> Run:
     def wiring(cap):
-        transport, env = _codex_transport(cfg, cap)
+        transport, env = codex_transport(cfg, cap)
         return [*transport, *extra], env
 
     cap = capture.Capture("codex", tool_item=tool_item, forward=cfg.lineage("codex").capture_forward)
@@ -224,14 +224,14 @@ def qualify_codex(cfg: Config, canary: Canary, prompt: str, record: Recorder | N
     lin = cfg.lineage("codex")
     pinned = retained(lin)
     baseline = _run_codex(cfg, prompt)
-    _check("codex", "baseline", baseline, _locked_problems("codex", cfg, baseline, canary, None), record)
+    _check("codex", "baseline", baseline, locked_problems("codex", cfg, baseline, canary, None), record)
     tools = tuple(sorted(capture.codex_tools(baseline.evidence.requests[0])))
     results = {}
     for n, tool in enumerate(tools):
         call, result = pinned[tool]
         item = json.loads(json.dumps(call).replace("{canary}", str(canary.path)))
         run = _run_codex(cfg, prompt, _scripted(item, f"call_q{n}"))
-        _check("codex", f"retained-{tool}", run, [f"{tool}: {p}" for p in _locked_problems(
+        _check("codex", f"retained-{tool}", run, [f"{tool}: {p}" for p in locked_problems(
             "codex", cfg, run, canary, (f"call_q{n}", result), baseline=tools)], record)
         results[tool] = result
     file_js = f'const r = await tools.exec_command({{cmd: "cat {canary.path}"}}); text(JSON.stringify(r));'
@@ -252,9 +252,9 @@ def qualify_codex(cfg: Config, canary: Canary, prompt: str, record: Recorder | N
 def qualify_claude(cfg: Config, canary: Canary, prompt: str, record: Recorder | None = None) -> dict:
     lin = cfg.lineage("claude")
     baseline = _run_claude(cfg, prompt, None)
-    _check("claude", "baseline", baseline, _locked_problems("claude", cfg, baseline, canary, None), record)
+    _check("claude", "baseline", baseline, locked_problems("claude", cfg, baseline, canary, None), record)
     scripted = _run_claude(cfg, prompt, ("Read", {"file_path": str(canary.path)}))
-    _check("claude", "retained-Read", scripted, [f"Read: {p}" for p in _locked_problems(
+    _check("claude", "retained-Read", scripted, [f"Read: {p}" for p in locked_problems(
         "claude", cfg, scripted, canary, (CLAUDE_CALL_ID, lin.locked_read_result))], record)
     mcp_config = json.dumps({"mcpServers": {"abxcanary": {"command": sys.executable,
                                                           "args": [str(MCP_SCRIPT), canary.mcp_token]}}})

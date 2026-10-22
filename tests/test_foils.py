@@ -60,8 +60,8 @@ class FoilEvidenceTest(unittest.TestCase):
     def test_a_colliding_foil_item_id_takes_the_next_free_one(self):
         with mock.patch.object(foils.card, "item_id", side_effect=lambda key, salt: f"K<{key}>"):
             taken = {"K<foil:e1:F1>"}
-            self.assertEqual(foils._free_id("foil:e1:F1", "salt", taken), "K<foil:e1:F1:1>")
-            self.assertEqual(foils._free_id("foil:e2:F1", "salt", taken), "K<foil:e2:F1>")
+            self.assertEqual(foils.free_id("foil:e1:F1", "salt", taken), "K<foil:e1:F1:1>")
+            self.assertEqual(foils.free_id("foil:e2:F1", "salt", taken), "K<foil:e2:F1>")
             self.assertEqual(taken, {"K<foil:e1:F1>", "K<foil:e1:F1:1>", "K<foil:e2:F1>"})
 
     def test_auditor_must_differ_from_the_foil_author(self):

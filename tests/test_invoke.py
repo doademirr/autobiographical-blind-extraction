@@ -69,7 +69,7 @@ class CallTest(unittest.TestCase):
         profile["oauthAccount"]["somethingNew"] = "unvetted"
         source.write_text(json.dumps(profile))
         with tempfile.TemporaryDirectory() as tmp:
-            home = invoke._claude_home(Path(tmp), self.cfg.lineage("claude"))
+            home = invoke.claude_home(Path(tmp), self.cfg.lineage("claude"))
             seeded = json.loads((home / ".claude.json").read_text())
             self.assertEqual(set(seeded), {"oauthAccount"})
             self.assertNotIn("somethingNew", seeded["oauthAccount"])
@@ -77,13 +77,13 @@ class CallTest(unittest.TestCase):
                              dict.fromkeys(invoke.CLAUDE_IDENTITY, ""))
             self.assertEqual(seeded["oauthAccount"]["billingType"], "stripe_subscription")
             self.assertGreater(seeded["oauthAccount"]["profileFetchedAt"], 1)
-            self.assertFalse(invoke._identity_restored(home))
+            self.assertFalse(invoke.identity_restored(home))
             for rewritten in ({"oauthAccount": {"emailAddress": "x@example.com"}}, {"oauthAccount": None},
                               {"oauthAccount": []}, {}, {"oauthAccount": {}}, {"oauthAccount": {
                                   **dict.fromkeys(invoke.CLAUDE_IDENTITY, ""), "emailAddress": None}}):
                 with self.subTest(rewritten=rewritten):
                     (home / ".claude.json").write_text(json.dumps(rewritten))
-                    self.assertTrue(invoke._identity_restored(home))
+                    self.assertTrue(invoke.identity_restored(home))
 
     def test_an_incomplete_or_missing_claude_profile_is_a_preflight_failure(self):
         lin = self.cfg.lineage("claude")
@@ -92,11 +92,11 @@ class CallTest(unittest.TestCase):
             with self.subTest(body=body), tempfile.TemporaryDirectory() as tmp:
                 source.write_text(body)
                 with self.assertRaises(UsageError) as cm:
-                    invoke._claude_home(Path(tmp), lin)
+                    invoke.claude_home(Path(tmp), lin)
                 self.assertEqual(cm.exception.exit_code, 2)
         source.unlink()
         with tempfile.TemporaryDirectory() as tmp, self.assertRaises(UsageError):
-            invoke._claude_home(Path(tmp), lin)
+            invoke.claude_home(Path(tmp), lin)
 
     def test_profile_rewritten_during_a_locked_claude_call_is_an_audited_tool_event(self):
         req = _req()

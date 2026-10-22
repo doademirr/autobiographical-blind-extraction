@@ -26,7 +26,7 @@ class EraSizeTest(unittest.TestCase):
     def setUp(self):
         self.fw = FakeWorkspace()
         self.ws, self.cfg = self.fw.ws, self.fw.config
-        prepare._stage_method(self.ws)
+        prepare.stage_method(self.ws)
 
     def tearDown(self):
         self.fw.close()
@@ -40,9 +40,9 @@ class EraSizeTest(unittest.TestCase):
 
     def need(self, role: str, position: int, body: str, card: bool = True, n_eras: int = 1) -> int:
         era_ids = [f"e{k + 1}" for k in range(n_eras)]
-        prompt = sizing._prompt(self.ws, role, era_ids, position, era_ids[position], body)
+        prompt = sizing.prompt_for(self.ws, role, era_ids, position, era_ids[position], body)
         if not card:
-            prompt = prompt.replace(sizing._largest_card(self.ws, n_eras), "")
+            prompt = prompt.replace(sizing.largest_card(self.ws, n_eras), "")
         return invoke.estimate_tokens(prompt)
 
     def era_texts(self, original, era, sents):
@@ -98,16 +98,16 @@ class EraSizeTest(unittest.TestCase):
         sizing.check_eras(self.ws, _budget(self.cfg, budget), eras, sents, original)
         template = self.ws.path("prereg/prompts/recode.md")
         template.write_text(template.read_text() + "\nThe era again:\n{{era}}\n")
-        self.assertEqual(sizing._prompt(self.ws, "recode", ["e1"], 0, "e1", full).count(full), 2)
+        self.assertEqual(sizing.prompt_for(self.ws, "recode", ["e1"], 0, "e1", full).count(full), 2)
         with self.assertRaises(UsageError) as cm:
             sizing.check_eras(self.ws, _budget(self.cfg, budget), eras, sents, original)
         self.assertIn("recode", str(cm.exception))
         lin = _budget(self.cfg, budget).lineage("claude")
-        once = sizing._words_that_fit(self.ws, "deductive_ledger", ["e1"], 0, "e1", lin, 6.0)
-        twice = sizing._words_that_fit(self.ws, "recode", ["e1"], 0, "e1", lin, 6.0)
+        once = sizing.words_that_fit(self.ws, "deductive_ledger", ["e1"], 0, "e1", lin, 6.0)
+        twice = sizing.words_that_fit(self.ws, "recode", ["e1"], 0, "e1", lin, 6.0)
         template.write_text(template.read_text().replace("\nThe era again:\n{{era}}\n", ""))
         # Within the few words the added template line itself takes.
-        self.assertAlmostEqual(twice, sizing._words_that_fit(self.ws, "recode", ["e1"], 0, "e1", lin, 6.0) // 2,
+        self.assertAlmostEqual(twice, sizing.words_that_fit(self.ws, "recode", ["e1"], 0, "e1", lin, 6.0) // 2,
                                delta=2)
         self.assertGreater(once, twice)
 

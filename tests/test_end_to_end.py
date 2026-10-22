@@ -15,7 +15,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from abx import invoke, store
+from abx import invoke, report, store
 
 from . import REPO, recompute
 from .helpers import FAKE_ENV, FAKES, FIXTURE, write_logins
@@ -120,6 +120,18 @@ class EndToEndTest(unittest.TestCase):
                                                       "removed": {"shown": 20, "marked": 2}})
         frozen = {path for e in store.verify_manifest(self.ws) for path in e["artifacts"]}
         self.assertIn("prepare/spot-check.json", frozen)
+
+    def test_a_report_with_no_facet_compared_still_lists_every_facet(self):
+        results = json.loads(json.dumps(self.results))
+        fb = results["facet_bands"]
+        for row in fb["facets"].values():
+            row.update(observer=None, observer_band=None, same_band=None)
+        fb.update(observer_missing=len(fb["facets"]), compared=0, same_band_rate=None)
+        text = report.render(results)
+        self.assertIn("Same band in n/a of 0 facets compared.", text)
+        rows = [line for line in text.splitlines() if any(line.startswith(f"| {f} ") for f in fb["facets"])]
+        self.assertEqual(len(rows), len(fb["facets"]))
+        self.assertTrue(all(line.endswith("| n/a |") for line in rows))
 
     def test_report_first_section_is_non_clinical(self):
         headings = [line for line in self.report.splitlines() if line.startswith("## ")]

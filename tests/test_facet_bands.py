@@ -1,7 +1,7 @@
 import unittest
 from fractions import Fraction
 
-from abx import report, unmask
+from abx import unmask
 
 INSTRUMENT = {"facets": {"N1": "Anxiety", "N2": "Anger", "E1": "Friendliness", "E2": "Gregariousness"}}
 
@@ -38,9 +38,6 @@ class FacetComparisonTest(unittest.TestCase):
         self_report = {"facets": {**dict.fromkeys(INSTRUMENT["facets"], Fraction(3)), "N1": None}}
         got = unmask.facet_comparison(observer, self_report, INSTRUMENT)
         self.assertEqual((len(got["facets"]), got["compared"], got["same_band_rate"]), (4, 0, None))
-        lines = report._facet_bands({"facet_bands": got, "facet_names": INSTRUMENT["facets"]})
-        self.assertIn("Same band in n/a of 0 facets compared.", "\n".join(lines))
-        self.assertEqual(sum(line.startswith("| N") or line.startswith("| E") for line in lines), 4)
 
 
 if __name__ == "__main__":

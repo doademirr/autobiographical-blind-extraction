@@ -62,5 +62,5 @@ def freeze(ws: store.Workspace) -> dict:
     return {"generation": "A", "artifacts": len(entry["artifacts"]), "requalified": requalified}
 
 
-STAGE = lifecycle.Stage("freeze", 3, "pre-register generation A", freeze, estimate, closed_after="A",
+STAGE = lifecycle.Stage("freeze", 3, "pre-register generation A", lifecycle.returns(freeze), estimate, closed_after="A",
                         checks_method=True)

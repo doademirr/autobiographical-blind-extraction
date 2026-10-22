@@ -84,7 +84,7 @@ class CaptureServerTest(unittest.TestCase):
             upstream.shutdown()
             upstream.server_close()
         self.assertEqual([(t.outcome, t.status) for t in cap.evidence.traffic], [("forwarded", 502)])
-        self.assertEqual(qualify._transport_problems(cap.evidence), ["discovery_read_failed"])
+        self.assertEqual(qualify.transport_problems(cap.evidence), ["discovery_read_failed"])
 
     def test_a_request_whose_handler_fails_is_recorded_incomplete(self):
         with mock.patch.object(capture.urllib.request, "urlopen", side_effect=ValueError("boom")), \
@@ -106,7 +106,7 @@ class CaptureServerTest(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp, qualify.Canary() as canary:
             cfg = config.parse(fake_config(write_logins(Path(tmp))))
             self.assertIn("the CLI sent a request other than inference",
-                          qualify._locked_problems("claude", cfg, run, canary, None))
+                          qualify.locked_problems("claude", cfg, run, canary, None))
 
     def test_codex_scripted_call_then_message_and_result_lookup(self):
         item = {"type": "function_call", "id": "fc", "call_id": "call_w", "name": "wait", "arguments": "{}"}

@@ -149,9 +149,9 @@ Answer each statement in ipip-120.csv as you are now: 1 very inaccurate, 2 moder
 """
 
 
-def _run(ws_path: Path, args) -> dict:
+def _run(ws_path: Path, args) -> lifecycle.CliResult:
     ws = init(ws_path, args.text, args.canary, args.allow_synced)
-    return {"workspace": str(ws.root), "next": "review_config"}
+    return lifecycle.CliResult({"workspace": str(ws.root), "next": "review_config"})
 
 
 STAGE = lifecycle.Stage(

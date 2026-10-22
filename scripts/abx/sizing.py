@@ -13,7 +13,8 @@ from . import audit, card, config, foils, invoke, prompts, store, text
 from .errors import TooLarge, UsageError
 from .roles import ROLES
 
-__all__ = ["MAX_HYPOTHESES_CHARS", "check_eras", "max_era_words"]
+__all__ = ["MAX_HYPOTHESES_CHARS", "check_eras", "largest_card", "longest_part", "max_era_words", "prompt_for",
+           "words_that_fit"]
 
 # The most hypotheses text one earlier era can pass to discovery: the schema allows 40 of 300 characters,
 # plus list markers. Era k carries the hypotheses of every era before it.
@@ -29,14 +30,14 @@ def _widest(ws: store.Workspace, schema: str, key: str) -> tuple[dict, int]:
             items["maxItems"])
 
 
-def _largest_card(ws: store.Workspace, eras: int) -> str:
+def largest_card(ws: store.Workspace, eras: int) -> str:
     """Every construct the codebook schema allows plus every foil the foils schema allows per era, at their widest."""
     construct, n_constructs = _widest(ws, "codebook", "constructs")
     foil, n_foils = _widest(ws, "foils", "foils")
     return card.line(construct) * n_constructs + card.line(foil) * (n_foils * eras)
 
 
-def _prompt(ws: store.Workspace, role: str, era_ids: list[str], position: int, label: str, body: str) -> str:
+def prompt_for(ws: store.Workspace, role: str, era_ids: list[str], position: int, label: str, body: str) -> str:
     """The prompt `role` would send for the era at `position`, assembled from the staged template with every input at
     its largest and `body` standing in for the era (or chunk) text."""
     policy = ROLES[role]
@@ -64,7 +65,7 @@ def _largest_input(ws: store.Workspace, kind: str, era_ids: list[str], position:
     if kind == "era":
         return f"era:{era}", body
     if kind == "card":
-        return "card:B", _largest_card(ws, len(era_ids))
+        return "card:B", largest_card(ws, len(era_ids))
     if kind == "codebook":
         construct, n = _widest(ws, "codebook", "constructs")
         return "codebook:B", audit.render_codebook([construct] * n)
@@ -89,11 +90,13 @@ def _lineages(cfg: config.Config, role: str) -> list[config.Lineage]:
 _MARK = "\u2063era\u2063"
 
 
-def _words_that_fit(ws: store.Workspace, role: str, era_ids: list[str], position: int, label: str,
+def words_that_fit(ws: store.Workspace, role: str, era_ids: list[str], position: int, label: str,
                     lin: config.Lineage, chars_per_word: float) -> int:
-    copies = max(1, _prompt(ws, role, era_ids, position, label, _MARK).count(_MARK))
+    """How many words of era text fit in `role`'s prompt on `lin` at this position, counting every place the
+    template repeats the era."""
+    copies = max(1, prompt_for(ws, role, era_ids, position, label, _MARK).count(_MARK))
     room = lin.input_budget_tokens - lin.reserve_output_tokens - \
-        invoke.estimate_tokens(_prompt(ws, role, era_ids, position, label, ""))
+        invoke.estimate_tokens(prompt_for(ws, role, era_ids, position, label, ""))
     return max(0, int(room / 1.2 * 4 / chars_per_word / copies))
 
 
@@ -106,12 +109,12 @@ def max_era_words(ws: store.Workspace, cfg: config.Config, position: int, chars_
     per-era rater role. An estimate where the text's characters per word are an average."""
     era_ids = [f"e{k + 1}" for k in range(position + 1)]
     label = "x" * prompts.MAX_PARAM_LEN
-    return min(_words_that_fit(ws, role, era_ids, position, label, lin, chars_per_word)
+    return min(words_that_fit(ws, role, era_ids, position, label, lin, chars_per_word)
                for role, policy in ROLES.items() if policy.per_era and not policy.chunked
                for lin in _lineages(cfg, role))
 
 
-def _longest_part(redacted: str, era_sents: list[text.Sentence]) -> str:
+def longest_part(redacted: str, era_sents: list[text.Sentence]) -> str:
     """At least as long as any zoning chunk or calibration excerpt part of the era: its 300 longest rendered lines."""
     lines = sorted((text.render_numbered(redacted, [s]) for s in era_sents), key=len, reverse=True)
     return "".join(lines[:text.ZONING_CHUNK])
@@ -128,15 +131,15 @@ def check_eras(ws: store.Workspace, cfg: config.Config, eras: list[dict], sents:
         for role, policy in ROLES.items():
             if not policy.per_era:
                 continue
-            sized = _longest_part(redacted, era_sents) if policy.chunked else body
+            sized = longest_part(redacted, era_sents) if policy.chunked else body
             for lin in _lineages(cfg, role):
-                if _fits(_prompt(ws, role, era_ids, position, label, sized), lin):
+                if _fits(prompt_for(ws, role, era_ids, position, label, sized), lin):
                     continue
                 if policy.chunked:
                     raise TooLarge(f"era {era['id']}: its {text.ZONING_CHUNK} longest sentences are too large for "
                                      f"{role} on {lin.name} ({lin.input_budget_tokens} tokens); its sentences are "
                                      "unusually long")
-                fits = _words_that_fit(ws, role, era_ids, position, label, lin, len(body) / max(words, 1))
+                fits = words_that_fit(ws, role, era_ids, position, label, lin, len(body) / max(words, 1))
                 raise TooLarge(f"era {era['id']} has {words} words; {role} on {lin.name} fits about {fits} words "
                                  f"in this era ({lin.input_budget_tokens} tokens, {lin.reserve_output_tokens} kept for "
                                  "output). Split it into smaller eras.")

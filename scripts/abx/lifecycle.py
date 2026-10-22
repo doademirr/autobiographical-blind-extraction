@@ -11,7 +11,7 @@ from typing import NamedTuple
 from . import store
 from .errors import IntegrityError, UsageError
 
-__all__ = ["HASHES", "SEALED", "Arg", "Preflight", "Stage", "enter", "verify_sealed"]
+__all__ = ["HASHES", "SEALED", "Arg", "CliResult", "Preflight", "Stage", "enter", "returns", "verify_sealed"]
 
 
 class Preflight(NamedTuple):
@@ -27,11 +27,26 @@ class Arg(NamedTuple):
     options: dict
 
 
+class CliResult(NamedTuple):
+    """What a command hands the CLI: the summary to show (a `next` value is a code the CLI renders) and the exit
+    code. The stage decides both; the CLI only prints."""
+
+    summary: dict
+    exit_code: int = 0
+
+
+def returns(stage_fn: Callable) -> Callable:
+    """The `run` of a workspace stage whose summary is what it returns and which always exits 0."""
+    def run(ws, args) -> CliResult:
+        return CliResult(stage_fn(ws))
+    return run
+
+
 class Stage(NamedTuple):
     """A command, declared by the module that implements it; `run.py` discovers and dispatches these.
 
-    A workspace stage's `run` takes the workspace; one that `creates_workspace` takes the path and
-    its parsed arguments. `needs`, `closed_after` and `verifies_seal` are its lifecycle rules.
+    Every `run` takes the target (the workspace, or for a stage that `creates_workspace`, its path) and the parsed
+    arguments, and returns a `CliResult`. `needs`, `closed_after` and `verifies_seal` are its lifecycle rules.
     """
 
     name: str

@@ -11,7 +11,7 @@ from .errors import UsageError
 __all__ = ["STAGE"]
 
 
-def _run(ws_path: Path, args) -> dict:
+def _run(ws_path: Path, args) -> lifecycle.CliResult:
     raise UsageError("revise is not in this version; start a new workspace to change a frozen artifact")
 
 

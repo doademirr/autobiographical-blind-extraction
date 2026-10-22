@@ -286,7 +286,7 @@ class PipelineTest(unittest.TestCase):
         rec = store.read_json(ws.path(calibration.PATH))
         for era in store.read_json(ws.path("prepare/eras.json"))["eras"]:
             mine = [s for s in sents if s.segment_id in set(era["segment_ids"])]
-            bound = len(sizing._longest_part(redacted, mine))
+            bound = len(sizing.longest_part(redacted, mine))
             bodies = [abx_text.render_numbered(redacted, c) for c in abx_text.zoning_chunks(mine)]
             bodies += [ws.path(f"{calibration.EXCERPTS}/{p['era']}/{p['part']}.txt").read_text()
                        for p in rec["parts"] if p["era"] == era["id"]]

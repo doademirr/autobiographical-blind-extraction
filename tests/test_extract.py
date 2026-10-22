@@ -100,10 +100,10 @@ class ValidationDetailTest(unittest.TestCase):
         self.assertEqual(self.context().outside("e1", ["s1"]), [])
 
     def test_coverage_names_missing_repeated_and_unknown_items(self):
-        problems = extract._coverage({"K1", "K2", "K3"}, ["K1", "K1", "K4"])
+        problems = extract.coverage({"K1", "K2", "K3"}, ["K1", "K1", "K4"])
         self.assertEqual(problems, ["verdicts must cover every card item exactly once: missing K2, K3; "
                                     "repeated K1; not on the card K4"])
-        self.assertEqual(extract._coverage({"K1"}, ["K1"]), [])
+        self.assertEqual(extract.coverage({"K1"}, ["K1"]), [])
 
 
 class InductiveArmTest(unittest.TestCase):
@@ -224,7 +224,7 @@ class AuditEvidenceTest(unittest.TestCase):
         self.fw.close()
 
     def test_integrity_audit_reads_call_record_events(self):
-        c = extract._context(self.ws)
+        c = extract.context(self.ws)
         clean = extract.integrity_audit(c)
         self.assertTrue(all(check["ok"] for check in clean.values()), clean)
         path = next(iter(sorted(self.ws.root.glob("run/calls/extract/recode/*.json"))))

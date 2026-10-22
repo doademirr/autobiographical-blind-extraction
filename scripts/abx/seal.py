@@ -52,4 +52,5 @@ def seal(ws: store.Workspace) -> dict:
     return {"predictions": count, "ipip_answered": answered}
 
 
-STAGE = lifecycle.Stage("seal", 2, "check and hash sealed/", seal, closed_after="A", verifies_seal=False)
+STAGE = lifecycle.Stage("seal", 2, "check and hash sealed/", lifecycle.returns(seal), closed_after="A",
+                        verifies_seal=False)

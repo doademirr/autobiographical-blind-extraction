@@ -28,38 +28,12 @@ from .errors import CallFailed, IntegrityError, IsolationError, UsageError
 from .roles import role as get_role
 from .text import effective_label
 
-__all__ = [
-    "FINGERPRINT_KEYS",
-    "FIRST_ERA_MARKER",
-    "ISOLATION_POLICY",
-    "MAX_ATTEMPTS",
-    "METHOD_VERSION",
-    "QUALIFICATION",
-    "QUALIFICATION_A",
-    "CallRequest",
-    "Event",
-    "ProbeOutcome",
-    "Result",
-    "audit_events",
-    "call",
-    "check_fingerprint",
-    "check_method",
-    "claude_argv",
-    "codex_argv",
-    "decode_events",
-    "estimate_tokens",
-    "execute",
-    "execute_unlocked",
-    "invalid_outputs",
-    "live_fingerprint",
-    "outcome",
-    "parse_claude",
-    "parse_codex",
-    "probe",
-    "qualified",
-    "record_path",
-    "sandbox_profile",
-]
+__all__ = ["FINGERPRINT_KEYS", "FIRST_ERA_MARKER", "ISOLATION_POLICY", "MAX_ATTEMPTS", "METHOD_VERSION",
+           "QUALIFICATION", "QUALIFICATION_A", "CallRequest", "Event", "ProbeOutcome", "Result", "audit_events",
+           "call", "check_fingerprint", "check_method", "claude_argv", "claude_home", "codex_argv", "decode_events",
+           "estimate_tokens", "execute", "execute_unlocked", "identity_restored", "invalid_outputs",
+           "live_fingerprint", "outcome", "parse_claude", "parse_codex", "probe", "qualified", "record_path",
+           "sandbox_profile"]
 
 SYSTEM_READ_ROOTS = (
     "/System", "/usr/lib", "/usr/libexec", "/usr/bin", "/usr/sbin", "/usr/share", "/bin", "/sbin",
@@ -408,7 +382,7 @@ CLAUDE_PROFILE_ENV = frozenset({"CLAUDE_CONFIG_DIR", "CLAUDE_CODE_USER_EMAIL", "
                                 "CLAUDE_CODE_ORGANIZATION_UUID", "ANTHROPIC_UNIX_SOCKET"})
 
 
-def _claude_home(tmp: Path, lin: Lineage) -> Path:
+def claude_home(tmp: Path, lin: Lineage) -> Path:
     """The locked HOME. A profile Claude Code would fetch again (unreadable, or missing the cache fields) is a
     preflight failure, before any process starts."""
     source = os.path.expanduser(lin.profile_file)
@@ -430,7 +404,7 @@ def _claude_home(tmp: Path, lin: Lineage) -> Path:
     return home
 
 
-def _identity_restored(home: Path) -> bool:
+def identity_restored(home: Path) -> bool:
     """True unless the profile is still there with every identity field exactly "". Anything else (an identity
     written back, a removed or malformed profile) means the CLI rewrote it during the run, and fails closed."""
     try:
@@ -498,11 +472,11 @@ def _execute(cfg: Config, lineage: str, prompt_text: str, schema: str | None, un
         if lineage == "claude" and unlocked_argv is not None:
             return _parsed(lineage, *_run(argv, prompt_text, cwd, env, cfg.timeout_s))
         if lineage == "claude":
-            home = _claude_home(tmp, lin)
+            home = claude_home(tmp, lin)
             locked_env = {**{k: v for k, v in env.items() if k not in CLAUDE_PROFILE_ENV}, **CLAUDE_LOCKED_ENV,
                           "HOME": str(home)}
             code, result = _parsed(lineage, *_run(argv, prompt_text, cwd, locked_env, cfg.timeout_s))
-            if _identity_restored(home):
+            if identity_restored(home):
                 result.events.append(Event("identity_restored"))
             return code, result
         home = tmp / "home"

@@ -1,19 +1,21 @@
 """`report.md` from `results.json`. Formatting only: every number arrives already computed."""
 
+from types import MappingProxyType
+
 from .agreement import MIN_PAIRED, REPORT, TENTATIVE
 from .divergence import CLASSES
 
 __all__ = ["render"]
 
-VERDICT_TEXT = {"report": f"reportable (α ≥ {REPORT:.2f})",
-                "tentative": f"tentative ({TENTATIVE:.3f} ≤ α < {REPORT:.2f})", "not_reportable": "not reportable"}
-REASON_TEXT = {"no_units": "there is nothing to rate (an empty codebook)",
+VERDICT_TEXT = MappingProxyType({"report": f"reportable (α ≥ {REPORT:.2f})",
+                "tentative": f"tentative ({TENTATIVE:.3f} ≤ α < {REPORT:.2f})", "not_reportable": "not reportable"})
+REASON_TEXT = MappingProxyType({"no_units": "there is nothing to rate (an empty codebook)",
                "no_pairable_unit": "no unit has values from both lineages",
                "no_variation": "the ratings do not vary, so agreement is undefined",
                "fewer_lineages": "fewer than two lineages rated",
-               "low_pairing": f"fewer than {MIN_PAIRED:.0%} of units carry a value from both lineages"}
-STANCE_REASON_TEXT = {"no_pairable_unit": "no lineage-facet score has a value under both stances",
-                      "no_variation": REASON_TEXT["no_variation"]}
+               "low_pairing": f"fewer than {MIN_PAIRED:.0%} of units carry a value from both lineages"})
+STANCE_REASON_TEXT = MappingProxyType({"no_pairable_unit": "no lineage-facet score has a value under both stances",
+                      "no_variation": REASON_TEXT["no_variation"]})
 
 
 def num(value, digits: int = 3) -> str:
@@ -24,14 +26,14 @@ def pct(value) -> str:
     return "n/a" if value is None else f"{value:.0%}"
 
 
-AUDIT_TEXT = {"requalified": "both lineages requalified with unchanged fingerprints",
+AUDIT_TEXT = MappingProxyType({"requalified": "both lineages requalified with unchanged fingerprints",
               "fingerprint_moved": "a fingerprint moved since the frozen baseline",
               "clean": "{records} call records audited, none with a tool event",
               "tool_events": "{records_with_tool_events} call record(s) and {tool_event_incidents} incident(s) "
                              "with tool events",
               "within_allowlists": "{records} call records within their roles' allowlists",
               "outside_allowlist": "{outside} of {records} call records outside their role's allowlist",
-              "verified": "manifest chain verified across {generations} generations"}
+              "verified": "manifest chain verified across {generations} generations"})
 
 
 def _check_text(check: dict) -> str:
@@ -155,8 +157,8 @@ def _divergence(r: dict) -> list[str]:
     return [*out, ""]
 
 
-NOW_TEXT = {"observed": "observed in {era}", "held": "held (last observed in {era})", "faded": "faded in {era}",
-            "never observed": "never observed"}
+NOW_TEXT = MappingProxyType({"observed": "observed in {era}", "held": "held (last observed in {era})",
+                            "faded": "faded in {era}", "never observed": "never observed"})
 
 
 def _transitions(rows: list[dict], key: str) -> str:

@@ -4,6 +4,7 @@ and report (generation E). Every figure is computed by script from frozen files 
 
 from fractions import Fraction
 from statistics import median
+from types import MappingProxyType
 
 from . import (
     artifacts,
@@ -33,9 +34,9 @@ __all__ = [
     "unmask",
 ]
 
-REPORTABLE = {"report", "tentative"}
-CODE_RANK = {"none": 0, "partial": 1, "match": 2}
-OUTCOME_OF_RANK = {0: "unmatched", 1: "partial", 2: "matched"}
+REPORTABLE = frozenset({"report", "tentative"})
+CODE_RANK = MappingProxyType({"none": 0, "partial": 1, "match": 2})
+OUTCOME_OF_RANK = MappingProxyType({0: "unmatched", 1: "partial", 2: "matched"})
 
 
 def estimate(ws: store.Workspace) -> lifecycle.Preflight:
@@ -208,5 +209,10 @@ def unmask(ws: store.Workspace) -> dict:
     return results
 
 
-STAGE = lifecycle.Stage("unmask", 5, "crosswalk, IPIP reveal, report", unmask, estimate, needs="C",
+def _cli(ws: store.Workspace, args) -> lifecycle.CliResult:
+    unmask(ws)
+    return lifecycle.CliResult({"report": "report/report.md"})
+
+
+STAGE = lifecycle.Stage("unmask", 5, "crosswalk, IPIP reveal, report", _cli, estimate, needs="C",
                         closed_after="E", checks_method=True)

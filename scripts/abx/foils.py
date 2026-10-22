@@ -12,7 +12,7 @@ from types import MappingProxyType
 
 from . import artifacts, card, config, evidence, invoke, store
 
-__all__ = ["EXPECTED", "author", "endorsement", "load", "path", "render_for_audit", "validate"]
+__all__ = ["EXPECTED", "author", "endorsement", "free_id", "load", "path", "render_for_audit", "validate"]
 
 # What each type expects in its own era.
 EXPECTED = MappingProxyType({"clear": "absent", "near_miss": "absent", "anchored": "present"})
@@ -79,7 +79,8 @@ def render_for_audit(foils: list[dict], era: str) -> str:
                    f"{f['definition']} Present when: {f['sufficiency_rule']}\n" for f in foils) or "- (none)\n"
 
 
-def _free_id(key: str, salt: str, taken: set[str]) -> str:
+def free_id(key: str, salt: str, taken: set[str]) -> str:
+    """A card item id for `key` that no item already holds, so a foil can never share a construct's id."""
     n = 0
     while (iid := card.item_id(key if n == 0 else f"{key}:{n}", salt)) in taken:
         n += 1
@@ -96,6 +97,6 @@ def author(ws: store.Workspace, cfg: config.Config, ix: evidence.Index, salt: st
             stage="freeze", role="foil_author", lineage=cfg.foil_author, run=None, era=era, generation="A",
             slots={"era": f"era:{era}"}, validate=lambda o, era=era: validate(o, ix, era)))
         foils = [{**f, "expected": {era: EXPECTED[f["type"]]},
-                  "item_id": _free_id(f"foil:{era}:{f['id']}", salt, taken)} for f in out["foils"]]
+                  "item_id": free_id(f"foil:{era}:{f['id']}", salt, taken)} for f in out["foils"]]
         store.write_json(path(ws, era), {"era": era, "foils": foils})
         store.write_text_atomic(artifacts.path_of(ws, f"foils:{era}"), render_for_audit(foils, era))

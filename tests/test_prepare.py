@@ -139,7 +139,7 @@ class PrepareTest(unittest.TestCase):
                     if s["segment_id"] in set(era["segment_ids"])]
             chunk = abx_text.render_numbered(redacted, abx_text.zoning_chunks(mine)[0])
             era_ids = [e["id"] for e in store.read_json(self.ws.path("prepare/eras.json"))["eras"]]
-            self.assertEqual(sizing._prompt(self.ws, "zoner", era_ids, 0, era["label"] or era["id"], chunk), first)
+            self.assertEqual(sizing.prompt_for(self.ws, "zoner", era_ids, 0, era["label"] or era["id"], chunk), first)
             sent = len(self.fw.prompts_logged())
             records[-1].unlink()
             prepare.prepare(self.ws)
@@ -403,7 +403,7 @@ class QualifyFailureTest(unittest.TestCase):
     def setUp(self):
         self.fw = FakeWorkspace()
         self.ws = new_workspace(self.fw)
-        prepare._stage_method(self.ws)
+        prepare.stage_method(self.ws)
 
     def tearDown(self):
         self.fw.close()
@@ -456,7 +456,7 @@ class QualifyFailureTest(unittest.TestCase):
         run = qualify.Run(capture.Evidence.of(requests, [T(*t) for t in traffic]), code,
                           invoke.Result(status=status, events=terminal))
         with qualify.Canary() as canary:
-            return qualify._locked_problems("codex", cfg, run, canary, scripted, baseline=baseline)
+            return qualify.locked_problems("codex", cfg, run, canary, scripted, baseline=baseline)
 
     OK_TRAFFIC = (("GET", "/codex-up/models", "forwarded", 200), ("GET", "/codex-up/responses", "ws-refused"),
                   ("POST", "/backend-api/codex/analytics-events/events", "refused"))
@@ -466,7 +466,7 @@ class QualifyFailureTest(unittest.TestCase):
         cfg = config.Config(**{**self.fw.config.__dict__, "lineages": {
             **self.fw.config.lineages, "codex": config.Lineage(**{**lin.__dict__, "capture_forward": True})}})
         with capture.Capture("codex") as cap:
-            args, _ = qualify._codex_transport(cfg, cap)
+            args, _ = qualify.codex_transport(cfg, cap)
         self.assertIn("enable_request_compression", args[args.index("--disable") + 1:][:1])
 
     def test_claude_capture_rejects_traffic_other_than_whole_inference(self):
@@ -478,7 +478,7 @@ class QualifyFailureTest(unittest.TestCase):
                 run = qualify.Run(capture.Evidence.of(({"model": "m", "messages": []},),
                                                       [extra, T("POST", "/v1/messages", "captured")]),
                                   0, invoke.Result(status="success", events=events))
-                self.assertTrue(qualify._locked_problems("claude", self.fw.config, run, canary, None))
+                self.assertTrue(qualify.locked_problems("claude", self.fw.config, run, canary, None))
 
     def test_every_locked_capture_checks_transport_and_cli_success(self):
         ok = self.OK_TRAFFIC

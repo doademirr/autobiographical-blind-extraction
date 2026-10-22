@@ -14,6 +14,7 @@ import subprocess
 import sys
 import traceback
 from pathlib import Path
+from types import MappingProxyType
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
@@ -22,7 +23,7 @@ from abx import invoke, lifecycle, store
 from abx.errors import AbxError
 
 UNEXPECTED = 70
-NEXT_TEXT = {
+NEXT_TEXT = MappingProxyType({
     "review_config": "review config.json, then run `prepare`",
     "approve_review_files": "edit and approve prepare/redactions.json and prepare/eras.json, then run `prepare`",
     "prepare": "run `prepare` (first approve prepare/redactions.json and prepare/eras.json)",
@@ -33,32 +34,19 @@ NEXT_TEXT = {
     "seal": "fill in sealed/self-prediction.md and sealed/ipip-120.csv in your own editor, then run `seal`",
     "freeze": "run `freeze`", "extract": "run `extract`", "unmask": "run `unmask`",
     "done": "done: read report/report.md",
-}
+})
 
 
 def _print(obj) -> None:
     print(json.dumps(obj, indent=1, ensure_ascii=False))
 
 
-def _show(out: dict) -> int:
-    if "next" in out:
-        out = {**out, "next": NEXT_TEXT[out["next"]]}
-    _print(out)
-    return 0
-
-
-def _show_extract(result: dict) -> int:
-    gates = {arm: result[arm]["verdict"] for arm in ("inductive", "deductive")}
-    _print({"gates": gates, "alpha": {arm: result[arm]["alpha"] for arm in gates}})
-    return 1 if "not_reportable" in gates.values() else 0
-
-
-def _show_unmask(_: dict) -> int:
-    _print({"report": "report/report.md"})
-    return 0
-
-
-SHOW = {"extract": _show_extract, "unmask": _show_unmask}
+def _show(out: lifecycle.CliResult) -> int:
+    summary = out.summary
+    if "next" in summary:
+        summary = {**summary, "next": NEXT_TEXT[summary["next"]]}
+    _print(summary)
+    return out.exit_code
 
 
 def _discover() -> dict[str, lifecycle.Stage]:
@@ -71,7 +59,7 @@ def _discover() -> dict[str, lifecycle.Stage]:
     return {s.name: s for s in sorted(found, key=lambda s: s.order)}
 
 
-STAGES = _discover()
+STAGES = MappingProxyType(_discover())
 
 
 REPO = Path(__file__).resolve().parent.parent
@@ -110,7 +98,7 @@ def _parser() -> argparse.ArgumentParser:
 
 def _run_stage(stage: lifecycle.Stage, args: argparse.Namespace) -> int:
     if stage.creates_workspace:
-        return SHOW.get(stage.name, _show)(stage.run(args.ws, args))
+        return _show(stage.run(args.ws, args))
     ws = store.Workspace(args.ws.resolve())
     store.verify_manifest(ws)  # integrity first: nothing below may read a frozen file that was edited or removed
     if not ws.path("config.json").exists():
@@ -123,7 +111,7 @@ def _run_stage(stage: lifecycle.Stage, args: argparse.Namespace) -> int:
         extra = f" (+{pre.conditional_calls} conditional)" if pre.conditional_calls else ""
         print(f"{stage.name}: about {pre.model_calls} model calls{extra}: {pre.note}; an output that fails "
               f"validation is resampled, up to {invoke.MAX_ATTEMPTS} attempts per call", file=sys.stderr)
-    return SHOW.get(stage.name, _show)(stage.run(ws, args) if stage.args else stage.run(ws))
+    return _show(stage.run(ws, args))
 
 
 def main(argv: list[str] | None = None) -> int:
