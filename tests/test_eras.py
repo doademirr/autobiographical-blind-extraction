@@ -211,7 +211,7 @@ class PrepareProposalTest(unittest.TestCase):
         prepare.prepare(ws)
         doc = store.read_json(FIXTURE / "eras.json")
         for era in doc["eras"]:
-            era |= {"date_range": "SENTINELRANGE", "basis": "SENTINELBASIS", "label": f"Label {era['id']}"}
+            era.update(date_range="SENTINELRANGE", basis="SENTINELBASIS", label=f"Label {era['id']}")
         store.write_json(ws.path("prepare/eras.json"), doc)
         store.write_json(ws.path("prepare/redactions.json"), store.read_json(FIXTURE / "redactions.json"))
         prepare.prepare(ws)
