@@ -90,8 +90,8 @@ def check(ws: store.Workspace) -> Checked:
 
 
 def approved(ws: store.Workspace) -> bool:
-    """For `status` only, which must always answer: a missing, unreadable or malformed file is not approved; `freeze`
-    reports why."""
+    """For `status` only, which must always answer: reads just the approval flag, so a missing, unreadable or unparsable
+    file is not approved; `freeze` validates the rest and reports why."""
     try:
         return store.read_json(ws.path(PATH)).get("approved") is True
     except (OSError, UsageError, AttributeError):
