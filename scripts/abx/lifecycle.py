@@ -5,6 +5,7 @@ refuses a stage the lifecycle has closed: nothing before generation A can be red
 and a workspace is unmasked once.
 """
 
+import re
 from collections.abc import Callable
 from typing import Any, NamedTuple
 
@@ -63,6 +64,7 @@ class Stage(NamedTuple):
 
 SEALED = ("sealed/self-prediction.md", "sealed/ipip-120.csv")
 HASHES = "prereg/sealed-hashes.json"
+_SHA256 = re.compile(r"[0-9a-f]{64}")
 
 def enter(ws: store.Workspace, stage: "Stage") -> set[str]:
     """Check integrity and the stage's own lifecycle rules before it writes or calls anything."""
@@ -81,6 +83,10 @@ def enter(ws: store.Workspace, stage: "Stage") -> set[str]:
 def verify_sealed(ws: store.Workspace) -> None:
     if not ws.path(HASHES).exists():
         raise UsageError("sealed files are not sealed yet; run `seal`")
-    for rel, digest in store.read_json(ws.path(HASHES)).items():
+    record = store.read_json(ws.path(HASHES))
+    if not isinstance(record, dict) or set(record) != set(SEALED) or \
+            not all(isinstance(d, str) and _SHA256.fullmatch(d) for d in record.values()):
+        raise IntegrityError(f"{HASHES} must hold a sha256 for exactly {', '.join(SEALED)}")
+    for rel, digest in record.items():
         if not ws.path(rel).exists() or store.sha256_file(ws.path(rel)) != digest:
             raise IntegrityError(f"{rel} changed after sealing")

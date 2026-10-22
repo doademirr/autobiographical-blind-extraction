@@ -565,5 +565,29 @@ class QualifyFailureTest(unittest.TestCase):
         self.assertEqual(record["verdict"], "error")
         self.assertNotIn("answer", json.dumps(record))
 
+
+class SealRecordTest(unittest.TestCase):
+    def test_an_incomplete_or_malformed_seal_record_is_refused(self):
+        from abx import lifecycle
+
+        fw = FakeWorkspace()
+        try:
+            ws = build(fw, until="prepare")
+            for name in ("self-prediction.md", "ipip-120.csv"):
+                ws.path(f"sealed/{name}").write_text((FIXTURE / name).read_text())
+            seal.seal(ws)
+            lifecycle.verify_sealed(ws)
+            record = store.read_json(ws.path(lifecycle.HASHES))
+            first = lifecycle.SEALED[0]
+            for bad in ({}, {first: record[first]}, {**record, first: "not-a-digest"},
+                        {**record, "sealed/extra.md": record[first]}):
+                with self.subTest(bad=bad):
+                    store.write_json(ws.path(lifecycle.HASHES), bad)
+                    with self.assertRaises(IntegrityError):
+                        lifecycle.verify_sealed(ws)
+        finally:
+            fw.close()
+
+
 if __name__ == "__main__":
     unittest.main()
