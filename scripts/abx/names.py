@@ -32,7 +32,8 @@ _TOKEN = re.compile(r"[^\W\d_](?:[^\W\d_]|['’\-])*")
 _OPENERS = " \t\n\"'“‘([{"
 # A capital after one of these inside a sentence starts a clause, not a name.
 _CLAUSE_BREAKS = ":;—–-"
-_ENDS_IN_TITLE = re.compile(rf"(?<![\w'’\-])(?:{'|'.join(sorted(TITLES))})\.$")
+# A title word stands alone: not the tail of a longer word (`O'Miss`, `Smith-Miss`); an opening quote before it is fine.
+_ENDS_IN_TITLE = re.compile(rf"(?<![\w\-])(?<!\w['’])(?:{'|'.join(sorted(TITLES))})\.$")
 
 
 class Candidate(NamedTuple):

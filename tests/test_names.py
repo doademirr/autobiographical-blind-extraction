@@ -54,6 +54,7 @@ class ScanTest(unittest.TestCase):
 
     def test_a_title_must_be_a_whole_word_and_spacing_is_kept(self):
         self.assertEqual(scanned("O'Miss. Alice left."), {})
+        self.assertTrue(scanned("I met 'Miss. Alice there.'")["Alice"].titled)
         # One space after a title, as the plan says; the join keeps the text's own spacing, so a title the splitter
         # knows (Mr.) and one it doesn't (Miss.) are treated alike.
         for title in ("Miss.", "Mr."):

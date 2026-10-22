@@ -5,7 +5,7 @@ also 1, so `run.py` catches everything and maps unexpected exceptions elsewhere.
 """
 
 
-__all__ = ["AbxError", "CallFailed", "GateFired", "IntegrityError", "IsolationError", "UsageError"]
+__all__ = ["AbxError", "CallFailed", "GateFired", "IntegrityError", "IsolationError", "TooLarge", "UsageError"]
 
 
 class AbxError(Exception):

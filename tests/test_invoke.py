@@ -442,6 +442,16 @@ class OutputParsingTest(unittest.TestCase):
                 self.assertEqual(out.events[0].detail, "text,other")
                 self.assertEqual(invoke.audit_events("claude", out.events), ["assistant_block:other"])
 
+    def test_a_repeated_key_makes_a_line_unparseable_not_its_last_value(self):
+        line = '{"type": "assistant", "message": {"content": [{"type": "tool_use", "type": "text", "text": "hi"}]}}'
+        claude = invoke.parse_claude([line])
+        self.assertEqual(claude.events[0].type, "unparseable")
+        self.assertTrue(invoke.audit_events("claude", claude.events))
+        codex = invoke.parse_codex(['{"type": "item.completed", "item": {"type": "command_execution", '
+                                    '"type": "agent_message", "text": "x"}}'])
+        self.assertEqual(codex.events[0].type, "unparseable")
+        self.assertTrue(invoke.audit_events("codex", codex.events))
+
     def test_timestamped_diagnostic_lines_are_scanned(self):
         out = invoke.parse_codex(["2026-10-19T10:32:44Z WARN about ABXPROFILECANARY",
                                   json.dumps({"type": "turn.completed"})])

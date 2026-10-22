@@ -201,7 +201,7 @@ def parse_claude(lines: list[str]) -> Result:
         if not line.strip():
             continue
         try:
-            ev = json.loads(line)
+            ev = store.loads_strict(line)  # a repeated key must not let a later value hide an earlier one
         except ValueError:
             ev = None
         if not isinstance(ev, dict):
@@ -259,7 +259,7 @@ def parse_codex(lines: list[str]) -> Result:
             out.messages.append(stripped)  # a diagnostic line: not an event, but still scanned for canaries
             continue
         try:
-            ev = json.loads(stripped)
+            ev = store.loads_strict(stripped)
         except ValueError:
             ev = None
         if not isinstance(ev, dict):
@@ -311,10 +311,11 @@ def cli_version(cli: str) -> str:
     return p.stdout.strip()
 
 
-# Bumped whenever how a locked call is isolated changes outside its argv and config (the Claude identity guard is
-# version 2). It is part of the fingerprint, so a qualification or call record made under an older policy is never
-# held to, or reused under, the current one.
-ISOLATION_POLICY = 2
+# Bumped whenever how a locked call is isolated or its stream audited changes outside its argv and config (version 2:
+# the Claude identity guard; version 3: stream lines parsed strictly, registry entries and block types never coerced).
+# It is part of the fingerprint, so a qualification or call record made under an older policy is never held to, or
+# reused under, the current one.
+ISOLATION_POLICY = 3
 # Bumped whenever how verdicts are coded, resampled or counted, or what preparation must pass, changes, so a workspace
 # prepared under older rules can never be finished under these.
 METHOD_VERSION = 10

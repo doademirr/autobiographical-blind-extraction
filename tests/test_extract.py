@@ -359,9 +359,6 @@ class ResumeTest(unittest.TestCase):
             fw.close()
 
 
-if __name__ == "__main__":
-    unittest.main()
-
 
 class CliResultTest(unittest.TestCase):
     def test_a_fired_gate_exits_1_and_reportable_arms_exit_0(self):
@@ -373,3 +370,7 @@ class CliResultTest(unittest.TestCase):
                 out = extract.STAGE.run(None, None)
             self.assertEqual(out.exit_code, code)
             self.assertEqual(out.summary["gates"], {"inductive": verdicts[0], "deductive": verdicts[1]})
+
+
+if __name__ == "__main__":
+    unittest.main()

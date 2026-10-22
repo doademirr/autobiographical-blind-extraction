@@ -80,7 +80,7 @@ def render_for_audit(foils: list[dict], era: str) -> str:
 
 
 def free_id(key: str, salt: str, taken: set[str]) -> str:
-    """A card item id for `key` that no item already holds, so a foil can never share a construct's id."""
+    """A card item id for `key` not in `taken`, which it adds to `taken`; the caller's set decides what it avoids."""
     n = 0
     while (iid := card.item_id(key if n == 0 else f"{key}:{n}", salt)) in taken:
         n += 1

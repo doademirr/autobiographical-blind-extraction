@@ -19,6 +19,8 @@ import urllib.request
 from dataclasses import dataclass
 from typing import NamedTuple
 
+from .store import loads_strict
+
 __all__ = ["Capture", "Evidence", "Traffic", "claude_tools", "codex_tools", "messages_stream", "request_text",
            "responses_stream", "tool_output", "tool_text"]
 
@@ -215,7 +217,7 @@ class Capture:
                     return self._send(400)
                 if path.endswith("/responses") or (path.endswith("/messages") and "count_tokens" not in path):
                     try:
-                        req = json.loads(body)
+                        req = loads_strict(body.decode("utf-8"))
                     except ValueError:
                         self._note(Traffic("POST", path, "unreadable"))
                         return self._send(400)

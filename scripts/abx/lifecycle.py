@@ -6,7 +6,7 @@ and a workspace is unmasked once.
 """
 
 from collections.abc import Callable
-from typing import NamedTuple
+from typing import Any, NamedTuple
 
 from . import store
 from .errors import IntegrityError, UsageError
@@ -35,7 +35,7 @@ class CliResult(NamedTuple):
     exit_code: int = 0
 
 
-def returns(stage_fn: Callable) -> Callable:
+def returns(stage_fn: Callable[[Any], dict]) -> Callable[[Any, Any], CliResult]:
     """The `run` of a workspace stage whose summary is what it returns and which always exits 0."""
     def run(ws, args) -> CliResult:
         return CliResult(stage_fn(ws))
@@ -52,7 +52,7 @@ class Stage(NamedTuple):
     name: str
     order: int
     help: str
-    run: Callable
+    run: Callable[[Any, Any], CliResult]  # (workspace or path, parsed arguments)
     estimate: Callable | None = None
     args: tuple[Arg, ...] = ()
     needs: str | None = None
