@@ -361,3 +361,15 @@ class ResumeTest(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class CliResultTest(unittest.TestCase):
+    def test_a_fired_gate_exits_1_and_reportable_arms_exit_0(self):
+        def arms(inductive, deductive):
+            return {"inductive": {"verdict": inductive, "alpha": 0.5},
+                    "deductive": {"verdict": deductive, "alpha": 0.9}}
+        for verdicts, code in ((("report", "tentative"), 0), (("not_reportable", "report"), 1)):
+            with self.subTest(verdicts=verdicts), mock.patch.object(extract, "extract", return_value=arms(*verdicts)):
+                out = extract.STAGE.run(None, None)
+            self.assertEqual(out.exit_code, code)
+            self.assertEqual(out.summary["gates"], {"inductive": verdicts[0], "deductive": verdicts[1]})
