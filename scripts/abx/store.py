@@ -83,9 +83,8 @@ def write_text_atomic(path: Path, text: str) -> None:
             f.flush()
             os.fsync(f.fileno())
         os.replace(tmp, path)
-    except BaseException:
-        Path(tmp).unlink(missing_ok=True)
-        raise
+    finally:
+        Path(tmp).unlink(missing_ok=True)  # gone already after a successful replace
 
 
 def write_json(path: Path, obj) -> None:

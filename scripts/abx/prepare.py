@@ -20,7 +20,7 @@ from . import (
     text,
     withheld,
 )
-from .errors import UsageError
+from .errors import TooLarge, UsageError
 
 __all__ = ["RECEIPT", "STAGE", "estimate", "prepare", "receipt_problems", "review_doc"]
 
@@ -138,7 +138,7 @@ def _proposal(ws: store.Workspace, cfg: config.Config, original: str, segs: list
         try:
             sizing.check_eras(ws, cfg, proposal.eras, sents, original)
             return _Proposed(proposal.eras, None)
-        except UsageError as exc:
+        except TooLarge as exc:  # only a size failure can be cured by a smaller cap
             failure = str(exc)
     return _Proposed(proposal.eras, failure)
 
@@ -163,10 +163,7 @@ def estimate(ws: store.Workspace) -> lifecycle.Preflight:
     eras = review_doc(ws, "eras.json")["eras"] if ws.path("prepare/eras.json").exists() else []
     original = ws.path("text/original.txt").read_text(encoding="utf-8")
     segs = text.segment(original)
-    try:
-        text.validate_eras(eras, segs)
-    except UsageError:
-        eras = []  # the stage itself reports the malformed file as a usage error
+    text.validate_eras(eras, segs)
     sents = text.sentences(original, segs)
     chunks = sum(len(text.zoning_chunks([s for s in sents if s.segment_id in set(e.get("segment_ids", []))]))
                  for e in eras)
@@ -211,8 +208,7 @@ def prepare(ws: store.Workspace) -> dict:
     if not all(isinstance(e, dict) for e in eras):
         raise UsageError("eras.json: eras must be a list of era objects")
     # An empty label is sent as the era id, so the id is what to check then.
-    labelled = next((k + 1 for k, e in enumerate(eras) if listed and isinstance(e.get("label") or e.get("id"), str)
-                     and listed.search(e.get("label") or e.get("id"))), None)
+    labelled = next((k + 1 for k, e in enumerate(eras) if listed and listed.search(text.effective_label(e))), None)
     if labelled:
         raise UsageError(f"eras.json: era entry {labelled}'s label (or its id, when the label is empty) holds a name "
                          "on the redaction list; labels are sent to the raters, so take the name out")

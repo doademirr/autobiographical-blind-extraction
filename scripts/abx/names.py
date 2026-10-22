@@ -32,7 +32,7 @@ _TOKEN = re.compile(r"[^\W\d_](?:[^\W\d_]|['’\-])*")
 _OPENERS = " \t\n\"'“‘([{"
 # A capital after one of these inside a sentence starts a clause, not a name.
 _CLAUSE_BREAKS = ":;—–-"
-_ENDS_IN_TITLE = re.compile(rf"(?<!\w)(?:{'|'.join(sorted(TITLES))})\.$")
+_ENDS_IN_TITLE = re.compile(rf"(?<![\w'’\-])(?:{'|'.join(sorted(TITLES))})\.$")
 
 
 class Candidate(NamedTuple):
@@ -102,12 +102,13 @@ def _units(text: str, sentences: Sequence[Sentence]) -> list[tuple[str, str]]:
     paragraph: the splitter ends a sentence at `Miss.` but the scan must see the name after it."""
     units: list[tuple[str, str]] = []
     joining = False
+    start = 0
     for sent in sentences:
-        body = text[sent.start:sent.end]
         if joining and units and units[-1][0] == sent.segment_id:
-            units[-1] = (sent.segment_id, units[-1][1] + " " + body)
+            units[-1] = (sent.segment_id, text[start:sent.end])  # the original spacing between the two
         else:
-            units.append((sent.segment_id, body))
+            start = sent.start
+            units.append((sent.segment_id, text[start:sent.end]))
         joining = bool(_ENDS_IN_TITLE.search(units[-1][1]))
     return units
 

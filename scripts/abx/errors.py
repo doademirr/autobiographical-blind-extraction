@@ -22,6 +22,10 @@ class UsageError(AbxError):
     exit_code = 2
 
 
+class TooLarge(UsageError):
+    """An era over a role's input budget: a smaller era would fit."""
+
+
 class IsolationError(AbxError):
     """A rater could reach something outside its prompt, or a leak was detected."""
 

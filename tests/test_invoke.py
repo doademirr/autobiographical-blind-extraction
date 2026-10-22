@@ -425,6 +425,23 @@ class OutputParsingTest(unittest.TestCase):
                                               "result": "{}"})])
         self.assertEqual(invoke.outcome("claude", 0, ok.events), "no_registry")
 
+    def test_a_registry_with_a_non_string_entry_is_no_registry_evidence(self):
+        out = invoke.parse_claude([
+            json.dumps({"type": "system", "subtype": "init", "tools": [{"name": "Read"}], "mcp_servers": [],
+                        "model": "m"}),
+            json.dumps({"type": "result", "subtype": "success", "is_error": False, "result": "{}"})])
+        init = out.events[0]
+        self.assertEqual((init.registry_present, init.tools), (False, ()))
+        self.assertEqual(invoke.audit_events("claude", out.events), ["init_registry_not_empty"])
+
+    def test_a_block_type_that_is_not_a_plain_name_is_audited_as_other(self):
+        for kind in ("text,thinking", "tool use", 7):
+            with self.subTest(kind=kind):
+                out = invoke.parse_claude([json.dumps({"type": "assistant", "message": {"content": [
+                    {"type": "text", "text": "hi"}, {"type": kind}]}})])
+                self.assertEqual(out.events[0].detail, "text,other")
+                self.assertEqual(invoke.audit_events("claude", out.events), ["assistant_block:other"])
+
     def test_timestamped_diagnostic_lines_are_scanned(self):
         out = invoke.parse_codex(["2026-10-19T10:32:44Z WARN about ABXPROFILECANARY",
                                   json.dumps({"type": "turn.completed"})])

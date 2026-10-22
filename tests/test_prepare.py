@@ -88,6 +88,21 @@ class InitTest(unittest.TestCase):
         self.assertEqual(init.CODEX_RETAINED["functions.exec"]["result"], "code-mode host is disabled")
 
 
+class EstimateTest(unittest.TestCase):
+    def test_malformed_eras_are_reported_by_the_estimate_too(self):
+        fw = FakeWorkspace()
+        try:
+            ws = new_workspace(fw)
+            prepare.prepare(ws)
+            doc = store.read_json(ws.path("prepare/eras.json"))
+            doc["eras"][0]["segment_ids"] = doc["eras"][0]["segment_ids"][1:]
+            store.write_json(ws.path("prepare/eras.json"), doc)
+            with self.assertRaises(UsageError):
+                prepare.estimate(ws)
+        finally:
+            fw.close()
+
+
 class PrepareTest(unittest.TestCase):
     def setUp(self):
         self.fw = FakeWorkspace()

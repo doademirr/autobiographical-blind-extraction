@@ -342,7 +342,10 @@ def load_ratings(ws: store.Workspace) -> Ratings:
     verdicts = {}
     for path in sorted(ws.root.glob("run/recode/*.json")):
         rec = store.read_json(path)
-        verdicts[RaterKey(rec["lineage"], rec["run"], rec["era"])] = tuple(rec["verdicts"])
+        key = RaterKey(rec["lineage"], rec["run"], rec["era"])
+        if key in verdicts:
+            raise IntegrityError(f"{ws.rel(path)} repeats the recode of {key.lineage} run {key.run} era {key.era}")
+        verdicts[key] = tuple(rec["verdicts"])
     by_stance = {stance.name: _stance_scores(ws, stance) for stance in STANCES}
     return Ratings(MappingProxyType(verdicts), by_stance["strict"], by_stance["lenient"])
 

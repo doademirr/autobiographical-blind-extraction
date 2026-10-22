@@ -10,7 +10,7 @@ role, and for a whole-era role also its words and the most words an era can hold
 """
 
 from . import audit, card, config, foils, invoke, prompts, store, text
-from .errors import UsageError
+from .errors import TooLarge, UsageError
 from .roles import ROLES
 
 __all__ = ["MAX_HYPOTHESES_CHARS", "check_eras", "max_era_words"]
@@ -124,7 +124,7 @@ def check_eras(ws: store.Workspace, cfg: config.Config, eras: list[dict], sents:
         era_sents = [s for s in sents if s.segment_id in set(era["segment_ids"])]
         words = sum(len(redacted[s.start:s.end].split()) for s in era_sents)
         body = text.render_zoned(redacted, era["segment_ids"], era_sents, {s.id for s in era_sents})
-        label = era["label"] or era["id"]
+        label = text.effective_label(era)
         for role, policy in ROLES.items():
             if not policy.per_era:
                 continue
@@ -133,10 +133,10 @@ def check_eras(ws: store.Workspace, cfg: config.Config, eras: list[dict], sents:
                 if _fits(_prompt(ws, role, era_ids, position, label, sized), lin):
                     continue
                 if policy.chunked:
-                    raise UsageError(f"era {era['id']}: its {text.ZONING_CHUNK} longest sentences are too large for "
+                    raise TooLarge(f"era {era['id']}: its {text.ZONING_CHUNK} longest sentences are too large for "
                                      f"{role} on {lin.name} ({lin.input_budget_tokens} tokens); its sentences are "
                                      "unusually long")
                 fits = _words_that_fit(ws, role, era_ids, position, label, lin, len(body) / max(words, 1))
-                raise UsageError(f"era {era['id']} has {words} words; {role} on {lin.name} fits about {fits} words "
+                raise TooLarge(f"era {era['id']} has {words} words; {role} on {lin.name} fits about {fits} words "
                                  f"in this era ({lin.input_budget_tokens} tokens, {lin.reserve_output_tokens} kept for "
                                  "output). Split it into smaller eras.")

@@ -10,9 +10,9 @@ from dataclasses import asdict, dataclass
 from .artifacts import ERA_ID
 from .errors import UsageError
 
-__all__ = ["REMOVED_MARK", "ZONING_CHUNK", "Segment", "Sentence", "as_dicts", "label_coverage", "name_pattern",
-           "redact", "render_numbered", "render_zoned", "segment", "sentences", "to_original", "validate_eras",
-           "zoning_chunks"]
+__all__ = ["REMOVED_MARK", "ZONING_CHUNK", "Segment", "Sentence", "as_dicts", "effective_label", "label_coverage",
+           "name_pattern", "redact", "render_numbered", "render_zoned", "segment", "sentences", "to_original",
+           "validate_eras", "zoning_chunks"]
 
 _PARAGRAPH_BREAK = re.compile(r"\n[ \t]*\n\s*")
 # A sentence ends at . ! ? (plus any closing quotes or brackets) followed by whitespace.
@@ -126,6 +126,12 @@ def sentences(text: str, segments: list[Segment]) -> list[Sentence]:
         if start < seg.end:
             out.append(Sentence(f"s{len(out) + 1:05d}", seg.id, start, seg.end))
     return out
+
+
+def effective_label(era: dict) -> str:
+    """What raters see for an era: its label, or its id when the label is empty."""
+    label = era.get("label")
+    return label if isinstance(label, str) and label else str(era.get("id", ""))
 
 
 def validate_eras(eras: list[dict], segments: list[Segment]) -> None:

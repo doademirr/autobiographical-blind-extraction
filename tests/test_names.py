@@ -52,6 +52,15 @@ class ScanTest(unittest.TestCase):
                     self.assertEqual(list(found), ["Alice"])
                     self.assertTrue(found["Alice"].titled)
 
+    def test_a_title_must_be_a_whole_word_and_spacing_is_kept(self):
+        self.assertEqual(scanned("O'Miss. Alice left."), {})
+        # One space after a title, as the plan says; the join keeps the text's own spacing, so a title the splitter
+        # knows (Mr.) and one it doesn't (Miss.) are treated alike.
+        for title in ("Miss.", "Mr."):
+            with self.subTest(title=title):
+                self.assertTrue(scanned(f"I met {title} Alice there.")["Alice"].titled)
+                self.assertFalse(scanned(f"I met {title}  Alice there.")["Alice"].titled)
+
     def test_accented_names_are_whole_words(self):
         found = scanned("I met Dr. José. Later I saw José and Émile, then Émile again.")
         self.assertEqual(set(found), {"Émile", "José"})

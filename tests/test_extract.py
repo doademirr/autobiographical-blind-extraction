@@ -195,6 +195,16 @@ class ExtractPipelineTest(unittest.TestCase):
                 self.assertNotIn(s, entry["prompt"])
             self.assertNotIn("i001,", entry["prompt"])
 
+    def test_a_repeated_recode_record_is_refused(self):
+        first = sorted(self.ws.root.glob("run/recode/*.json"))[0]
+        copy = first.with_name("zz-" + first.name)
+        copy.write_bytes(first.read_bytes())
+        try:
+            with self.assertRaises(IntegrityError):
+                extract.load_ratings(self.ws)
+        finally:
+            copy.unlink()
+
     def test_call_counts(self):
         roles = [e["prompt"].splitlines()[0] for e in self.logged()]
         self.assertEqual(roles.count("# abx-role: discovery"), 12)

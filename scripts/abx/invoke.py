@@ -26,6 +26,7 @@ from . import schema as jsonschema
 from .config import Config, Lineage
 from .errors import CallFailed, IntegrityError, IsolationError, UsageError
 from .roles import role as get_role
+from .text import effective_label
 
 __all__ = [
     "FINGERPRINT_KEYS",
@@ -125,6 +126,9 @@ _CODEX_KNOWN_ITEMS = frozenset({"command_execution", "file_change", "mcp_tool_ca
 _CODEX_KNOWN_EVENTS = frozenset({"session.configured", "unparseable"})
 
 
+_BLOCK_NAME = re.compile(r"[a-z_]+")
+
+
 def _code(prefix: str, value: str, known: frozenset[str]) -> str:
     return f"{prefix}:{value if value in known else 'other'}"
 
@@ -203,7 +207,18 @@ def decode_events(stored) -> list[Event] | None:
 
 
 def _strings(value) -> tuple[str, ...] | None:
-    return tuple(str(v) for v in value) if isinstance(value, list) else None
+    """A registry list as the CLI sent it; anything else (not a list, or a non-string entry) is no registry evidence,
+    never coerced into some."""
+    if isinstance(value, list) and all(isinstance(v, str) for v in value):
+        return tuple(value)
+    return None
+
+
+def _block_type(block: dict) -> str:
+    """A block's type for the allowlist; one that is not a plain name (a comma would split it into allowed parts
+    when the event is audited) is `other`."""
+    kind = block.get("type")
+    return kind if isinstance(kind, str) and _BLOCK_NAME.fullmatch(kind) else "other"
 
 
 def parse_claude(lines: list[str]) -> Result:
@@ -230,7 +245,7 @@ def parse_claude(lines: list[str]) -> Result:
             if not isinstance(blocks, list) or not all(isinstance(b, dict) for b in blocks):
                 out.events.append(Event("unparseable"))
                 continue
-            out.events.append(Event("assistant", ",".join(str(b.get("type")) for b in blocks)))
+            out.events.append(Event("assistant", ",".join(_block_type(b) for b in blocks)))
             out.messages += [b[k] for b in blocks for k in ("text", "thinking") if isinstance(b.get(k), str)]
         elif etype == "result":
             ok = sub == "success" and ev.get("is_error") is False and isinstance(ev.get("result"), str)
@@ -551,7 +566,7 @@ def _labels(ws: store.Workspace, req: CallRequest) -> dict[str, str]:
         era = next((e for e in eras if e["id"] == req.era), None)
         if era is None:
             raise UsageError(f"{req.role} call names an unknown era")
-        labels["era_label"] = era["label"] or era["id"]
+        labels["era_label"] = effective_label(era)
     if "hypotheses" in policy.params and "hypotheses" not in req.slots:
         if not eras or eras[0]["id"] != req.era:
             raise IsolationError(f"{req.role} for a later era must carry its own earlier hypotheses")

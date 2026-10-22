@@ -5,7 +5,7 @@ from unittest import mock
 
 from abx import config, eras, init, prepare, sizing, store
 from abx import text as abx_text
-from abx.errors import UsageError
+from abx.errors import TooLarge, UsageError
 
 from .helpers import FIXTURE, FakeWorkspace
 
@@ -188,7 +188,7 @@ class PrepareProposalTest(unittest.TestCase):
         def spy(text, segs, cap_for):
             caps.append(cap_for(6))
             return real(text, segs, cap_for)
-        with mock.patch.object(sizing, "check_eras", side_effect=UsageError("era e3 has too many words")) as check, \
+        with mock.patch.object(sizing, "check_eras", side_effect=TooLarge("era e3 has too many words")) as check, \
                 mock.patch.object(eras, "propose", side_effect=spy):
             doc = self.proposal(ws)
         self.assertEqual(check.call_count, 6)
@@ -197,6 +197,13 @@ class PrepareProposalTest(unittest.TestCase):
             self.assertAlmostEqual(after / before, 0.9, delta=0.01)
         self.assertIn("does not pass the size check: era e3 has too many words", doc["note"])
         self.assertFalse(doc["approved"])
+
+    def test_a_failure_a_smaller_cap_cannot_cure_is_not_retried(self):
+        ws = self.workspace("other")
+        with mock.patch.object(sizing, "check_eras", side_effect=UsageError("template has unfilled slots")) as check, \
+                self.assertRaises(UsageError):
+            prepare.prepare(ws)
+        self.assertEqual(check.call_count, 1)
 
     def test_an_existing_eras_file_is_never_overwritten(self):
         ws = self.workspace("kept")
