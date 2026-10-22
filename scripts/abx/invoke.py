@@ -7,7 +7,6 @@ matches. Each process starts in an empty temp directory (also its cwd: Codex rea
 launch directory); Codex runs with a temp CODEX_HOME inside an OS read sandbox.
 """
 
-import json
 import math
 import os
 import re
@@ -311,10 +310,9 @@ def cli_version(cli: str) -> str:
     return p.stdout.strip()
 
 
-# Bumped whenever how a locked call is isolated or its stream audited changes outside its argv and config (version 2:
-# the Claude identity guard; version 3: stream lines parsed strictly, registry entries and block types never coerced).
-# It is part of the fingerprint, so a qualification or call record made under an older policy is never held to, or
-# reused under, the current one.
+# Bumped whenever how a locked call is isolated, its profile guarded or its stream audited changes outside its argv
+# and config. It is part of the fingerprint, so a qualification or call record made under an older policy is never
+# held to, or reused under, the current one.
 ISOLATION_POLICY = 3
 # Bumped whenever how verdicts are coded, resampled or counted, or what preparation must pass, changes, so a workspace
 # prepared under older rules can never be finished under these.
@@ -388,7 +386,7 @@ def claude_home(tmp: Path, lin: Lineage) -> Path:
     preflight failure, before any process starts."""
     source = os.path.expanduser(lin.profile_file)
     try:
-        account = json.loads(Path(source).read_text()).get("oauthAccount")
+        account = store.loads_strict(Path(source).read_text()).get("oauthAccount")
     except (OSError, ValueError, AttributeError):
         account = None
     if not (isinstance(account, dict) and all(account.get(k) is not None for k in CLAUDE_CACHE_FIELDS)):
@@ -409,7 +407,7 @@ def identity_restored(home: Path) -> bool:
     """True unless the profile is still there with every identity field exactly "". Anything else (an identity
     written back, a removed or malformed profile) means the CLI rewrote it during the run, and fails closed."""
     try:
-        account = json.loads((home / ".claude.json").read_text()).get("oauthAccount")
+        account = store.loads_strict((home / ".claude.json").read_text()).get("oauthAccount")
     except (OSError, ValueError, AttributeError):
         return True
     return not isinstance(account, dict) or any(account.get(k, None) != "" for k in CLAUDE_IDENTITY)

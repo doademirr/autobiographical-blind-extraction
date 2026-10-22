@@ -2,6 +2,7 @@
 
 import hashlib
 import json
+import math
 import os
 import tempfile
 from collections.abc import Mapping
@@ -42,11 +43,18 @@ def sha256_file(path: Path) -> str:
 
 def canonical(obj) -> str:
     """The one serialisation hashed anywhere: key order and whitespace never move a hash."""
-    return json.dumps(obj, sort_keys=True, separators=(",", ":"), ensure_ascii=False)
+    return json.dumps(obj, sort_keys=True, separators=(",", ":"), ensure_ascii=False, allow_nan=False)
 
 
 def _reject_constant(name):
     raise ValueError(f"non-finite number {name} is not valid JSON")
+
+
+def _finite_float(text: str) -> float:
+    value = float(text)
+    if not math.isfinite(value):
+        raise ValueError(f"number {text} overflows to a non-finite value")
+    return value
 
 
 def _no_duplicate_keys(pairs):
@@ -57,9 +65,11 @@ def _no_duplicate_keys(pairs):
 
 
 def loads_strict(text: str):
-    """JSON that refuses NaN/Infinity and duplicate keys, which `json.loads` silently accepts."""
+    """JSON that refuses NaN/Infinity (written, or a number too large to be finite) and duplicate keys, which
+    `json.loads` silently accepts."""
     try:
-        return json.loads(text, parse_constant=_reject_constant, object_pairs_hook=_no_duplicate_keys)
+        return json.loads(text, parse_constant=_reject_constant, parse_float=_finite_float,
+                          object_pairs_hook=_no_duplicate_keys)
     except RecursionError as exc:
         raise ValueError("JSON nested too deeply") from exc
 
@@ -67,8 +77,6 @@ def loads_strict(text: str):
 def read_json(path: Path):
     try:
         return loads_strict(path.read_text(encoding="utf-8"))
-    except FileNotFoundError:
-        raise
     except ValueError as exc:
         raise UsageError(f"{path}: invalid JSON ({exc})") from exc
 

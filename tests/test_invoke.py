@@ -84,6 +84,11 @@ class CallTest(unittest.TestCase):
                 with self.subTest(rewritten=rewritten):
                     (home / ".claude.json").write_text(json.dumps(rewritten))
                     self.assertTrue(invoke.identity_restored(home))
+            # A repeated key must not let a blank account hide an identity written back before it.
+            blank = json.dumps(dict.fromkeys(invoke.CLAUDE_IDENTITY, ""))
+            (home / ".claude.json").write_text(f'{{"oauthAccount": {{"emailAddress": "x@example.com"}}, '
+                                               f'"oauthAccount": {blank}}}')
+            self.assertTrue(invoke.identity_restored(home))
 
     def test_an_incomplete_or_missing_claude_profile_is_a_preflight_failure(self):
         lin = self.cfg.lineage("claude")

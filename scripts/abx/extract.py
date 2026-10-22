@@ -31,9 +31,10 @@ from . import (
 )
 from .errors import AbxError, IntegrityError
 
-__all__ = ["REQUALIFICATION_AUDIT", "STAGE", "STANCES", "RaterKey", "Ratings", "Stance", "StanceComparison",
-           "StanceName", "StanceUnit", "Unit", "arms", "context", "coverage", "estimate", "extract", "load_ratings",
-           "score_problems", "stance_sensitivity", "validate_codebook", "with_foils"]
+__all__ = ["REQUALIFICATION_AUDIT", "STAGE", "STANCES", "Context", "RaterKey", "Ratings", "Stance",
+           "StanceComparison", "StanceName", "StanceUnit", "Unit", "arms", "context", "coverage", "estimate",
+           "extract", "integrity_audit", "load_ratings", "score_problems", "stance_sensitivity", "validate_codebook",
+           "with_foils"]
 
 REQUALIFICATION_AUDIT = "run/requalification-audit.json"
 

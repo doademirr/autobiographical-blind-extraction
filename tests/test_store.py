@@ -13,6 +13,11 @@ class StrictJsonTest(unittest.TestCase):
         with self.assertRaises(ValueError):
             store.loads_strict('{"a": NaN}')
 
+    def test_rejects_a_number_too_large_to_be_finite(self):
+        with self.assertRaises(ValueError):
+            store.loads_strict('{"x": 1e999}')
+        self.assertEqual(store.loads_strict('{"x": 1.5e3}'), {"x": 1500.0})
+
     def test_read_json_reports_path(self):
         with tempfile.TemporaryDirectory() as d:
             p = Path(d) / "x.json"
