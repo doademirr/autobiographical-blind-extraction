@@ -47,6 +47,7 @@ python3 scripts/run.py freeze  ~/abx/me   # writes test items (foils), one call 
 python3 scripts/run.py extract ~/abx/me
 python3 scripts/run.py unmask  ~/abx/me
 python3 scripts/run.py status  ~/abx/me   # where a workspace stands and what's next
+python3 scripts/run.py --version          # the harness version and commit, e.g. 0.9.1 (6972113)
 ```
 
 Three review points are yours:

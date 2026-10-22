@@ -9,6 +9,8 @@ import argparse
 import importlib
 import json
 import pkgutil
+import re
+import subprocess
 import sys
 import traceback
 from pathlib import Path
@@ -72,8 +74,23 @@ def _discover() -> dict[str, lifecycle.Stage]:
 STAGES = _discover()
 
 
+REPO = Path(__file__).resolve().parent.parent
+
+
+def _version() -> str:
+    """`X.Y.Z (<short-sha>)`: the package version and the checkout's commit, `unknown` outside a git checkout."""
+    found = re.search(r'^version = "([^"]+)"', (REPO / "pyproject.toml").read_text(encoding="utf-8"), re.M)
+    try:
+        sha = subprocess.run(["git", "-C", str(REPO), "rev-parse", "--short", "HEAD"], capture_output=True,
+                             text=True, check=True, timeout=10).stdout.strip()
+    except (OSError, subprocess.SubprocessError):
+        sha = "unknown"
+    return f"{found.group(1) if found else 'unknown'} ({sha or 'unknown'})"
+
+
 def _parser() -> argparse.ArgumentParser:
     ap = argparse.ArgumentParser(prog="run.py", description=__doc__, formatter_class=argparse.RawTextHelpFormatter)
+    ap.add_argument("--version", action="version", version=_version())
     sub = ap.add_subparsers(dest="cmd", required=True)
     for stage in STAGES.values():
         cmd = sub.add_parser(stage.name, help=stage.help)

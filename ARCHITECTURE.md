@@ -9,7 +9,7 @@ lists the gaps.
 ## Layout
 
 ```
-scripts/run.py              CLI: subcommands, exit codes, all printing
+scripts/run.py              CLI: subcommands, --version, exit codes, all printing
 scripts/abx/                the harness package
 prompts/*.md                role templates (# abx-role: <role>, {{slot}} placeholders)
 schemas/*.json              output schemas, the JSON Schema subset in schema.py
