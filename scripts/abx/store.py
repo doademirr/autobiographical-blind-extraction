@@ -4,6 +4,7 @@ import hashlib
 import json
 import os
 import tempfile
+from collections.abc import Mapping
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -110,8 +111,9 @@ def _entry_hash(entry: dict) -> str:
     return sha256_text(canonical({k: v for k, v in entry.items() if k != "hash"}))
 
 
-def append_generation(ws: Workspace, gen: str, rel_paths: list[str]) -> dict:
-    """Freeze the named files as generation `gen`, chained to the previous entry."""
+def append_generation(ws: Workspace, gen: str, rel_paths: list[str], expect: Mapping[str, str] | None = None) -> dict:
+    """Freeze the named files as generation `gen`, chained to the previous entry. `expect` pins files to the digests
+    a caller validated, so a file edited after its check is never frozen."""
     entries = read_manifest(ws)
     if any(e["gen"] == gen for e in entries):
         raise IntegrityError(f"generation {gen} is already frozen")
@@ -120,6 +122,9 @@ def append_generation(ws: Workspace, gen: str, rel_paths: list[str]) -> dict:
         "artifacts": {rel: sha256_file(ws.path(rel)) for rel in sorted(rel_paths)},
         "prev": entries[-1]["hash"] if entries else None,
     }
+    changed = sorted(rel for rel, digest in (expect or {}).items() if entry["artifacts"].get(rel) != digest)
+    if changed:
+        raise IntegrityError(f"{', '.join(changed)} changed after it was checked; nothing frozen, rerun the stage")
     entry["hash"] = _entry_hash(entry)
     lines = [canonical(e) for e in [*entries, entry]]
     write_text_atomic(ws.path(MANIFEST), "\n".join(lines) + "\n")

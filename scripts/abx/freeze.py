@@ -41,7 +41,7 @@ def freeze(ws: store.Workspace) -> dict:
     invoke.check_method(ws)  # before the receipt: an older workspace's receipt lists files the current layout lacks
     _check_inputs(ws)
     calibration.check(ws)
-    if not spotcheck.check(ws):
+    if not spotcheck.check(ws).approved:
         return {"status": "review", "next": "approve_spot_check"}
     cfg = config.load(ws)
     requalified = False
@@ -54,10 +54,11 @@ def freeze(ws: store.Workspace) -> dict:
     shutil.copy(ws.path(invoke.QUALIFICATION), ws.path(invoke.QUALIFICATION_A))
     foils.author(ws, cfg, evidence.load(ws), store.sha256_file(ws.path("prepare/redacted.txt")))
     _check_inputs(ws)  # authoring takes a while; an input changed meanwhile must not be frozen under these foils
-    if not spotcheck.check(ws):
+    spot = spotcheck.check(ws)
+    if not spot.approved:
         raise UsageError(f"{spotcheck.PATH} was unapproved while `freeze` ran; approve it and rerun `freeze`")
     paths = [*GEN_A_FILES, *(ws.rel(p) for g in GEN_A_GLOBS for p in sorted(ws.root.glob(g)))]
-    entry = store.append_generation(ws, "A", paths)
+    entry = store.append_generation(ws, "A", paths, expect={spotcheck.PATH: spot.sha256})
     return {"generation": "A", "artifacts": len(entry["artifacts"]), "requalified": requalified}
 
 

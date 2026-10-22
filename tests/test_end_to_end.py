@@ -46,11 +46,11 @@ class EndToEndTest(unittest.TestCase):
         for name in ("redactions.json", "eras.json"):
             shutil.copy(FIXTURE / name, cls.ws_path / "prepare" / name)
         cls.run_stage("prepare")
-        cls.status_before_approval = cls.stage_output("status")
+        cls.status_before_approval = cls.run_stage("status")
         for name in ("self-prediction.md", "ipip-120.csv"):
             shutil.copy(FIXTURE / name, cls.ws_path / "sealed" / name)
         cls.run_stage("seal")
-        cls.unapproved_freeze = cls.stage_output("freeze")
+        cls.unapproved_freeze = cls.run_stage("freeze")
         cls.generations_before_approval = len(store.read_manifest(store.Workspace(cls.ws_path)))
         spot = cls.ws_path / "prepare" / "spot-check.json"
         doc = json.loads(spot.read_text())
@@ -70,18 +70,13 @@ class EndToEndTest(unittest.TestCase):
         shutil.rmtree(cls.tmp, ignore_errors=True)
 
     @classmethod
-    def stage_output(cls, stage: str) -> str:
-        cls.run_stage(stage)
-        return cls.last_output
-
-    @classmethod
     def run_stage(cls, stage: str, *extra: str):
         p = subprocess.run([sys.executable, str(RUN), stage, str(cls.ws_path), *extra], env=cls.env,
                            capture_output=True, text=True, timeout=600, check=False)
         cls.codes[stage] = p.returncode
-        cls.last_output = p.stdout + p.stderr
         if p.returncode != 0:
             raise AssertionError(f"{stage} exited {p.returncode}: {p.stderr[-2000:]}")
+        return p.stdout + p.stderr
 
     def test_every_stage_completed_and_status_is_done(self):
         self.assertTrue(all(code == 0 for code in self.codes.values()), self.codes)

@@ -5,7 +5,7 @@ from unittest import mock
 
 from abx import foils, freeze, prepare, seal, spotcheck, status, store
 from abx import text as abx_text
-from abx.errors import GateFired, UsageError
+from abx.errors import GateFired, IntegrityError, UsageError
 
 from .helpers import FIXTURE, FakeWorkspace, approve_spot_check, build
 
@@ -115,6 +115,26 @@ class PipelineTest(unittest.TestCase):
                 self.assertEqual(store.frozen_generations(ws), set())
                 self.fw.close()
                 self.fw = FakeWorkspace()
+
+    def test_status_answers_even_when_the_file_is_malformed(self):
+        ws = self.sealed()
+        ws.path(spotcheck.PATH).write_text("{not json")
+        self.assertEqual(status.status(ws)["next"], "approve_spot_check")
+        with self.assertRaises(UsageError):
+            freeze.freeze(ws)
+
+    def test_an_edit_after_the_last_check_is_never_frozen(self):
+        ws = self.sealed()
+        approve_spot_check(ws)
+        real = store.append_generation
+
+        def edit_then_append(*args, **kwargs):
+            self.edit(ws, lambda d: d.update(approved=False))
+            return real(*args, **kwargs)
+        with mock.patch.object(store, "append_generation", side_effect=edit_then_append), \
+                self.assertRaises(IntegrityError):
+            freeze.freeze(ws)
+        self.assertEqual(store.frozen_generations(ws), set())
 
     def test_approval_revoked_during_authoring_freezes_nothing_and_the_rerun_reuses_the_calls(self):
         ws = self.sealed()
