@@ -263,7 +263,8 @@ def _arm(arm: agreement.ArmResult) -> dict:
 
 
 def _facet_bands(by_lineage: dict, self_report: dict, instrument: dict) -> dict:
-    """Facet bands rebuilt from the lineage collapses and the IPIP facet scores with their own median and thresholds."""
+    """Facet bands rebuilt from the lineage collapses and the IPIP facet scores with their own thresholds; the observer
+    estimate is the two lineages' midpoint, which is their median (the config requires exactly two lineages)."""
     def band(value, low, high):
         return None if value is None else "low" if value <= low else "high" if value >= high else "mid"
 
