@@ -36,6 +36,15 @@ class VersionTest(unittest.TestCase):
         self.assertEqual(cm.exception.code, 0)
         self.assertTrue(out.getvalue().startswith(pyproject_version() + " ("))
 
+    def test_ordinary_runs_never_look_the_version_up(self):
+        with mock.patch.object(cli, "_version", side_effect=AssertionError("looked up")), \
+                mock.patch.object(cli, "_run_stage", return_value=0) as dispatched:
+            cli._parser()
+            with contextlib.redirect_stdout(io.StringIO()), self.assertRaises(SystemExit):
+                cli.main(["--help"])
+            self.assertEqual(cli.main(["status", "/nonexistent"]), 0)
+        dispatched.assert_called_once()
+
     def test_git_failing_or_missing_gives_unknown(self):
         for failure in (subprocess.CalledProcessError(128, "git"), FileNotFoundError("git")):
             with self.subTest(failure=type(failure).__name__), \
