@@ -45,8 +45,8 @@ PROPOSAL_NOTE = ("This file is a proposal from headings, dated passages and size
                  "starts where it does. Move the cuts to life events, and write each label yourself, without names: "
                  "labels are sent to the raters.")
 THIN, STOP = 0.50, 0.25
-ERA_RULE = ("You decide the eras, before any model call. Aim for at least 5-6, each a period of years with at least "
-            "10k words and no more than the maximum below. Eras run in order, back to back, and every paragraph "
+ERA_RULE = ("You decide the eras, before any model call. Aim for at least 5, each a period of years with at least "
+            "15k words and no more than the maximum below. Eras run in order, back to back, and every paragraph "
             "(segment) is in exactly one. Cut at life events: a move, a new school or job, a relationship starting or "
             "ending, a birth or death, a long gap in the writing. Never cut around traits you expect to see. "
             "segments-preview.txt gives each paragraph's word count.")

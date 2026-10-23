@@ -161,7 +161,7 @@ class PrepareProposalTest(unittest.TestCase):
         ws = self.workspace("full")
         doc = self.proposal(ws)
         self.assertFalse(doc["approved"])
-        self.assertEqual(len(doc["eras"]), 6)
+        self.assertEqual(len(doc["eras"]), 4)  # 61k words holds four eras of 15k
         self.assertTrue(all(e["basis"].startswith("dated passage") for e in doc["eras"][1:]), doc["eras"])
         self.assertIn("proposal from headings", doc["note"])
         self.assertNotIn("does not pass", doc["note"])

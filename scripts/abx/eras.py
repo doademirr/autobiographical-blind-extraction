@@ -2,8 +2,8 @@
 passages and size alone, never its content. The user moves the cuts to life events, writes the labels and approves.
 
 Every paragraph boundary may start an era, as a heading, a dated passage or a bare paragraph break. The count follows
-the era rule (5-6 eras of 10k words where the text allows) and the per-era size cap; among partitions into that many
-eras, each within the cap (or a lone paragraph over it) and at least half the target size where possible, the
+the era rule (up to 6 eras of at least 15k words where the text allows) and the per-era size cap; among partitions into
+that many eras, each within the cap (or a lone paragraph over it) and at least half the target size where possible, the
 proposal takes the fewest bare paragraph breaks, then the fewest dated cuts, then the most balanced sizes, then the
 earliest cuts.
 """
@@ -19,7 +19,7 @@ __all__ = ["Boundary", "Proposal", "candidates", "partition", "propose"]
 
 MAX_HEADING = 80
 TARGET_ERAS = 6
-MIN_ERA_WORDS = 10_000
+MIN_ERA_WORDS = 15_000
 _YEAR = re.compile(r"(?<![\w])(1[5-9]\d\d|20\d\d)(?![\w])")
 _MARKDOWN = re.compile(r"#{1,6}\s+\S")
 _DIVISION = re.compile(r"(chapter|part|book|section)\s+(\d+|[ivxlcdm]+|[a-z]+)\b", re.IGNORECASE)

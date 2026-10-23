@@ -130,7 +130,7 @@ class EraSizeTest(unittest.TestCase):
         ws = init.init(self.fw.ws.root.parent / "w", [FIXTURE / "autobiography.txt"], [], False, config=self.fw.cfg)
         prepare.prepare(ws)
         note = store.read_json(ws.path("prepare/eras.json"))["note"]
-        self.assertIn("at least 5-6", note)
+        self.assertIn("at least 5, each a period of years with at least 15k words", note)
         self.assertRegex(note, r"about \d+ words for the sixth era")
         self.assertRegex(ws.path("prepare/segments-preview.txt").read_text().splitlines()[0],
                          r"^p\d+ \(\d+ words, (heading|dated|paragraph)\): ")

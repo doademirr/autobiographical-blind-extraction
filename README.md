@@ -1,5 +1,7 @@
 # autobiographical-blind-extraction
 
+Personality analysis of your diary or memoir by blind Claude Code and Codex raters, checked against your own Big Five test
+
 Run a blind analysis over a body of text about you. Diaries, an autobiography project, even years of scattered writing about different events in your life.
 
 Get back a list of your main personality traits:
@@ -11,29 +13,29 @@ Get back a list of your main personality traits:
 > [!NOTE]
 > This is a fun exercise. Its results should not be taken as clinical or medical advice.
 
-The longer the better. We suggest at least 100k words, across at least 5-6 different life eras of 10k words or more each. Each era is a period of years in length.
+## Why
 
-Why blind extraction? Why not just feed your diary to an agent and ask it for some psychoanalysis? Well, expect to get back a judgement coloured by its memory, AGENTS.md files, account holder info, and other leaks.
+Why not just feed your diary to an agent and ask it for some psychoanalysis? What I found was the judgement is coloured by the agent's memory, AGENTS.md files, account holder info and other leaks.
 
 This tool does three things:
 
 1. **Strips hindsight.** A zoner removes sentences where the author interprets their past self ("looking back, I was…"). Raters judge what the person did, not how they later explained it.
 2. **Uses two blind raters, Claude and Codex.** Each runs as a clean-room CLI process with no tools, instruction files or account identity. It never sees who you are, your sealed self-prediction or any later era of your life.
-3. **Counts a trait only if both model families find it in separate episodes.** Claude and Codex rate independently across repeated runs, with identical prompts. The method and codebook are frozen before any results exist, and scripts compute every number.
+3. **Counts a trait only if both model families find it in separate episodes.** The method and codebook are frozen before any results exist, and scripts compute every number.
 
 **When not to use it:**
 
-- You want advice, a diagnosis or a type. The report describes patterns and agreement. Not a clinical assessment. A psychologist can ask you questions and notice what your writing leaves out.
+- You want advice, a diagnosis or a type. The report describes patterns and agreement, not a clinical assessment. A psychologist can ask you questions and notice what your writing leaves out.
 - You want a quick read. Pasting your diary into a chatbot is faster and fine for a conversation. It just isn't blind.
-- You only want your Big Five scores. The [IPIP-NEO-120](https://ipip.ori.org) on its own measures them directly. This adds what your writing shows, era by era.
-- Your record is short. 12k words total produced a poor result in tests. Expect to need a lot more text.
-- You're on Linux or Windows. Sorry! Feel free to open a PR. The Codex read sandbox uses macOS `sandbox-exec` and the Claude login comes from the macOS keychain.
+- You only want your Big Five scores. Just do the test directly [IPIP-NEO-120](https://ipip.ori.org).
+- Your record is short. Testing 12k and 50k words both produced poor results in tests.
+- You're on Linux or Windows. Sorry, but PRs welcome.
 - You want to compare people. One subject per workspace.
-- You want to psycho-analyse a famous person. Like Ben Franklin. Technically possible, but expect the text to already be in the models' training data, so the result will be coloured.
+- You want to psycho-analyse a famous person, by feeding in their autobiography. Example Ben Franklin. Technically possible but the text is already in the models' training data, so expect the result to be coloured.
 
-## Tested on a synthetic memoir
+## Tested on a synthetic memoir, as well as my own diary
 
-We wrote a 155k-word fictional memoir with a known answer: traits planted in every era, traits that fade or appear partway through, hindsight sentences to strip, and decoys. The pass marks were fixed before the run.
+Not going to publish my own results but I also had Claude and Codex write a 155k-word fictional memoir: traits planted in every era, traits that fade or appear partway through, hindsight sentences to strip, and decoys. The pass marks were fixed before the run.
 
 | Check | Result |
 |---|---|
@@ -43,91 +45,106 @@ We wrote a 155k-word fictional memoir with a known answer: traits planted in eve
 | Traits never shown, never reported | 2/2 |
 | Later eras leaking into earlier ones | none |
 
-Details, the record and the key: [`fixtures/synthetic-memoir/`](fixtures/synthetic-memoir/SOURCE.md). The report: [`examples/synthetic-memoir/`](examples/synthetic-memoir/report.md).
+The record and the key: [`fixtures/synthetic-memoir/`](fixtures/synthetic-memoir/SOURCE.md). The report: [`examples/synthetic-memoir/`](examples/synthetic-memoir/report.md).
+
+## What you get
+
+`report/report.md` gives:
+
+- how far the two model families agree, and how often they got planted test items wrong
+- each trait both found, era by era: consistent, fading, emerging, or held only by assumption
+- how your sealed predictions matched
+- the blind estimate against your IPIP-NEO-120, by domain and facet
+- where the blind read, your predictions and your questionnaire agree and diverge
 
 ## Requirements
 
-- macOS
-- Python 3.10+ (stdlib only, nothing to install)
-- [Claude Code](https://code.claude.com) 2.1.303+ and [Codex CLI](https://github.com/openai/codex) 0.160.1+, both logged in. Calls run on your own subscriptions, recommend at least Max 5x / Pro, the cheap plans are unlikely to be enough. There are no API keys in this version.
+- macOS. The Codex read sandbox uses `sandbox-exec` and the Claude login comes from the keychain.
+- Python 3.10+, standard library only.
+- [Claude Code](https://code.claude.com) 2.1.303+ and [Codex CLI](https://github.com/openai/codex) 0.160.1+, both logged in. Calls run on your own subscriptions: at least Max 5x / Pro, the cheap plans are unlikely to be enough.
+- Your writing: at least 100k words across 5 or more life eras of 15k words or more, each a period of years. Plain UTF-8 `.txt` or `.md`, so export PDF and Word first.
 
-Codex qualification pins the exact inert results some tools return on a given CLI version. A newer Codex can fail qualification until those pins are updated, which is deliberate (exit 3 beats an unproven sandbox).
+## Install and use
 
-## Install the skill
+Paste this into your coding agent:
 
-Clone the repo somewhere local. The skill drives `scripts/run.py` from the clone, so either open your agent in the clone, or copy `skills/autobiographical-blind-extraction/` into your agent's skills folder (for Claude Code, `~/.claude/skills/`) and tell it where the clone is. Then ask it to run the blind extraction on your record. It stops at each review point and never opens your sealed files.
-
-**Your text** must be plain UTF-8 text: `.txt` or `.md` files (Markdown is read as plain text, so headings and lists just become paragraphs). PDF, Word and scans aren't read; export them to text first. Pass one file or several with `--text`. Several files are joined in the order you list them, so list them oldest first. Separate paragraphs with a blank line: paragraphs are the units you group into eras.
-
-## Use
-
-Pick a workspace folder outside any git repo or synced folder (Dropbox, iCloud, Google Drive). Then, stage by stage:
-
-```bash
-python3 scripts/run.py init    ~/abx/me --text memoir.md --canary 'Bunny' 'INTJ'
-python3 scripts/run.py prepare ~/abx/me   # writes review files, then stops
-python3 scripts/run.py prepare ~/abx/me   # after you approve them: qualifies both CLIs, zones the text
-python3 scripts/run.py seal    ~/abx/me   # after you fill in sealed/
-python3 scripts/run.py freeze  ~/abx/me   # writes test items (foils), one call per era
-python3 scripts/run.py extract ~/abx/me
-python3 scripts/run.py unmask  ~/abx/me
-python3 scripts/run.py status  ~/abx/me   # where a workspace stands and what's next
-python3 scripts/run.py --version          # the harness version and commit, e.g. 0.9.3 (277e506)
+```text
+Clone https://github.com/holarchic/autobiographical-blind-extraction at tag v0.10.0.
+Follow skills/autobiographical-blind-extraction/SKILL.md to run the blind extraction on my writing in <path>.
+Stop at each review point for me, and never open anything in the workspace's sealed/ folder.
 ```
 
-Three review points are yours:
+The agent runs the steps below, stops three times for you, and never reads your sealed files.
 
-1. **Names and eras.** `prepare` writes `prepare/segments-preview.txt` (each numbered paragraph's word count, whether it reads as a heading or a dated passage, and its first 100 characters) `prepare/names-preview.txt` and two files to review. `prepare/redactions.json` comes pre-filled from a local scan for names (capitalised words seen mid-sentence, twice or after a title), each with a placeholder; the preview lists every candidate, including those seen once. Delete what isn't a person you want hidden (places, organisations), add the names it missed (nicknames, names only ever at the start of a sentence), then check the eras `prepare/eras.json` proposes (cut at headings and dated passages, within the size limits; each era's `basis` says why it starts there), move the cuts to life events, write each era's label (labels are sent to the raters, so leave names out), and approve both. Nothing is sent before that.
+| # | Agent runs | Check |
+|---|---|---|
+| 1 | `git clone --branch v0.10.0 https://github.com/holarchic/autobiographical-blind-extraction` | `python3 scripts/run.py --version` prints `0.10.0 (<commit>)` |
+| 2 | `python3 scripts/run.py init <ws> --text <files> --canary <tokens>` | `<ws>` sits outside any git repo or synced folder |
+| 3 | `python3 scripts/run.py prepare <ws>` | stops for review 1 |
+| 4 | `python3 scripts/run.py prepare <ws>` | exit 0, then review 2 |
+| 5 | `python3 scripts/run.py seal <ws>`, after review 3 | prints the prediction and answer counts |
+| 6 | `python3 scripts/run.py freeze <ws>` | exit 0 |
+| 7 | `python3 scripts/run.py extract <ws>` | exit 0, or 1 if an arm isn't reportable |
+| 8 | `python3 scripts/run.py unmask <ws>` | exit 0 and `report/report.md` |
 
-   You decide the eras. Aim for at least 5-6, each a period of years with at least 10k words, and no bigger than the maximum the template's note gives. Eras run in order, back to back, and every paragraph sits in exactly one. Cut at life events: a move, a new school or job, a relationship starting or ending, a birth or death, a long gap in the writing. Don't cut around traits you expect to see. `prepare` checks every era's size before anything is sent and names any era that's too big.
-2. **Zoning.** A zoner removes sentences written in hindsight ("looking back, I was…") so raters judge what happened, not your later reading of it. Then read `prepare/spot-check.json`: 20 kept and 20 removed sentences. Mark any that are wrongly labelled and approve it; `freeze` waits for that. Your marks are counted in the report and never change what the raters see. Skim `prepare/retrospective.md` for what went and `prepare/substrate/` for what raters will see.
+`python3 scripts/run.py status <ws>` says where a workspace stands. Every model-calling stage prints its call estimate first.
 
-   The zoner is checked on your own text every run. About 120 sampled sentences, half it kept and half it cut, are labelled blind by a Claude judge and a Codex judge, who see whole paragraphs and never the zoner's labels. If more than 5 % of the sampled kept sentences are reflection, or more than 20 % of the sampled cut ones are events, counting only sentences both judges agree on (the ones they split on are left out and reported), `prepare` and `freeze` stop with exit 1 and no real run is permitted. These are rates on the sample, not confidence bounds.
-3. **Sealed comparators.** Write your predictions in `sealed/self-prediction.md` and answer `sealed/ipip-120.csv` in your own editor, before `seal`.
+Your three reviews:
 
-Canaries are words only your own profile or instruction files would contain (a nickname, a test score). The leak probe checks that no rater knows them. It matches text, ignoring case, so pick short distinctive tokens rather than sentences (a model paraphrases), give a hyphenated one in its spaced form too, and check none of them appears in your record.
+1. **Names and eras.** Check the names a local scan pre-filled for redaction and add any it missed. Move the proposed era cuts to life events (a move, a new job, a birth or death) and label each era without names. Nothing is sent before you approve both files.
+2. **Zoning.** Read the 20 kept and 20 removed sentences in `prepare/spot-check.json`, mark any wrongly labelled, and approve. Your marks are counted in the report and never change what the raters see.
+3. **Sealed comparators.** Write your predictions in `sealed/self-prediction.md` and answer `sealed/ipip-120.csv` in your own editor.
+
+**Canaries** are short words only your own profile or instruction files contain, such as a nickname or a test score. The leak probe checks no rater knows them, so give a hyphenated one in its spaced form too and check none appears in your record.
 
 | Exit | Meaning |
 |---|---|
 | 0 | stage done |
-| 1 | a gate fired: from `prepare` or `freeze`, the zoner failed calibration and the run stops; from `extract`, the run is valid and the report says which arm isn't reportable |
+| 1 | a gate fired: from `prepare` or `freeze` the zoner failed its check and the run stops; from `extract` the report says which arm isn't reportable |
 | 2 | usage or preflight failure (a missing login, a bad config, a probe that could not run) |
 | 3 | isolation or leak failure; stop, don't work around it |
-| 4 | a frozen or sealed file changed, or a CLI changed since qualification; a new run needs a new workspace. Don't upgrade Codex mid-run; Claude Code's self-updates don't affect a run |
+| 4 | a frozen or sealed file or a CLI changed since qualification; start a new workspace. Don't upgrade Codex mid-run |
 | 5 | a model call failed; rerun the stage and completed calls are reused |
-| 70 | an unexpected harness error (a bug; please report it) |
+| 70 | a harness bug; please report it |
 
-The report lands in `report/report.md`: agreement per arm, foil error rates and the audit's flags, the construct table, how each construct changes across eras (fades and emergences both model families see, eras held only by assumption, and its state at the end of the record), how your predictions matched, the observer estimate against your IPIP-NEO-120 by domain (and, as descriptive detail, by facet), each supported construct set against the IPIP facets a separate model mapped it to, and a facet-by-facet map of where the blind extraction, your predictions and your questionnaire agree and diverge.
+## How it works
 
-## Behaviour worth knowing
+- **Isolation.** Before your text is sent, each CLI points at a local fake provider and the harness reads the request it actually sends. Claude calls run with your account identity blanked, Codex calls inside a macOS read sandbox, and a leak probe checks both end to end.
+- **Zoning check.** A Claude judge and a Codex judge label about 120 sampled sentences blind. If more than 5 % of kept ones are reflection, or more than 20 % of cut ones are events, the run stops.
+- **Evidence bar.** A trait counts in an era only with two occurrences in separate, non-adjacent passages.
+- **Foils.** Test items with a known answer are mixed in with the real traits, after a second model family audits each era. The report says how often raters got them wrong.
+- **Two scoring stances.** Raters score the questionnaire facets strictly (each score cites that facet's evidence) and leniently. Only the strict scores feed the comparisons.
 
-- **Cost.** Every model-calling stage prints its call estimate first. Calls scale with eras × raters × replicates. For scale: Ben Franklin's full *Autobiography* is about 61k words (53k after the hindsight strip) across 6 eras, and a full run took about 125 model calls and 2 hours. A 155k-word synthetic memoir across 6 eras took about 180 calls and 3 hours 20 minutes.
-- **Resuming.** A failed call (exit 5) can be rerun; finished calls are reused only when every input still matches.
-- **What isolation means here.** Before your text is sent, each CLI is pointed at a local fake provider and the harness reads the request it actually sends: tool list, system text and any canary. Claude's capture uses a dummy API key, so it can't see what Claude Code adds only for logged-in accounts. Claude calls run with your account identity blanked, Codex calls inside a macOS read sandbox, and a leak probe checks both end to end.
-- **Strict evidence bar.** A construct counts as present in an era only with two occurrences in separate, non-adjacent passages. Agreement asks whether both model families see a construct in an era; a construct an era doesn't show counts as not shown, so most of a whole-life codebook is not shown in any one era.
-- **Two scoring stances.** Each rater scores the questionnaire facets twice from the same evidence ledgers: strictly (each score rests on that facet's own cited evidence) and leniently (it may infer from the whole ledger set). Only the strict scores gate the observer estimate and feed the comparisons; the report gives the lenient agreement and how far the two stances differ as a sensitivity check.
-- **Foils and the audit.** A clean-room author writes up to three test items per era with a known answer for that era, and the raters score them mixed in with the real constructs. The report gives how often raters marked a trait present that the era plainly lacks, and how often they found one it plainly shows. A second model family audits each era first: it drops test items whose answer is arguable and flags constructs the era holds counter-evidence against. Foils never count toward the agreement gate; the report gives an agreement figure with them included for information only.
+Structure: [`ARCHITECTURE.md`](ARCHITECTURE.md), including what this version leaves out.
+
+## Behaviour notes
+
+- **Cost.** Franklin's 61k-word *Autobiography* took about 125 calls and 2 hours. The 155k-word synthetic memoir took about 180 calls and 3 hours 20 minutes.
+- **Resuming.** Rerun a stage after exit 5. Finished calls are reused when every input still matches.
+- **CLI versions.** A newer Codex can fail qualification (exit 3) until its pinned tool results are updated. Claude Code's self-updates don't affect a run in progress.
+- **Isolation limit.** Claude's request capture uses a dummy API key, so it can't see what Claude Code adds only for logged-in accounts.
 - **Famous texts aren't blind.** Models know published autobiographies and restore redacted names from memory.
 
 ## Development
 
 ```bash
-python3 -m unittest                  # offline: fake CLIs, plus model-free checks against the real binaries
-tests/live_smoke.sh "$TMPDIR/abx-live"   # live: the Franklin pipeline on your subscriptions (~60 calls)
+python3 -m unittest                      # offline, about 20 minutes; ends in OK
+ruff check .                             # All checks passed!
+tests/live_smoke.sh "$TMPDIR/abx-live"   # live: the Franklin pipeline, ~60 calls on the user's subscriptions
 ```
 
-[`ARCHITECTURE.md`](ARCHITECTURE.md) is the as-built structure, and its [Not yet built](ARCHITECTURE.md#not-yet-built) section lists what this version leaves out. Bug reports and fixes are welcome: see [`CONTRIBUTING.md`](CONTRIBUTING.md).
+Ask the user before the live smoke test. Pull requests and bug reports are welcome: see [`CONTRIBUTING.md`](CONTRIBUTING.md).
 
 ## Credits
 
 - IPIP-NEO-120 items and key: Johnson, J. A. (2014). Measuring thirty facets of the Five Factor Model with a 120-item public domain inventory. *Journal of Research in Personality*, 51, 78–89. Public domain, via [ipip.ori.org](https://ipip.ori.org).
 - Krippendorff's α follows Krippendorff (2011), *Computing Krippendorff's Alpha-Reliability*, and reproduces its worked examples.
-- Test fixture: *Autobiography of Benjamin Franklin*, Project Gutenberg eBook #20203, with synthetic comparators. An example report is in [`examples/franklin/`](examples/franklin/report.md).
-- Synthetic memoir: written for this repo by Claude Opus 5.5 and Codex, chapter by chapter from briefs; every person and place in it is invented.
+- Franklin fixture: *Autobiography of Benjamin Franklin*, Project Gutenberg eBook #20203, with synthetic comparators. Example report: [`examples/franklin/`](examples/franklin/report.md).
+- Synthetic memoir: written for this repo by Claude Opus 5.5 and Codex, chapter by chapter from briefs. Every person and place in it is invented.
 
 ## Attribution
 
-For those who care about such things, the majority of the code in this repo was produced by Claude Opus 5.5 (Anthropic), with david guiding Claude, providing insights, direction and critical review throughout the process.
+For those who care about such things, the majority of the code in this repo was produced by Claude Opus 5.5 (Anthropic), with @holarchic guiding Claude, providing insights, direction and critical review throughout the process.
 
 ## Licence
 

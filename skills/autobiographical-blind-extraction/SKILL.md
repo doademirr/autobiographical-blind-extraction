@@ -25,7 +25,9 @@ Run from the folder holding `scripts/run.py`. `<ws>` is the workspace; it must s
 synced folder.
 
 1. `python3 scripts/run.py init <ws> --text <file>... [--canary <term>...]`
-   Canaries are words that only the user's own profile or instruction files would contain (a nickname, a test
+   The text is plain UTF-8 `.txt` or `.md` (Markdown is read as plain text; PDF, Word and scans must be exported to
+   text first), with a blank line between paragraphs. Several files are joined in the order given, so list them
+   oldest first. Canaries are words that only the user's own profile or instruction files would contain (a nickname, a test
    result). Ask the user for two or three; the leak probe checks no rater knows them. The check is a case-insensitive
    substring match on what each CLI sends and replies, so prefer short, distinctive tokens over sentences (a model
    paraphrases), give a hyphenated token in its spaced form too, and check none appears in the text itself.
@@ -39,7 +41,7 @@ synced folder.
    size limits; each era's `"basis"` says why), moves the cuts to life events, writes each era's label without names,
    and sets `"approved": true` in both files. The user decides the eras, not you: help them find the breaks, never
    choose for them. The `"note"` in
-   `eras.json` states the rule (at least 5-6 eras of at least 10k words each, under the estimated maximum; in order,
+   `eras.json` states the rule (at least 5 eras of at least 15k words each, under the estimated maximum; in order,
    back to back, every segment in exactly one; cut at life events such as a move, a new school or job, a
    relationship, a birth or death, a gap in the writing; never around traits the user expects), and the preview
    gives each paragraph's word count. Nothing leaves the machine before that. Run `prepare` again: it checks every
