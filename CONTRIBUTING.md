@@ -1,6 +1,6 @@
 # Contributing
 
-This project is finished. Bug reports and fixes are welcome; new features are unlikely to be merged.
+This project isn't being actively developed, but pull requests are welcome: bug fixes, features and ports (Linux, for one). Bug reports too.
 
 ## Reporting a bug
 
