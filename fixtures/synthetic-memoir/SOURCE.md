@@ -25,7 +25,7 @@ On top of that:
 - 54 hindsight sentences: 42 the zoner should remove (reflection from the time of writing) and 12 plain sentences that look like reflection and should stay.
 - 3 traps: a later-era sentence claiming an old trait still holds.
 - 3 sentinel terms that appear only in a late era and must never reach an earlier era's raters.
-- `sealed/` holds a self-prediction and IPIP-NEO-120 answers built so the six firm rows of the three-way map land in all six of its classes.
+- `self-prediction.md` and `ipip-120.csv` are the subject's sealed comparators, built built so the six firm rows of the three-way map land in all six of its classes.
 
 ## Result
 
@@ -47,6 +47,6 @@ Agreement between the two model families: inductive α .833 (reportable), deduct
 
 The raters build their own codebook, so the scorer first needs each construct mapped to a planted trait. Two mappings were made from the codebook definitions alone, before any result was read: one by Claude (`mappings/A.json`), one by a fresh Codex process (`mappings/B.json`). Only constructs both map identically count (33 of 79; 4 disputed). `scripts/score.py` applies `key/scoring.md`'s rules; `evidence/validation.json` gives each planted sentence's id in the harness's segmentation.
 
-To rerun: `init` a workspace with `--text record.md`, run the first `prepare`, copy `eras.json` and `redactions.json` into its `prepare/`, finish `prepare`, copy `sealed/` in, then `seal`, `freeze`, `extract` and `unmask`. Map the new codebook's constructs to the traits above, then `python3 scripts/score.py <repo> <workspace> A.json B.json out.json`. A new run builds a new codebook, so expect different construct ids and slightly different numbers.
+To rerun: `init` a workspace with `--text record.md`, run the first `prepare`, copy `eras.json` and `redactions.json` into its `prepare/`, finish `prepare`, copy `self-prediction.md` and `ipip-120.csv` into its `sealed/`, then `seal`, `freeze`, `extract` and `unmask`. Map the new codebook's constructs to the traits above, then `python3 scripts/score.py <repo> <workspace> A.json B.json out.json`. A new run builds a new codebook, so expect different construct ids and slightly different numbers.
 
 sha256 at sealing: `record.md` `bc908420e40c5fab…`, `key/key.json` `07588bb59d56fc9c…`, `key/scoring.md` `49e7534163f203d9…`.
