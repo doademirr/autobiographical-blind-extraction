@@ -16,14 +16,16 @@ from abx import config, init, qualify
 from .helpers import Logins, write_logins
 
 PROMPT = (Path(__file__).resolve().parent.parent / "prompts" / "probe.md").read_text()
-CLAUDE = os.path.realpath(shutil.which("claude")) if shutil.which("claude") else None  # pinned, as `init` does
+CLAUDE = shutil.which("claude")
 CODEX = shutil.which("codex")
 
 
 def real_config(logins: Logins) -> config.Config:
     codex_bin, codex_root = init.codex_native(CODEX) if CODEX else ("", "")
     lineages = {
-        "claude": {"cli": CLAUDE, "model": "claude-opus-5-5", "input_budget_tokens": 1, "reserve_output_tokens": 0,
+        # Claude's cli is the versioned binary behind the launcher, as `init` stores it.
+        "claude": {"cli": os.path.realpath(CLAUDE or ""), "model": "claude-opus-5-5",
+                   "input_budget_tokens": 1, "reserve_output_tokens": 0,
                    "locked_read_result": init.CLAUDE_LOCKED_READ, "profile_file": str(logins.claude_profile)},
         "codex": {"cli": codex_bin, "model": "gpt-6.1-sol", "input_budget_tokens": 1, "reserve_output_tokens": 0,
                   "sandbox_exec": "/usr/bin/sandbox-exec", "sandbox_allow": [codex_root],

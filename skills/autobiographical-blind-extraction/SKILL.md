@@ -30,7 +30,8 @@ synced folder.
    substring match on what each CLI sends and replies, so prefer short, distinctive tokens over sentences (a model
    paraphrases), give a hyphenated token in its spaced form too, and check none appears in the text itself.
    Don't upgrade either CLI until the run is finished: after `freeze`, a changed CLI stops the next stage (exit 4).
-   `init` pins Claude Code to the version it finds; Codex relies on the user leaving it alone.
+   `init` stores the versioned binary behind Claude Code's self-updating symlink, so the native installer's updates
+   leave the run alone; an install replaced in place (npm), and Codex, rely on the user not upgrading.
 2. `python3 scripts/run.py prepare <ws>` — the first run writes `prepare/redactions.json`, `prepare/eras.json` and
    `prepare/segments-preview.txt`, then stops. **Review point 1:** the user reviews the third-party names a local
    scan pre-filled (`"names": {"Full Name": "Name 1"}`; `prepare/names-preview.txt` lists every candidate): deletes
