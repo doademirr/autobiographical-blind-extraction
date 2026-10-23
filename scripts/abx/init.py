@@ -83,9 +83,11 @@ def default_config(canaries: list[str]) -> dict:
     if not claude or not codex:
         raise UsageError("both `claude` and `codex` must be on PATH and logged in")
     codex_bin, codex_root = codex_native(codex)
+    # The native installer's `claude` is a symlink its self-updater repoints; the versioned binary behind it keeps a
+    # run of several hours on the CLI it qualified.
     return {
         "lineages": {
-            "claude": {"cli": claude, "model": "claude-opus-5-5",
+            "claude": {"cli": os.path.realpath(claude), "model": "claude-opus-5-5",
                        "input_budget_tokens": 180000, "reserve_output_tokens": 32000,
                        "locked_read_result": CLAUDE_LOCKED_READ, "profile_file": CLAUDE_PROFILE_DEFAULT},
             "codex": {"cli": codex_bin, "model": "gpt-6.1-sol",

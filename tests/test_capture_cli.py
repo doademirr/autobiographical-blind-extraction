@@ -16,7 +16,7 @@ from abx import config, init, qualify
 from .helpers import Logins, write_logins
 
 PROMPT = (Path(__file__).resolve().parent.parent / "prompts" / "probe.md").read_text()
-CLAUDE = shutil.which("claude")
+CLAUDE = os.path.realpath(shutil.which("claude")) if shutil.which("claude") else None  # pinned, as `init` does
 CODEX = shutil.which("codex")
 
 

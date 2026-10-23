@@ -87,6 +87,23 @@ class InitTest(unittest.TestCase):
         self.assertNotIn("x", b["lineages"]["codex"]["disable"])
         self.assertEqual(init.CODEX_RETAINED["functions.exec"]["result"], "code-mode host is disabled")
 
+    def test_claude_self_update_repointing_the_launcher_leaves_the_fingerprint_unchanged(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            versions = {}
+            for v in ("2.0.1", "2.0.2"):
+                versions[v] = Path(tmp, v)
+                versions[v].write_text(f"#!/bin/sh\necho '{v} (Claude Code)'\n")
+                versions[v].chmod(0o755)
+            launcher = Path(tmp, "claude")
+            launcher.symlink_to(versions["2.0.1"])
+            with mock.patch("shutil.which", return_value=str(launcher)):
+                cfg = config.parse(init.default_config([]))
+            qualified = invoke.live_fingerprint(cfg, "claude")
+            launcher.unlink()
+            launcher.symlink_to(versions["2.0.2"])
+            invoke.check_fingerprint(cfg, "claude", qualified)
+            self.assertEqual(cfg.lineage("claude").cli, os.path.realpath(versions["2.0.1"]))
+
 
 class EstimateTest(unittest.TestCase):
     def test_malformed_eras_are_reported_by_the_estimate_too(self):
