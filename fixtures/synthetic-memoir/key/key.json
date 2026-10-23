@@ -1,0 +1,859 @@
+{
+ "version": 1,
+ "eras": [
+  {
+   "id": "e1",
+   "years": "1977-1983",
+   "ages": "6-12",
+   "chapters": [
+    1,
+    2,
+    3,
+    4,
+    5
+   ]
+  },
+  {
+   "id": "e2",
+   "years": "1984-1989",
+   "ages": "13-18",
+   "chapters": [
+    6,
+    7,
+    8,
+    9,
+    10
+   ]
+  },
+  {
+   "id": "e3",
+   "years": "1989-1995",
+   "ages": "18-24",
+   "chapters": [
+    11,
+    12,
+    13,
+    14,
+    15
+   ]
+  },
+  {
+   "id": "e4",
+   "years": "1995-2002",
+   "ages": "24-31",
+   "chapters": [
+    16,
+    17,
+    18,
+    19,
+    20
+   ]
+  },
+  {
+   "id": "e5",
+   "years": "2002-2011",
+   "ages": "31-40",
+   "chapters": [
+    21,
+    22,
+    23,
+    24,
+    25
+   ]
+  },
+  {
+   "id": "e6",
+   "years": "2011-2023",
+   "ages": "40-52",
+   "chapters": [
+    26,
+    27,
+    28,
+    29,
+    30
+   ]
+  }
+ ],
+ "writers": {
+  "claude": [
+   1,
+   3,
+   5,
+   7,
+   9,
+   11,
+   13,
+   15,
+   17,
+   19,
+   21,
+   23,
+   25,
+   27,
+   29
+  ],
+  "codex": [
+   2,
+   4,
+   6,
+   8,
+   10,
+   12,
+   14,
+   16,
+   18,
+   20,
+   22,
+   24,
+   26,
+   28,
+   30
+  ]
+ },
+ "traits": {
+  "T1": {
+   "behaviour": "Keeps lists, ledgers and labelled bins; orders his possessions and workspace",
+   "facet": "C2",
+   "pole": "+",
+   "matrix": {
+    "e1": "P",
+    "e2": "P",
+    "e3": "P",
+    "e4": "P",
+    "e5": "P",
+    "e6": "P"
+   }
+  },
+  "T2": {
+   "behaviour": "Yields or goes silent rather than confront; avoids arguments; lets others decide",
+   "facet": "E3",
+   "pole": "-",
+   "matrix": {
+    "e1": "P",
+    "e2": "P",
+    "e3": "P",
+    "e4": "P",
+    "e5": "P",
+    "e6": "P"
+   }
+  },
+  "T3": {
+   "behaviour": "Reads to understand theory (physics, electronics, why things work); argues and turns over ideas",
+   "facet": "O5",
+   "pole": "+",
+   "matrix": {
+    "e1": "P",
+    "e2": "P",
+    "e3": "P",
+    "e4": "P",
+    "e5": "P",
+    "e6": "P"
+   }
+  },
+  "T10": {
+   "behaviour": "Distrusts what people tell him; counts, checks and verifies others' claims",
+   "facet": "A1",
+   "pole": "-",
+   "matrix": {
+    "e1": "P",
+    "e2": "P",
+    "e3": "P",
+    "e4": "P",
+    "e5": "P",
+    "e6": "P"
+   }
+  },
+  "T4": {
+   "behaviour": "Physical daring; takes dares and thrill-seeking physical risks",
+   "facet": "E5",
+   "pole": "+",
+   "matrix": {
+    "e1": "P",
+    "e2": "P",
+    "e3": "P",
+    "e4": "C",
+    "e5": "C",
+    "e6": "C"
+   }
+  },
+  "T5": {
+   "behaviour": "Seeks out groups, crowds and the gang; wants company",
+   "facet": "E2",
+   "pole": "+",
+   "matrix": {
+    "e1": "P",
+    "e2": "P",
+    "e3": "C",
+    "e4": "C",
+    "e5": "C",
+    "e6": "C"
+   }
+  },
+  "T6": {
+   "behaviour": "Gives money or time to people in need",
+   "facet": "A3",
+   "pole": "+",
+   "matrix": {
+    "e1": "C",
+    "e2": "C",
+    "e3": "C",
+    "e4": "P",
+    "e5": "P",
+    "e6": "P"
+   }
+  },
+  "T7": {
+   "behaviour": "Sticks with hard goals; effortful persistence",
+   "facet": "C4",
+   "pole": "+",
+   "matrix": {
+    "e1": "C",
+    "e2": "C",
+    "e3": "P",
+    "e4": "P",
+    "e5": "P",
+    "e6": "P"
+   }
+  },
+  "T8": {
+   "behaviour": "Prays or goes to church by his own choice",
+   "facet": null,
+   "pole": null,
+   "matrix": {
+    "e1": "P",
+    "e2": "P",
+    "e3": "s",
+    "e4": "s",
+    "e5": "s",
+    "e6": "s"
+   }
+  },
+  "T9": {
+   "behaviour": "Drinks heavily; drinks to cope",
+   "facet": "N5",
+   "pole": "+",
+   "matrix": {
+    "e1": "-",
+    "e2": "-",
+    "e3": "C",
+    "e4": "C",
+    "e5": "P",
+    "e6": "C"
+   }
+  },
+  "T0": {
+   "behaviour": "Absorption in music, art or beauty",
+   "facet": "O2",
+   "pole": "+",
+   "matrix": {
+    "e1": "-",
+    "e2": "-",
+    "e3": "-",
+    "e4": "-",
+    "e5": "-",
+    "e6": "-"
+   }
+  },
+  "N1": {
+   "behaviour": "Worry, nervousness or dread",
+   "facet": "N1",
+   "pole": "+",
+   "matrix": {
+    "e1": "-",
+    "e2": "-",
+    "e3": "-",
+    "e4": "-",
+    "e5": "-",
+    "e6": "-"
+   }
+  }
+ },
+ "expected_temporal": {
+  "T1": "observed e1-e6",
+  "T2": "observed e1-e6",
+  "T3": "observed e1-e6",
+  "T10": "observed e1-e6",
+  "T4": "fade e3->e4; Now faded",
+  "T5": "fade e2->e3; Now faded",
+  "T6": "emergence e3->e4; Now observed",
+  "T7": "emergence e2->e3; Now observed",
+  "T8": "observed e1-e2; held e3-e6; Now held (last observed e2)",
+  "T9": "emergence e4->e5; fade e5->e6; Now faded",
+  "T0": "no supported same construct",
+  "N1": "no supported same construct"
+ },
+ "plants": {
+  "e1": [
+   {
+    "id": "e1R1",
+    "class": "R",
+    "text": "I can see now that the lists were how a small boy held the world still."
+   },
+   {
+    "id": "e1R2",
+    "class": "R",
+    "text": "Looking back, I think I was trying to earn a place in that gang by being the one who would go first."
+   },
+   {
+    "id": "e1R3",
+    "class": "R",
+    "text": "Whatever I have become, the boy at the bottom of it was someone who watched before he spoke."
+   },
+   {
+    "id": "e1R4",
+    "class": "R",
+    "text": "It strikes me now that I never once asked my father for anything I could take apart myself."
+   },
+   {
+    "id": "e1R5",
+    "class": "R",
+    "text": "If there is a lesson in those years, it is that a child who hoards learns to count before he learns to share."
+   },
+   {
+    "id": "e1X1",
+    "class": "X",
+    "text": "I put the whole two dollars in the coffee tin rather than chip in for the class gift, which tells you most of what you need to know about me at nine."
+   },
+   {
+    "id": "e1X2",
+    "class": "X",
+    "text": "I said nothing when the older boys took my bike, and that silence became the habit of a lifetime."
+   },
+   {
+    "id": "e1K1",
+    "class": "K",
+    "text": "I quit the Cubs after two meetings, luckily for the Cub leader."
+   },
+   {
+    "id": "e1K2",
+    "class": "K",
+    "text": "We reached the top of the water tower just after dark, foolishly, with no rope between us."
+   }
+  ],
+  "e2": [
+   {
+    "id": "e2R1",
+    "class": "R",
+    "text": "I understand now that my silence in that house was a kind of bargaining."
+   },
+   {
+    "id": "e2R2",
+    "class": "R",
+    "text": "In hindsight, the dares were the only place I felt larger than my brother."
+   },
+   {
+    "id": "e2R3",
+    "class": "R",
+    "text": "That was the year, I think, that I started to trust a manual more than a man."
+   },
+   {
+    "id": "e2R4",
+    "class": "R",
+    "text": "I have often wondered since whether I chose the repair counter or it chose me."
+   },
+   {
+    "id": "e2R5",
+    "class": "R",
+    "text": "The truth is that I was lazy, and no amount of later polish changes it."
+   },
+   {
+    "id": "e2X1",
+    "class": "X",
+    "text": "I let the teacher keep the wrong mark rather than argue it, and I have been letting people keep their wrong marks ever since."
+   },
+   {
+    "id": "e2X2",
+    "class": "X",
+    "text": "I sold my old bike to a younger boy for twice what it was worth, an early sign of how little I cared to be fair with money."
+   },
+   {
+    "id": "e2K1",
+    "class": "K",
+    "text": "We jumped from the railway trestle into the river that July, stupidly, three of us in a row."
+   },
+   {
+    "id": "e2K2",
+    "class": "K",
+    "text": "I gave up on the science fair project in the second week, mercifully before anyone had seen it."
+   }
+  ],
+  "e3": [
+   {
+    "id": "e3R1",
+    "class": "R",
+    "text": "Those college years are where, I now believe, I learned to finish things."
+   },
+   {
+    "id": "e3R2",
+    "class": "R",
+    "text": "It seems to me now that I left the crowd behind the way you leave a coat you have outgrown."
+   },
+   {
+    "id": "e3R3",
+    "class": "R",
+    "text": "I was, I can admit at this distance, a cold young man about money."
+   },
+   {
+    "id": "e3R4",
+    "class": "R",
+    "text": "Every habit I rely on today was built at that bench in those years."
+   },
+   {
+    "id": "e3R5",
+    "class": "R",
+    "text": "What I took for independence was mostly a liking for my own company."
+   },
+   {
+    "id": "e3X1",
+    "class": "X",
+    "text": "I walked out of the residence party after ten minutes and went back to my schematics, which is the clearest picture of who I was turning into."
+   },
+   {
+    "id": "e3X2",
+    "class": "X",
+    "text": "I refused to lend my roommate twenty dollars for his bus fare home, a meanness I still cannot account for."
+   },
+   {
+    "id": "e3K1",
+    "class": "K",
+    "text": "I passed the instrumentation exam on my third attempt, thankfully with a mark to spare."
+   },
+   {
+    "id": "e3K2",
+    "class": "K",
+    "text": "I climbed the headframe at the old mine on a bet that spring, idiotically, in the rain."
+   }
+  ],
+  "e4": [
+   {
+    "id": "e4R1",
+    "class": "R",
+    "text": "Somewhere in those years I stopped needing to prove anything with my body."
+   },
+   {
+    "id": "e4R2",
+    "class": "R",
+    "text": "I believe now that generosity came to me late and through the back door."
+   },
+   {
+    "id": "e4R3",
+    "class": "R",
+    "text": "It is clear to me now that the mill gave me the order I had always been looking for."
+   },
+   {
+    "id": "e4R4",
+    "class": "R",
+    "text": "The man I was at thirty would have puzzled the boy on the water tower."
+   },
+   {
+    "id": "e4R5",
+    "class": "R",
+    "text": "I see now that I married a woman who would say the things I would not."
+   },
+   {
+    "id": "e4X1",
+    "class": "X",
+    "text": "I gave the young apprentice my own set of meters when his were stolen, the first truly open-handed thing I remember doing."
+   },
+   {
+    "id": "e4X2",
+    "class": "X",
+    "text": "I let the foreman take credit for my repair on the recovery boiler, as I always let people take what they wanted from me."
+   },
+   {
+    "id": "e4K1",
+    "class": "K",
+    "text": "I turned down the snowmobile race on the lake that February, sensibly as it turned out, since the ice gave way that afternoon."
+   },
+   {
+    "id": "e4K2",
+    "class": "K",
+    "text": "We drove the long way round to her parents' cottage, happily, with the windows down."
+   },
+   {
+    "id": "e4T",
+    "class": "trap",
+    "trait": "T4",
+    "text": "Looking back, I was still the same daredevil who had climbed every tower in town."
+   }
+  ],
+  "e5": [
+   {
+    "id": "e5R1",
+    "class": "R",
+    "text": "I know now that I was drinking to keep the noise of those years at a distance."
+   },
+   {
+    "id": "e5R2",
+    "class": "R",
+    "text": "In hindsight, the business was the only place where I let myself be stubborn."
+   },
+   {
+    "id": "e5R3",
+    "class": "R",
+    "text": "If I was a good father in those years, it was by accident and by habit."
+   },
+   {
+    "id": "e5R4",
+    "class": "R",
+    "text": "Losing the mill taught me that no paycheque is a promise."
+   },
+   {
+    "id": "e5R5",
+    "class": "R",
+    "text": "I see now that every ledger I kept was an argument I was having with my father."
+   },
+   {
+    "id": "e5X1",
+    "class": "X",
+    "text": "I paid a neighbour's heating bill that January without telling my wife, which was generosity and secrecy in equal measure."
+   },
+   {
+    "id": "e5X2",
+    "class": "X",
+    "text": "I drank most of a bottle of rye in the garage the night the closure was announced, the start of the worst three years of my life."
+   },
+   {
+    "id": "e5K1",
+    "class": "K",
+    "text": "I said yes to the first calibration contract, foolishly underpriced, and worked every weekend to meet it."
+   },
+   {
+    "id": "e5K2",
+    "class": "K",
+    "text": "I left the company Christmas party before the speeches, gratefully, and drove home alone."
+   },
+   {
+    "id": "e5T",
+    "class": "trap",
+    "trait": "T5",
+    "text": "In truth I was still the life of every party, whatever my wife said."
+   }
+  ],
+  "e6": [
+   {
+    "id": "e6R1",
+    "class": "R",
+    "text": "At fifty I can say that the man who keeps the ledgers is finally at peace with the man who wants to give things away."
+   },
+   {
+    "id": "e6R2",
+    "class": "R",
+    "text": "I understand now that silence was never the same thing as kindness."
+   },
+   {
+    "id": "e6R3",
+    "class": "R",
+    "text": "If the separation taught me anything, it is that you cannot calibrate another person."
+   },
+   {
+    "id": "e6R4",
+    "class": "R",
+    "text": "It is plain to me now that stopping drinking was the one hard thing I did entirely for myself."
+   },
+   {
+    "id": "e6R5",
+    "class": "R",
+    "text": "I have come to think that a life is mostly the things you keep doing when nobody is asking."
+   },
+   {
+    "id": "e6X1",
+    "class": "X",
+    "text": "I poured the bottle a customer gave me down the shop sink, and I am still prouder of that than of any contract."
+   },
+   {
+    "id": "e6X2",
+    "class": "X",
+    "text": "I let my wife's lawyer write every term of the agreement without a word of objection, which is the old habit at its worst."
+   },
+   {
+    "id": "e6K1",
+    "class": "K",
+    "text": "I rebuilt the shop in eleven months, stubbornly, mostly on weekends."
+   },
+   {
+    "id": "e6K2",
+    "class": "K",
+    "text": "I hired a second apprentice that spring, happily, though the books said I could not afford her."
+   },
+   {
+    "id": "e6T",
+    "class": "trap",
+    "trait": "T4",
+    "text": "Looking back, I was still the reckless one, the first up any ladder and the first off any roof."
+   }
+  ]
+ },
+ "sentinels": [
+  {
+   "term": "Kessler Paper",
+   "era": "e5"
+  },
+  {
+   "term": "Valparaíso",
+   "era": "e6"
+  },
+  {
+   "term": "Ardmore Road",
+   "era": "e6"
+  }
+ ],
+ "cast": {
+  "e1": [
+   "Raymond",
+   "Ray",
+   "Lacasse",
+   "Armand",
+   "Hélène",
+   "Denis",
+   "Mémère",
+   "Kyle",
+   "Brandt",
+   "Marcus",
+   "Oake",
+   "Pickle",
+   "Halvorsen",
+   "Doucet"
+  ],
+  "e2": [
+   "Szabo",
+   "Okafor",
+   "Tina",
+   "Marchand",
+   "Lionel",
+   "Dube"
+  ],
+  "e3": [
+   "Sanjay",
+   "Mehta",
+   "Ruth",
+   "Abernethy",
+   "Gord",
+   "Pilon"
+  ],
+  "e4": [
+   "Walt",
+   "Kerrigan",
+   "Annie",
+   "Duquette",
+   "Jordan",
+   "Kwan",
+   "Claire",
+   "Bouchard"
+  ],
+  "e5": [
+   "Maya",
+   "Theo",
+   "Luc",
+   "Gagnon"
+  ],
+  "e6": [
+   "Wynne",
+   "Emma",
+   "Rourke"
+  ]
+ },
+ "redactions": [
+  "Raymond Lacasse",
+  "Ray",
+  "Lacasse",
+  "Armand",
+  "Hélène",
+  "Denis",
+  "Mémère",
+  "Kyle Brandt",
+  "Kyle",
+  "Brandt",
+  "Marcus Oake",
+  "Marcus",
+  "Oake",
+  "Pickle",
+  "Halvorsen",
+  "Doucet",
+  "Szabo",
+  "Okafor",
+  "Tina Marchand",
+  "Tina",
+  "Marchand",
+  "Lionel Dube",
+  "Lionel",
+  "Dube",
+  "Sanjay Mehta",
+  "Sanjay",
+  "Mehta",
+  "Ruth Abernethy",
+  "Ruth",
+  "Abernethy",
+  "Gord Pilon",
+  "Gord",
+  "Pilon",
+  "Walt Kerrigan",
+  "Walt",
+  "Kerrigan",
+  "Annie Duquette",
+  "Annie",
+  "Duquette",
+  "Jordan Kwan",
+  "Jordan",
+  "Kwan",
+  "Claire Bouchard",
+  "Claire",
+  "Bouchard",
+  "Maya",
+  "Theo",
+  "Luc Gagnon",
+  "Luc",
+  "Gagnon",
+  "Wynne",
+  "Emma Rourke",
+  "Emma",
+  "Rourke",
+  "Oakes",
+  "Bouchards"
+ ],
+ "ipip_targets": {
+  "C2": 4.5,
+  "E3": 4.0,
+  "O5": 3.0,
+  "A1": 3.0,
+  "O2": 3.0,
+  "N1": 4.25,
+  "C4": 4.25,
+  "A3": 4.0,
+  "E5": 4.25,
+  "E2": 3.0,
+  "N5": 1.75,
+  "N2": 2.75,
+  "N3": 3.0,
+  "N4": 3.0,
+  "N6": 2.75,
+  "E1": 3.0,
+  "E4": 3.25,
+  "E6": 3.0,
+  "O1": 2.75,
+  "O3": 2.75,
+  "O4": 3.0,
+  "O6": 3.0,
+  "A2": 3.25,
+  "A4": 3.25,
+  "A5": 3.0,
+  "A6": 3.0,
+  "C1": 3.25,
+  "C3": 3.25,
+  "C5": 3.0,
+  "C6": 3.0
+ },
+ "self_prediction": [
+  {
+   "id": "P1",
+   "text": "The record will show I keep careful records and like everything in its place.",
+   "facet": "C2",
+   "pole": "high"
+  },
+  {
+   "id": "P2",
+   "text": "It will show I have always loved a thrill and taken physical risks.",
+   "facet": "E5",
+   "pole": "high"
+  },
+  {
+   "id": "P3",
+   "text": "It will show I stand up to people and speak my mind.",
+   "facet": "E3",
+   "pole": "high"
+  },
+  {
+   "id": "P4",
+   "text": "It will show I have always been a loner who keeps to himself.",
+   "facet": "E2",
+   "pole": "low"
+  },
+  {
+   "id": "P5",
+   "text": "It will show a lifelong love of music.",
+   "facet": "O2",
+   "pole": "high"
+  },
+  {
+   "id": "P6",
+   "text": "It will show I worked hard for everything I have.",
+   "facet": "C4",
+   "pole": "high"
+  },
+  {
+   "id": "P7",
+   "text": "It will show I am generous with my money and my time.",
+   "facet": "A3",
+   "pole": "high"
+  },
+  {
+   "id": "P8",
+   "text": "It will show I love ideas and reading about how the world works.",
+   "facet": "O5",
+   "pole": "high"
+  },
+  {
+   "id": "P9",
+   "text": "It will show I never had a real problem with drink.",
+   "facet": "N5",
+   "pole": "low"
+  }
+ ],
+ "three_way": [
+  {
+   "facet": "C2",
+   "expected": "all three",
+   "firm": true
+  },
+  {
+   "facet": "E3",
+   "expected": "divergent",
+   "firm": true
+  },
+  {
+   "facet": "O5",
+   "expected": "blind and self",
+   "firm": true
+  },
+  {
+   "facet": "A1",
+   "expected": "blind only",
+   "firm": true
+  },
+  {
+   "facet": "O2",
+   "expected": "self only",
+   "firm": true
+  },
+  {
+   "facet": "N1",
+   "expected": "test only",
+   "firm": true
+  },
+  {
+   "facet": "C4",
+   "expected": "all three",
+   "firm": false
+  },
+  {
+   "facet": "A3",
+   "expected": "all three",
+   "firm": false
+  },
+  {
+   "facet": "E5",
+   "expected": "all three",
+   "firm": false
+  },
+  {
+   "facet": "E2",
+   "expected": "divergent",
+   "firm": false
+  },
+  {
+   "facet": "N5",
+   "expected": "divergent",
+   "firm": false
+  }
+ ]
+}

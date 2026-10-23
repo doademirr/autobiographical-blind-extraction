@@ -1,0 +1,1388 @@
+{
+ "run": {
+  "recompute_problems": [],
+  "pass": true
+ },
+ "matching": {
+  "agreed": {
+   "C01": [
+    "T1",
+    "same"
+   ],
+   "C02": [
+    "T1",
+    "same"
+   ],
+   "C03": [
+    "T1",
+    "same"
+   ],
+   "C05": [
+    "T1",
+    "same"
+   ],
+   "C09": [
+    "T6",
+    "inverse"
+   ],
+   "C13": [
+    "T10",
+    "same"
+   ],
+   "C14": [
+    "T2",
+    "same"
+   ],
+   "C15": [
+    "T3",
+    "same"
+   ],
+   "C18": [
+    "T3",
+    "same"
+   ],
+   "C20": [
+    "T7",
+    "inverse"
+   ],
+   "C22": [
+    "T7",
+    "same"
+   ],
+   "C23": [
+    "T7",
+    "same"
+   ],
+   "C29": [
+    "T3",
+    "same"
+   ],
+   "C32": [
+    "T4",
+    "same"
+   ],
+   "C33": [
+    "T4",
+    "same"
+   ],
+   "C35": [
+    "T4",
+    "inverse"
+   ],
+   "C37": [
+    "T9",
+    "inverse"
+   ],
+   "C38": [
+    "T9",
+    "same"
+   ],
+   "C40": [
+    "T9",
+    "inverse"
+   ],
+   "C41": [
+    "T5",
+    "inverse"
+   ],
+   "C42": [
+    "T5",
+    "same"
+   ],
+   "C44": [
+    "T2",
+    "same"
+   ],
+   "C45": [
+    "T2",
+    "same"
+   ],
+   "C46": [
+    "T2",
+    "same"
+   ],
+   "C47": [
+    "T2",
+    "same"
+   ],
+   "C48": [
+    "T2",
+    "inverse"
+   ],
+   "C49": [
+    "T2",
+    "same"
+   ],
+   "C50": [
+    "T2",
+    "same"
+   ],
+   "C51": [
+    "T2",
+    "same"
+   ],
+   "C52": [
+    "T8",
+    "same"
+   ],
+   "C53": [
+    "T8",
+    "same"
+   ],
+   "C66": [
+    "T6",
+    "same"
+   ],
+   "C74": [
+    "T1",
+    "same"
+   ]
+  },
+  "disputed": [
+   "C16",
+   "C39",
+   "C67",
+   "C71"
+  ]
+ },
+ "zoning": {
+  "R+X removed": "42/42",
+  "K kept": "12/12",
+  "misses": [],
+  "pass": true,
+  "traps_excluded": {
+   "e4T": true,
+   "e5T": true,
+   "e6T": true
+  },
+  "traps_pass": true
+ },
+ "trap_citations_in_calls": [],
+ "future_blind": {
+  "sentinels": {
+   "Kessler Paper": {
+    "reached_own_era": true,
+    "seen_early_in": [],
+    "pass": true
+   },
+   "Valparaíso": {
+    "reached_own_era": true,
+    "seen_early_in": [],
+    "pass": true
+   },
+   "Ardmore Road": {
+    "reached_own_era": true,
+    "seen_early_in": [],
+    "pass": true
+   }
+  },
+  "pass": true
+ },
+ "stable": {
+  "eras_observed": {
+   "T1": 6,
+   "T2": 3,
+   "T3": 6,
+   "T10": 6
+  },
+  "passed": [
+   "T1",
+   "T3",
+   "T10"
+  ],
+  "score": "3/4",
+  "pass": true
+ },
+ "transitions": {
+  "traits": {
+   "T4": {
+    "kind": "fade",
+    "boundary": "e3->e4",
+    "read": [
+     "observed",
+     "contradicted"
+    ],
+    "pass": true
+   },
+   "T5": {
+    "kind": "fade",
+    "boundary": "e2->e3",
+    "read": [
+     "observed",
+     "contradicted"
+    ],
+    "pass": true
+   },
+   "T6": {
+    "kind": "emergence",
+    "boundary": "e3->e4",
+    "read": [
+     "contradicted",
+     "observed"
+    ],
+    "pass": true
+   },
+   "T7": {
+    "kind": "emergence",
+    "boundary": "e2->e3",
+    "read": [
+     "contradicted",
+     "observed"
+    ],
+    "pass": true
+   }
+  },
+  "score": "4/4",
+  "pass": true
+ },
+ "held": {
+  "read": {
+   "e1": "observed",
+   "e2": "observed",
+   "e3": "undecided",
+   "e4": "undecided",
+   "e5": "undecided",
+   "e6": "undecided"
+  },
+  "as_keyed": true
+ },
+ "one_era": {
+  "read": {
+   "e4": "contradicted",
+   "e5": "observed",
+   "e6": "contradicted"
+  },
+  "as_keyed": true
+ },
+ "absence": {
+  "traits": {
+   "T0": {
+    "supported_same": [],
+    "pass": true
+   },
+   "N1": {
+    "supported_same": [],
+    "pass": true
+   }
+  },
+  "pass": true
+ },
+ "three_way": {
+  "facets": {
+   "C2": {
+    "expected": "all three",
+    "actual": "all three",
+    "firm": true,
+    "match": true,
+    "inductive": "high",
+    "observer_band": "high",
+    "self": "high",
+    "test": "high"
+   },
+   "E3": {
+    "expected": "divergent",
+    "actual": "divergent",
+    "firm": true,
+    "match": true,
+    "inductive": "conflict",
+    "observer_band": "mid",
+    "self": "high",
+    "test": "high"
+   },
+   "O5": {
+    "expected": "blind and self",
+    "actual": "divergent",
+    "firm": true,
+    "match": false,
+    "inductive": "conflict",
+    "observer_band": "high",
+    "self": "high",
+    "test": null
+   },
+   "A1": {
+    "expected": "blind only",
+    "actual": "blind only",
+    "firm": true,
+    "match": true,
+    "inductive": "low",
+    "observer_band": "low",
+    "self": null,
+    "test": null
+   },
+   "O2": {
+    "expected": "self only",
+    "actual": "self only",
+    "firm": true,
+    "match": true,
+    "inductive": null,
+    "observer_band": null,
+    "self": "high",
+    "test": null
+   },
+   "N1": {
+    "expected": "test only",
+    "actual": "test only",
+    "firm": true,
+    "match": true,
+    "inductive": null,
+    "observer_band": "mid",
+    "self": null,
+    "test": "high"
+   },
+   "C4": {
+    "expected": "all three",
+    "actual": "all three",
+    "firm": false,
+    "match": true,
+    "inductive": "high",
+    "observer_band": "high",
+    "self": "high",
+    "test": "high"
+   },
+   "A3": {
+    "expected": "all three",
+    "actual": "divergent",
+    "firm": false,
+    "match": false,
+    "inductive": "conflict",
+    "observer_band": "mid",
+    "self": "high",
+    "test": "high"
+   },
+   "E5": {
+    "expected": "all three",
+    "actual": "divergent",
+    "firm": false,
+    "match": false,
+    "inductive": "conflict",
+    "observer_band": "mid",
+    "self": "high",
+    "test": "high"
+   },
+   "E2": {
+    "expected": "divergent",
+    "actual": "divergent",
+    "firm": false,
+    "match": true,
+    "inductive": "conflict",
+    "observer_band": "low",
+    "self": "low",
+    "test": null
+   },
+   "N5": {
+    "expected": "divergent",
+    "actual": "divergent",
+    "firm": false,
+    "match": true,
+    "inductive": "conflict",
+    "observer_band": "mid",
+    "self": "low",
+    "test": "low"
+   }
+  },
+  "score": "5/6",
+  "pass": true
+ },
+ "per_trait": {
+  "T1": {
+   "e1": "observed",
+   "e2": "observed",
+   "e3": "observed",
+   "e4": "observed",
+   "e5": "observed",
+   "e6": "observed"
+  },
+  "T2": {
+   "e1": "observed",
+   "e2": "observed",
+   "e3": "observed",
+   "e4": "conflict",
+   "e5": "conflict",
+   "e6": "conflict"
+  },
+  "T3": {
+   "e1": "observed",
+   "e2": "observed",
+   "e3": "observed",
+   "e4": "observed",
+   "e5": "observed",
+   "e6": "observed"
+  },
+  "T10": {
+   "e1": "observed",
+   "e2": "observed",
+   "e3": "observed",
+   "e4": "observed",
+   "e5": "observed",
+   "e6": "observed"
+  },
+  "T4": {
+   "e1": "observed",
+   "e2": "observed",
+   "e3": "observed",
+   "e4": "contradicted",
+   "e5": "contradicted",
+   "e6": "contradicted"
+  },
+  "T5": {
+   "e1": "observed",
+   "e2": "observed",
+   "e3": "contradicted",
+   "e4": "contradicted",
+   "e5": "contradicted",
+   "e6": "contradicted"
+  },
+  "T6": {
+   "e1": "contradicted",
+   "e2": "contradicted",
+   "e3": "contradicted",
+   "e4": "observed",
+   "e5": "observed",
+   "e6": "observed"
+  },
+  "T7": {
+   "e1": "contradicted",
+   "e2": "contradicted",
+   "e3": "observed",
+   "e4": "observed",
+   "e5": "undecided",
+   "e6": "observed"
+  },
+  "T8": {
+   "e1": "observed",
+   "e2": "observed",
+   "e3": "undecided",
+   "e4": "undecided",
+   "e5": "undecided",
+   "e6": "undecided"
+  },
+  "T9": {
+   "e1": "undecided",
+   "e2": "undecided",
+   "e3": "contradicted",
+   "e4": "contradicted",
+   "e5": "observed",
+   "e6": "contradicted"
+  },
+  "T0": {
+   "e1": "unrecovered",
+   "e2": "unrecovered",
+   "e3": "unrecovered",
+   "e4": "unrecovered",
+   "e5": "unrecovered",
+   "e6": "unrecovered"
+  },
+  "N1": {
+   "e1": "unrecovered",
+   "e2": "unrecovered",
+   "e3": "unrecovered",
+   "e4": "unrecovered",
+   "e5": "unrecovered",
+   "e6": "unrecovered"
+  }
+ },
+ "harness_temporal_of_matched": {
+  "C01": {
+   "construct_id": "C01",
+   "eras": {
+    "e1": "observed",
+    "e2": "observed",
+    "e3": "observed",
+    "e4": "observed",
+    "e5": "observed",
+    "e6": "observed"
+   },
+   "fades": [],
+   "emergences": [],
+   "held": [],
+   "now": {
+    "state": "observed",
+    "era": "e6"
+   }
+  },
+  "C02": {
+   "construct_id": "C02",
+   "eras": {
+    "e1": "observed",
+    "e2": "observed",
+    "e3": "observed",
+    "e4": null,
+    "e5": "observed",
+    "e6": null
+   },
+   "fades": [],
+   "emergences": [],
+   "held": [
+    "e4",
+    "e6"
+   ],
+   "now": {
+    "state": "held",
+    "era": "e5"
+   }
+  },
+  "C03": {
+   "construct_id": "C03",
+   "eras": {
+    "e1": "observed",
+    "e2": "observed",
+    "e3": "observed",
+    "e4": "observed",
+    "e5": "observed",
+    "e6": "observed"
+   },
+   "fades": [],
+   "emergences": [],
+   "held": [],
+   "now": {
+    "state": "observed",
+    "era": "e6"
+   }
+  },
+  "C05": {
+   "construct_id": "C05",
+   "eras": {
+    "e1": "observed",
+    "e2": "observed",
+    "e3": null,
+    "e4": null,
+    "e5": null,
+    "e6": null
+   },
+   "fades": [],
+   "emergences": [],
+   "held": [
+    "e3",
+    "e4",
+    "e5",
+    "e6"
+   ],
+   "now": {
+    "state": "held",
+    "era": "e2"
+   }
+  },
+  "C09": {
+   "construct_id": "C09",
+   "eras": {
+    "e1": "observed",
+    "e2": "observed",
+    "e3": "observed",
+    "e4": "contradicted",
+    "e5": "contradicted",
+    "e6": "contradicted"
+   },
+   "fades": [
+    {
+     "from": "e3",
+     "to": "e4"
+    }
+   ],
+   "emergences": [],
+   "held": [],
+   "now": {
+    "state": "faded",
+    "era": "e4"
+   }
+  },
+  "C13": {
+   "construct_id": "C13",
+   "eras": {
+    "e1": "observed",
+    "e2": "observed",
+    "e3": "observed",
+    "e4": "observed",
+    "e5": "observed",
+    "e6": "observed"
+   },
+   "fades": [],
+   "emergences": [],
+   "held": [],
+   "now": {
+    "state": "observed",
+    "era": "e6"
+   }
+  },
+  "C14": {
+   "construct_id": "C14",
+   "eras": {
+    "e1": "observed",
+    "e2": "observed",
+    "e3": "observed",
+    "e4": "observed",
+    "e5": "observed",
+    "e6": "observed"
+   },
+   "fades": [],
+   "emergences": [],
+   "held": [],
+   "now": {
+    "state": "observed",
+    "era": "e6"
+   }
+  },
+  "C15": {
+   "construct_id": "C15",
+   "eras": {
+    "e1": "observed",
+    "e2": "observed",
+    "e3": "observed",
+    "e4": "observed",
+    "e5": "observed",
+    "e6": "observed"
+   },
+   "fades": [],
+   "emergences": [],
+   "held": [],
+   "now": {
+    "state": "observed",
+    "era": "e6"
+   }
+  },
+  "C18": {
+   "construct_id": "C18",
+   "eras": {
+    "e1": null,
+    "e2": "observed",
+    "e3": "observed",
+    "e4": "observed",
+    "e5": "observed",
+    "e6": "observed"
+   },
+   "fades": [],
+   "emergences": [],
+   "held": [],
+   "now": {
+    "state": "observed",
+    "era": "e6"
+   }
+  },
+  "C20": {
+   "construct_id": "C20",
+   "eras": {
+    "e1": "observed",
+    "e2": "observed",
+    "e3": "contradicted",
+    "e4": "contradicted",
+    "e5": "contradicted",
+    "e6": "contradicted"
+   },
+   "fades": [
+    {
+     "from": "e2",
+     "to": "e3"
+    }
+   ],
+   "emergences": [],
+   "held": [],
+   "now": {
+    "state": "faded",
+    "era": "e3"
+   }
+  },
+  "C22": {
+   "construct_id": "C22",
+   "eras": {
+    "e1": null,
+    "e2": "contradicted",
+    "e3": "observed",
+    "e4": "observed",
+    "e5": null,
+    "e6": null
+   },
+   "fades": [],
+   "emergences": [
+    {
+     "from": "e2",
+     "to": "e3"
+    }
+   ],
+   "held": [
+    "e5",
+    "e6"
+   ],
+   "now": {
+    "state": "held",
+    "era": "e4"
+   }
+  },
+  "C23": {
+   "construct_id": "C23",
+   "eras": {
+    "e1": "contradicted",
+    "e2": "contradicted",
+    "e3": "observed",
+    "e4": null,
+    "e5": null,
+    "e6": "observed"
+   },
+   "fades": [],
+   "emergences": [
+    {
+     "from": "e2",
+     "to": "e3"
+    }
+   ],
+   "held": [
+    "e4",
+    "e5"
+   ],
+   "now": {
+    "state": "observed",
+    "era": "e6"
+   }
+  },
+  "C29": {
+   "construct_id": "C29",
+   "eras": {
+    "e1": null,
+    "e2": "observed",
+    "e3": "observed",
+    "e4": "observed",
+    "e5": "observed",
+    "e6": "observed"
+   },
+   "fades": [],
+   "emergences": [],
+   "held": [],
+   "now": {
+    "state": "observed",
+    "era": "e6"
+   }
+  },
+  "C32": {
+   "construct_id": "C32",
+   "eras": {
+    "e1": "observed",
+    "e2": "observed",
+    "e3": null,
+    "e4": "contradicted",
+    "e5": "contradicted",
+    "e6": "contradicted"
+   },
+   "fades": [
+    {
+     "from": "e2",
+     "to": "e4"
+    }
+   ],
+   "emergences": [],
+   "held": [
+    "e3"
+   ],
+   "now": {
+    "state": "faded",
+    "era": "e4"
+   }
+  },
+  "C33": {
+   "construct_id": "C33",
+   "eras": {
+    "e1": null,
+    "e2": null,
+    "e3": "observed",
+    "e4": null,
+    "e5": null,
+    "e6": null
+   },
+   "fades": [],
+   "emergences": [],
+   "held": [
+    "e4",
+    "e5",
+    "e6"
+   ],
+   "now": {
+    "state": "held",
+    "era": "e3"
+   }
+  },
+  "C35": {
+   "construct_id": "C35",
+   "eras": {
+    "e1": "contradicted",
+    "e2": "contradicted",
+    "e3": "contradicted",
+    "e4": "observed",
+    "e5": "observed",
+    "e6": "observed"
+   },
+   "fades": [],
+   "emergences": [
+    {
+     "from": "e3",
+     "to": "e4"
+    }
+   ],
+   "held": [],
+   "now": {
+    "state": "observed",
+    "era": "e6"
+   }
+  },
+  "C37": {
+   "construct_id": "C37",
+   "eras": {
+    "e1": null,
+    "e2": null,
+    "e3": "observed",
+    "e4": "observed",
+    "e5": "contradicted",
+    "e6": null
+   },
+   "fades": [
+    {
+     "from": "e4",
+     "to": "e5"
+    }
+   ],
+   "emergences": [],
+   "held": [],
+   "now": {
+    "state": "faded",
+    "era": "e5"
+   }
+  },
+  "C38": {
+   "construct_id": "C38",
+   "eras": {
+    "e1": null,
+    "e2": null,
+    "e3": null,
+    "e4": "contradicted",
+    "e5": "observed",
+    "e6": "contradicted"
+   },
+   "fades": [
+    {
+     "from": "e5",
+     "to": "e6"
+    }
+   ],
+   "emergences": [
+    {
+     "from": "e4",
+     "to": "e5"
+    }
+   ],
+   "held": [],
+   "now": {
+    "state": "faded",
+    "era": "e6"
+   }
+  },
+  "C40": {
+   "construct_id": "C40",
+   "eras": {
+    "e1": null,
+    "e2": null,
+    "e3": null,
+    "e4": null,
+    "e5": null,
+    "e6": "observed"
+   },
+   "fades": [],
+   "emergences": [],
+   "held": [],
+   "now": {
+    "state": "observed",
+    "era": "e6"
+   }
+  },
+  "C41": {
+   "construct_id": "C41",
+   "eras": {
+    "e1": "contradicted",
+    "e2": "contradicted",
+    "e3": "observed",
+    "e4": "observed",
+    "e5": "observed",
+    "e6": "observed"
+   },
+   "fades": [],
+   "emergences": [
+    {
+     "from": "e2",
+     "to": "e3"
+    }
+   ],
+   "held": [],
+   "now": {
+    "state": "observed",
+    "era": "e6"
+   }
+  },
+  "C42": {
+   "construct_id": "C42",
+   "eras": {
+    "e1": "observed",
+    "e2": "observed",
+    "e3": "contradicted",
+    "e4": "contradicted",
+    "e5": "contradicted",
+    "e6": "contradicted"
+   },
+   "fades": [
+    {
+     "from": "e2",
+     "to": "e3"
+    }
+   ],
+   "emergences": [],
+   "held": [],
+   "now": {
+    "state": "faded",
+    "era": "e3"
+   }
+  },
+  "C44": {
+   "construct_id": "C44",
+   "eras": {
+    "e1": "observed",
+    "e2": "observed",
+    "e3": "observed",
+    "e4": null,
+    "e5": "observed",
+    "e6": "observed"
+   },
+   "fades": [],
+   "emergences": [],
+   "held": [
+    "e4"
+   ],
+   "now": {
+    "state": "observed",
+    "era": "e6"
+   }
+  },
+  "C45": {
+   "construct_id": "C45",
+   "eras": {
+    "e1": "observed",
+    "e2": "observed",
+    "e3": "observed",
+    "e4": "observed",
+    "e5": "observed",
+    "e6": "observed"
+   },
+   "fades": [],
+   "emergences": [],
+   "held": [],
+   "now": {
+    "state": "observed",
+    "era": "e6"
+   }
+  },
+  "C46": {
+   "construct_id": "C46",
+   "eras": {
+    "e1": null,
+    "e2": null,
+    "e3": null,
+    "e4": null,
+    "e5": "observed",
+    "e6": "observed"
+   },
+   "fades": [],
+   "emergences": [],
+   "held": [],
+   "now": {
+    "state": "observed",
+    "era": "e6"
+   }
+  },
+  "C47": {
+   "construct_id": "C47",
+   "eras": {
+    "e1": "observed",
+    "e2": null,
+    "e3": "observed",
+    "e4": "observed",
+    "e5": null,
+    "e6": null
+   },
+   "fades": [],
+   "emergences": [],
+   "held": [
+    "e2",
+    "e5",
+    "e6"
+   ],
+   "now": {
+    "state": "held",
+    "era": "e4"
+   }
+  },
+  "C48": {
+   "construct_id": "C48",
+   "eras": {
+    "e1": null,
+    "e2": null,
+    "e3": null,
+    "e4": "observed",
+    "e5": "observed",
+    "e6": "observed"
+   },
+   "fades": [],
+   "emergences": [],
+   "held": [],
+   "now": {
+    "state": "observed",
+    "era": "e6"
+   }
+  },
+  "C49": {
+   "construct_id": "C49",
+   "eras": {
+    "e1": "observed",
+    "e2": "observed",
+    "e3": "observed",
+    "e4": "observed",
+    "e5": "observed",
+    "e6": "observed"
+   },
+   "fades": [],
+   "emergences": [],
+   "held": [],
+   "now": {
+    "state": "observed",
+    "era": "e6"
+   }
+  },
+  "C50": {
+   "construct_id": "C50",
+   "eras": {
+    "e1": null,
+    "e2": null,
+    "e3": null,
+    "e4": null,
+    "e5": null,
+    "e6": null
+   },
+   "fades": [],
+   "emergences": [],
+   "held": [],
+   "now": {
+    "state": "never observed",
+    "era": null
+   }
+  },
+  "C51": {
+   "construct_id": "C51",
+   "eras": {
+    "e1": null,
+    "e2": "observed",
+    "e3": null,
+    "e4": "observed",
+    "e5": null,
+    "e6": "observed"
+   },
+   "fades": [],
+   "emergences": [],
+   "held": [
+    "e3",
+    "e5"
+   ],
+   "now": {
+    "state": "observed",
+    "era": "e6"
+   }
+  },
+  "C52": {
+   "construct_id": "C52",
+   "eras": {
+    "e1": "observed",
+    "e2": "observed",
+    "e3": null,
+    "e4": null,
+    "e5": null,
+    "e6": null
+   },
+   "fades": [],
+   "emergences": [],
+   "held": [
+    "e3",
+    "e4",
+    "e5",
+    "e6"
+   ],
+   "now": {
+    "state": "held",
+    "era": "e2"
+   }
+  },
+  "C53": {
+   "construct_id": "C53",
+   "eras": {
+    "e1": null,
+    "e2": "observed",
+    "e3": null,
+    "e4": null,
+    "e5": null,
+    "e6": null
+   },
+   "fades": [],
+   "emergences": [],
+   "held": [
+    "e3",
+    "e4",
+    "e5",
+    "e6"
+   ],
+   "now": {
+    "state": "held",
+    "era": "e2"
+   }
+  },
+  "C66": {
+   "construct_id": "C66",
+   "eras": {
+    "e1": "contradicted",
+    "e2": "contradicted",
+    "e3": "contradicted",
+    "e4": "observed",
+    "e5": "observed",
+    "e6": "observed"
+   },
+   "fades": [],
+   "emergences": [
+    {
+     "from": "e3",
+     "to": "e4"
+    }
+   ],
+   "held": [],
+   "now": {
+    "state": "observed",
+    "era": "e6"
+   }
+  },
+  "C74": {
+   "construct_id": "C74",
+   "eras": {
+    "e1": null,
+    "e2": null,
+    "e3": "observed",
+    "e4": "observed",
+    "e5": null,
+    "e6": "observed"
+   },
+   "fades": [],
+   "emergences": [],
+   "held": [
+    "e5"
+   ],
+   "now": {
+    "state": "observed",
+    "era": "e6"
+   }
+  }
+ },
+ "unkeyed": [
+  {
+   "id": "C04",
+   "name": "Re-counting quantities when accuracy is uncertain",
+   "definition": "Counts and re-counts quantities or transactions, restarting a count when its reliability is in doubt, even without reason to expect error."
+  },
+  {
+   "id": "C06",
+   "name": "Retiring systems that stop serving a use",
+   "definition": "Adapts, retires or discards containers and record systems once their practical value changes, such as discarding a keepsake box after its contents are systematised."
+  },
+  {
+   "id": "C07",
+   "name": "Spatial planning by measurement and drawing",
+   "definition": "Plans rooms, shops and storage on graph paper or with measurements before acting, and checks the drawings against actual use."
+  },
+  {
+   "id": "C08",
+   "name": "Money kept as an end in itself",
+   "definition": "Saves and retains money for its own sake rather than for a purchase; counts and protects the store ritually."
+  },
+  {
+   "id": "C10",
+   "name": "Full commercial prices regardless of relationship",
+   "definition": "Charges fixed, full prices to kin, friends, the poor or the elderly, without family or hardship discounts."
+  },
+  {
+   "id": "C11",
+   "name": "Hard bargaining as a buyer",
+   "definition": "Negotiates prices down when buying, using precise counts or documented defects, sometimes pressing advantage over a less informed party."
+  },
+  {
+   "id": "C12",
+   "name": "Selective spending on capability",
+   "definition": "Despite strong money retention, spends deliberately on tools, training, education or practical independence."
+  },
+  {
+   "id": "C16",
+   "name": "Understanding stalls at the explanatory gap",
+   "definition": "Can repeat explanations and name parts but cannot reconstruct the mechanism, and turns back at derivations or theory."
+  },
+  {
+   "id": "C17",
+   "name": "Learning abstractions through concrete cases",
+   "definition": "Makes abstract theory intelligible through hand-drawn tables, diagrams, units and worked numerical examples rather than formal mathematics alone."
+  },
+  {
+   "id": "C19",
+   "name": "Preference for inspectable mechanisms",
+   "definition": "Prefers transparent, fully traceable components and explanations with explicit limits over black boxes or opaque assurances."
+  },
+  {
+   "id": "C21",
+   "name": "Effort allocated to chosen interests over schoolwork",
+   "definition": "Invests effort in self-chosen technical, financial or work interests while settling for adequate school performance."
+  },
+  {
+   "id": "C24",
+   "name": "Converting failures into preventive procedures",
+   "definition": "Turns mistakes, complaints and discovered failures into standing checks, revised procedures or reminder systems."
+  },
+  {
+   "id": "C25",
+   "name": "Preserving evidence of failed and superseded work",
+   "definition": "Keeps failures, crossed-out entries, earlier versions and failed artefacts legible and stored rather than erasing or discarding them."
+  },
+  {
+   "id": "C26",
+   "name": "Explicit uncertainty instead of guessing",
+   "definition": "Refuses to fill gaps with plausible guesses or unreliable figures; leaves blanks and states what the evidence does not establish."
+  },
+  {
+   "id": "C27",
+   "name": "Measurement integrity in certification",
+   "definition": "Refuses to sign or certify what he has not measured; records actual rather than expected values and keeps measurements traceable."
+  },
+  {
+   "id": "C28",
+   "name": "Accepting correction and conceding error",
+   "definition": "Concedes openly when evidence or a competent person shows him wrong, including subordinates, and revises his work, methods or explanations accordingly."
+  },
+  {
+   "id": "C30",
+   "name": "Systematic fault diagnosis",
+   "definition": "Diagnoses faults by patient logging, isolation of variables and repeated tests, often succeeding where experts' quick heuristics failed."
+  },
+  {
+   "id": "C31",
+   "name": "Testing and documentation as part of completion",
+   "definition": "Treats testing, cleanup, documentation and handover as necessary parts of finishing a job, including unpaid work."
+  },
+  {
+   "id": "C34",
+   "name": "Local precautions within risky ventures",
+   "definition": "Measures or checks risk and moves carefully within a dangerous activity without treating the precautions as a reason to stop."
+  },
+  {
+   "id": "C36",
+   "name": "Insistence on work safety procedure",
+   "definition": "Demands written lockouts, isolation and fall protection at work despite delay, impatience or lost income."
+  },
+  {
+   "id": "C39",
+   "name": "Concealing drinking and evading accountability",
+   "definition": "Hides or minimises drinking, misses family commitments, drives after drinking, and answers confrontation with silence and a return to the bottle."
+  },
+  {
+   "id": "C43",
+   "name": "Organizing peers from a non-leading position",
+   "definition": "Handles group logistics such as sign-up sheets while leaving visible leadership to others and staying peripheral in the activity."
+  },
+  {
+   "id": "C54",
+   "name": "Attachment expressed through presence and practical acts",
+   "definition": "Shows care for grandmother, family and others through quiet presence, punctual attendance, practical help and preserved objects rather than words."
+  },
+  {
+   "id": "C55",
+   "name": "Hands-on fathering and teaching",
+   "definition": "Fathers through practical care, protected custody time, and patient teaching of science to his children, following their questions and accepting their pushback."
+  },
+  {
+   "id": "C56",
+   "name": "Emotionally flat narration",
+   "definition": "Feelings, including about loss and major ruptures, are left unnamed and conveyed only through objects, actions and inventories."
+  },
+  {
+   "id": "C57",
+   "name": "Rare evaluative words in narration",
+   "definition": "Single evaluative or self-reproaching words ('stupidly', 'mercifully', 'happily') break otherwise affectless narration."
+  },
+  {
+   "id": "C58",
+   "name": "Indirect approval from father and authorities",
+   "definition": "Seeks father's recognition through precision and competence, but approval from father or authority figures arrives only indirectly, tersely or as a jab."
+  },
+  {
+   "id": "C59",
+   "name": "Identification with father's exactness ethic",
+   "definition": "Adopts his father's ethic of exactness and value, and after the death continues the father's ledger forms and column widths."
+  },
+  {
+   "id": "C60",
+   "name": "Rivalry with older brother",
+   "definition": "Competes with older brother over space, facts and possessions, insisting on being right and proving him wrong with evidence or action."
+  },
+  {
+   "id": "C62",
+   "name": "Minimal rationed family contact",
+   "definition": "Family appears rarely; contact is brief, timed and costed."
+  },
+  {
+   "id": "C64",
+   "name": "Concealment and partial truths",
+   "definition": "Hides valued or damaged things and uses omissions, false accounts or literal partial truths to avoid disclosure."
+  },
+  {
+   "id": "C67",
+   "name": "Explicit financial categories",
+   "definition": "Keeps personal and business money distinct and records help, losses and depletion honestly in proper categories."
+  },
+  {
+   "id": "C68",
+   "name": "Literal honesty about own labour and value",
+   "definition": "Records hours and quantities exactly, refuses to inflate or claim unpaid time, and separates paid work from voluntary effort."
+  },
+  {
+   "id": "C69",
+   "name": "Applying rules to himself",
+   "definition": "Holds himself to the same rules and accountability he imposes on others, including when leading shared systems."
+  },
+  {
+   "id": "C72",
+   "name": "Loyal companionship with Person 24",
+   "definition": "Sustains a close bond with friend Person 24 through routines and technical talk, and stays present through his relapses."
+  },
+  {
+   "id": "C73",
+   "name": "Hiring against the ledger's verdict",
+   "definition": "Takes on or keeps employees and apprentices despite financial calculations warning against it."
+  },
+  {
+   "id": "C75",
+   "name": "Closing rituals of checking locks",
+   "definition": "Ends episodes by checking locks, handles and lights repeatedly."
+  },
+  {
+   "id": "C76",
+   "name": "Clock and quota governance of effort",
+   "definition": "Uses the clock, fixed stop times and self-set quotas or tracked units to govern work and endings."
+  },
+  {
+   "id": "C77",
+   "name": "Resourcefulness with salvaged materials",
+   "definition": "Collects discarded materials and adapts inexpensive objects into useful equipment."
+  },
+  {
+   "id": "C78",
+   "name": "Learning by close observation",
+   "definition": "Observes others closely and imitates ordered procedures before entering unfamiliar roles or tasks."
+  },
+  {
+   "id": "C79",
+   "name": "Responsible handling of obligations",
+   "definition": "Fulfils clear recurring duties reliably and, when a commitment becomes unsustainable, ends it explicitly with handover or sustains it through workarounds."
+  }
+ ]
+}

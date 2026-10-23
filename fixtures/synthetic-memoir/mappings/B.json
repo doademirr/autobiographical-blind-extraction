@@ -1,0 +1,186 @@
+{
+ "matcher": "codex",
+ "constructs": {
+  "C01": {
+   "trait": "T1",
+   "orientation": "same"
+  },
+  "C02": {
+   "trait": "T1",
+   "orientation": "same"
+  },
+  "C03": {
+   "trait": "T1",
+   "orientation": "same"
+  },
+  "C04": null,
+  "C05": {
+   "trait": "T1",
+   "orientation": "same"
+  },
+  "C06": null,
+  "C07": null,
+  "C08": null,
+  "C09": {
+   "trait": "T6",
+   "orientation": "inverse"
+  },
+  "C10": null,
+  "C11": null,
+  "C12": null,
+  "C13": {
+   "trait": "T10",
+   "orientation": "same"
+  },
+  "C14": {
+   "trait": "T2",
+   "orientation": "same"
+  },
+  "C15": {
+   "trait": "T3",
+   "orientation": "same"
+  },
+  "C16": null,
+  "C17": null,
+  "C18": {
+   "trait": "T3",
+   "orientation": "same"
+  },
+  "C19": null,
+  "C20": {
+   "trait": "T7",
+   "orientation": "inverse"
+  },
+  "C21": null,
+  "C22": {
+   "trait": "T7",
+   "orientation": "same"
+  },
+  "C23": {
+   "trait": "T7",
+   "orientation": "same"
+  },
+  "C24": null,
+  "C25": null,
+  "C26": null,
+  "C27": null,
+  "C28": null,
+  "C29": {
+   "trait": "T3",
+   "orientation": "same"
+  },
+  "C30": null,
+  "C31": null,
+  "C32": {
+   "trait": "T4",
+   "orientation": "same"
+  },
+  "C33": {
+   "trait": "T4",
+   "orientation": "same"
+  },
+  "C34": null,
+  "C35": {
+   "trait": "T4",
+   "orientation": "inverse"
+  },
+  "C36": null,
+  "C37": {
+   "trait": "T9",
+   "orientation": "inverse"
+  },
+  "C38": {
+   "trait": "T9",
+   "orientation": "same"
+  },
+  "C39": null,
+  "C40": {
+   "trait": "T9",
+   "orientation": "inverse"
+  },
+  "C41": {
+   "trait": "T5",
+   "orientation": "inverse"
+  },
+  "C42": {
+   "trait": "T5",
+   "orientation": "same"
+  },
+  "C43": null,
+  "C44": {
+   "trait": "T2",
+   "orientation": "same"
+  },
+  "C45": {
+   "trait": "T2",
+   "orientation": "same"
+  },
+  "C46": {
+   "trait": "T2",
+   "orientation": "same"
+  },
+  "C47": {
+   "trait": "T2",
+   "orientation": "same"
+  },
+  "C48": {
+   "trait": "T2",
+   "orientation": "inverse"
+  },
+  "C49": {
+   "trait": "T2",
+   "orientation": "same"
+  },
+  "C50": {
+   "trait": "T2",
+   "orientation": "same"
+  },
+  "C51": {
+   "trait": "T2",
+   "orientation": "same"
+  },
+  "C52": {
+   "trait": "T8",
+   "orientation": "same"
+  },
+  "C53": {
+   "trait": "T8",
+   "orientation": "same"
+  },
+  "C54": null,
+  "C55": null,
+  "C56": null,
+  "C57": null,
+  "C58": null,
+  "C59": null,
+  "C60": null,
+  "C61": null,
+  "C62": null,
+  "C63": null,
+  "C64": null,
+  "C65": null,
+  "C66": {
+   "trait": "T6",
+   "orientation": "same"
+  },
+  "C67": {
+   "trait": "T1",
+   "orientation": "same"
+  },
+  "C68": null,
+  "C69": null,
+  "C70": null,
+  "C71": null,
+  "C72": null,
+  "C73": null,
+  "C74": {
+   "trait": "T1",
+   "orientation": "same"
+  },
+  "C75": null,
+  "C76": null,
+  "C77": null,
+  "C78": null,
+  "C79": null
+ }
+}

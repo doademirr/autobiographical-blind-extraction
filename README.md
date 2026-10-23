@@ -2,6 +2,9 @@
 
 Run a blind analysis over a body of text about you. Diaries, an autobiography project, even years of scattered writing about different events in your life.
 
+> [!NOTE]
+> This is a fun exercise. Its results should not be taken as clinical or medical advice.
+
 The longer the better. To get a decent result we suggest at least 10k words of content in each era, across at least 5-6 different life eras. Each era is a period of years in length.
 
 Why blind extraction? Why not just feed your diary to an agent and ask it for some psychoanalysis? Well, expect to get back a judgement coloured by its memory, AGENTS.md files, account holder info, and other leaks.
@@ -14,11 +17,27 @@ This tool does three things:
 
 **When not to use it:**
 
-- You want advice, a diagnosis or a type. The report describes patterns and agreement. Not a clinical assessment.
+- You want advice, a diagnosis or a type. The report describes patterns and agreement. Not a clinical assessment. A psychologist can ask you questions and notice what your writing leaves out.
+- You want a quick read. Pasting your diary into a chatbot is faster and fine for a conversation. It just isn't blind.
+- You only want your Big Five scores. The [IPIP-NEO-120](https://ipip.ori.org) on its own measures them directly. This adds what your writing shows, era by era.
 - Your record is short. 12k words total produced a poor result in tests. Expect to need a lot more text.
 - You're on Linux or Windows. Sorry! Feel free to open a PR. The Codex read sandbox uses macOS `sandbox-exec` and the Claude login comes from the macOS keychain.
 - You want to compare people. One subject per workspace.
 - You want to psycho-analyse a famous person. Like Ben Franklin. Technically possible, but expect the text to already be in the models' training data, so the result will be coloured.
+
+## Tested on a synthetic memoir
+
+We wrote a 155k-word fictional memoir with a known answer: traits planted in every era, traits that fade or appear partway through, hindsight sentences to strip, and decoys. The pass marks were fixed before the run.
+
+| Check | Result |
+|---|---|
+| Hindsight sentences removed / plain ones kept | 42/42, 12/12 |
+| Fades and emergences found at the right era | 4/4 |
+| Traits planted in every era, found in at least 5 of 6 | 3/4 |
+| Traits never shown, never reported | 2/2 |
+| Later eras leaking into earlier ones | none |
+
+Details, the record and the key: [`fixtures/synthetic-memoir/`](fixtures/synthetic-memoir/SOURCE.md). The report: [`examples/synthetic-memoir/`](examples/synthetic-memoir/report.md).
 
 ## Requirements
 
@@ -91,13 +110,14 @@ python3 -m unittest                  # offline: fake CLIs, plus model-free check
 tests/live_smoke.sh "$TMPDIR/abx-live"   # live: the Franklin pipeline on your subscriptions (~60 calls)
 ```
 
-[`ARCHITECTURE.md`](ARCHITECTURE.md) is the as-built structure, and its [Not yet built](ARCHITECTURE.md#not-yet-built) section lists what this version leaves out.
+[`ARCHITECTURE.md`](ARCHITECTURE.md) is the as-built structure, and its [Not yet built](ARCHITECTURE.md#not-yet-built) section lists what this version leaves out. Bug reports and fixes are welcome: see [`CONTRIBUTING.md`](CONTRIBUTING.md).
 
 ## Credits
 
 - IPIP-NEO-120 items and key: Johnson, J. A. (2014). Measuring thirty facets of the Five Factor Model with a 120-item public domain inventory. *Journal of Research in Personality*, 51, 78–89. Public domain, via [ipip.ori.org](https://ipip.ori.org).
 - Krippendorff's α follows Krippendorff (2011), *Computing Krippendorff's Alpha-Reliability*, and reproduces its worked examples.
 - Test fixture: *Autobiography of Benjamin Franklin*, Project Gutenberg eBook #20203, with synthetic comparators. An example report is in [`examples/franklin/`](examples/franklin/report.md).
+- Synthetic memoir: written for this repo by Claude Opus 5.5 and Codex, chapter by chapter from briefs; every person and place in it is invented.
 
 ## Attribution
 
