@@ -2,10 +2,16 @@
 
 Run a blind analysis over a body of text about you. Diaries, an autobiography project, even years of scattered writing about different events in your life.
 
+Get back a list of your main personality traits:
+
+- **Consistent:** present through all your life.
+- **Fading:** present in earlier years but not later.
+- **Emerging:** present in later years but not earlier.
+
 > [!NOTE]
 > This is a fun exercise. Its results should not be taken as clinical or medical advice.
 
-The longer the better. To get a decent result we suggest at least 10k words of content in each era, across at least 5-6 different life eras. Each era is a period of years in length.
+The longer the better. We suggest at least 100k words, across at least 5-6 different life eras of 10k words or more each. Each era is a period of years in length.
 
 Why blind extraction? Why not just feed your diary to an agent and ask it for some psychoanalysis? Well, expect to get back a judgement coloured by its memory, AGENTS.md files, account holder info, and other leaks.
 
