@@ -1,6 +1,6 @@
 # Architecture
 
-Updated: 21/10/2026
+Updated: 23/10/2026
 
 Stdlib-only Python ≥ 3.10. `scripts/run.py` is the CLI; `scripts/abx/` holds one module per stage plus the shared
 layers below. This version builds every stage end to end but not every planned requirement; [Not yet built](#not-yet-built)
@@ -45,7 +45,7 @@ report/                     results.json, report.md
 
 | Module | Stage | Produces |
 |---|---|---|
-| `init.py` | `init` | workspace, default config (resolves the native Codex binary behind the npm launcher), sealed templates |
+| `init.py` | `init` | workspace, default config (resolves the native Codex binary behind the npm launcher and the versioned Claude binary behind its self-updating symlink), sealed templates |
 | `revise.py` | `revise` | declared so the command exists; refuses (not in this version) |
 | `prepare.py` | `prepare` | staged method and review files on first run (an era proposal from `eras.py`, checked with the exact size check and retried under a smaller cap if it fails, its note carrying the era rule and an estimated per-era maximum; the preview gives each paragraph's word count and boundary kind); then redaction, segments/sentences, the era size check (`sizing.py`) before any model call, qualification, zoning in chunks, the zoning calibration (`calibration.py`), substrate, stats, the spot-check sample (`spotcheck.py`, outside the receipt) and a receipt hashing what it read (every staged prompt and schema included) and wrote (the calibration and its judges' call records included); then exit 1 if calibration failed |
 | `seal.py` | `seal` | validates sealed/ and records its hashes; `verify_sealed` is called by every later stage |

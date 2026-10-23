@@ -26,7 +26,11 @@ synced folder.
 
 1. `python3 scripts/run.py init <ws> --text <file>... [--canary <term>...]`
    Canaries are words that only the user's own profile or instruction files would contain (a nickname, a test
-   result). Ask the user for two or three; the leak probe checks no rater knows them.
+   result). Ask the user for two or three; the leak probe checks no rater knows them. The check is a case-insensitive
+   substring match on what each CLI sends and replies, so prefer short, distinctive tokens over sentences (a model
+   paraphrases), give a hyphenated token in its spaced form too, and check none appears in the text itself.
+   Don't upgrade either CLI until the run is finished: after `freeze`, a changed CLI stops the next stage (exit 4).
+   `init` pins Claude Code to the version it finds; Codex relies on the user leaving it alone.
 2. `python3 scripts/run.py prepare <ws>` — the first run writes `prepare/redactions.json`, `prepare/eras.json` and
    `prepare/segments-preview.txt`, then stops. **Review point 1:** the user reviews the third-party names a local
    scan pre-filled (`"names": {"Full Name": "Name 1"}`; `prepare/names-preview.txt` lists every candidate): deletes
