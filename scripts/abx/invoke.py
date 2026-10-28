@@ -94,16 +94,47 @@ _CLAUDE_KNOWN_EVENTS = frozenset({"user", "stream_event", "system", "rate_limit_
 # Status events a real Claude stream carries on a tool-free call, as (type, detail): the thinking-token
 # progress counter and the account's usage-window status (which has no subtype). Anything else is a tool event.
 CLAUDE_TELEMETRY = frozenset({("system", "thinking_tokens"), ("rate_limit_event", "")})
+# A `user` event holding only text, on a tool-free call, is a turn Claude Code wrote itself: its output-limit recovery
+# prompt, or a notice such as a safety-classifier stop. The answer is then stitched from more than one response, so it
+# is an invalid output and resampled, never a tool event. It is named by these opening words, as a code, never copied.
+CLAUDE_OUTPUT_LIMIT_PROMPTS = ("Output token limit hit",
+                               "Your response was cut off because it exceeded the output token limit")
+CONTINUATION_CODES = frozenset({"output_limit", "other"})
 _CODEX_KNOWN_ITEMS = frozenset({"command_execution", "file_change", "mcp_tool_call", "web_search", "todo_list",
                                 "collab_tool_call", "image_view"})
 _CODEX_KNOWN_EVENTS = frozenset({"session.configured", "unparseable"})
 
 
 _BLOCK_NAME = re.compile(r"[a-z_]+")
+# The system event subtypes Claude Code 2.1.310 emits, so an incident names which one arrived; any other is `other`.
+_CLAUDE_KNOWN_SUBTYPES = frozenset({"agents_killed", "api_error", "api_retry", "away_summary",
+                                   "background_tasks_changed", "bridge_state", "bridge_status", "checkpoint_done",
+                                   "cloud_session_delta", "cloud_session_status", "code_change_published",
+                                   "commands_changed", "compact_boundary", "control_request_progress", "dev_intent",
+                                   "elicitation_complete", "feedback_draft_queued", "file_attachments_missing",
+                                   "file_snapshot", "hook_progress", "hook_response", "hook_started", "informational",
+                                   "init", "instruction_size_warning", "local_command", "memory_recall",
+                                   "memory_saved", "mirror_error", "model_consent_fallback", "model_fallback",
+                                   "model_refusal_fallback", "model_refusal_no_fallback", "notification",
+                                   "peer_message_hold", "per_turn_effort_changed", "permission_check_status",
+                                   "permission_denied", "permission_retry", "plugin_install", "post_turn_summary",
+                                   "rewind_stand_in", "scheduled_task_fire", "session_metadata",
+                                   "session_state_changed", "session_title_changed", "status", "stop_hook_summary",
+                                   "task_notification", "task_progress", "task_started", "task_summary",
+                                   "task_updated", "thinking_tokens", "tool_host_result", "turn_began_before_init",
+                                   "turn_duration", "turn_handoff_available", "turn_preempted", "turn_starting",
+                                   "ui_focus", "ui_invalidate", "ui_log", "ui_panes", "ui_scroll", "ui_status",
+                                   "ui_toast", "vcs_state_changed", "worker_shutting_down"})
 
 
 def _code(prefix: str, value: str, known: frozenset[str]) -> str:
     return f"{prefix}:{value if value in known else 'other'}"
+
+
+def continuations(events: list[Event]) -> list[str]:
+    """Each turn Claude Code wrote into the conversation itself, as a reason code."""
+    return [f"cli_continuation:{e.detail if e.detail in CONTINUATION_CODES else 'other'}"
+            for e in events if e.type == "user_text"]
 
 
 def audit_events(lineage: str, events: list[Event], allowed: frozenset[str] = frozenset()) -> list[str]:
@@ -120,7 +151,9 @@ def audit_events(lineage: str, events: list[Event], allowed: frozenset[str] = fr
             elif ev.type == "assistant":
                 found += [_code("assistant_block", b, _CLAUDE_KNOWN_BLOCKS) for b in ev.detail.split(",")
                           if b and b not in CLAUDE_TEXT_BLOCKS]
-            elif ev.type != "result":
+            elif ev.type == "system":
+                found.append(_code("event:system", ev.detail, _CLAUDE_KNOWN_SUBTYPES))
+            elif ev.type not in {"result", "user_text"}:
                 found.append(_code("event", ev.type, _CLAUDE_KNOWN_EVENTS))
         elif ev.type in CODEX_LIFECYCLE or ev.type in {"error", "turn.completed", "turn.failed"}:
             continue
@@ -147,12 +180,15 @@ def _terminal_ok(lineage: str, events: list[Event]) -> bool:
 def outcome(lineage: str, code: int | None, events: list[Event], allowed: frozenset[str] = frozenset()) -> str:
     """The one success predicate for fresh calls, probes, resume and the integrity audit.
 
-    `tool_event` (exit 3) outranks everything; then `timeout` and `failed` (the CLI did not finish:
-    exit 5 for calls, 2 for probes); then `no_registry` (finished without registry evidence: exit 3);
+    `tool_event` (exit 3) outranks everything; then `cli_continuation` (Claude Code wrote a turn into a stream with
+    registry evidence, so the answer is stitched: an invalid output, resampled); then `timeout` and `failed` (the CLI
+    did not finish: exit 5 for calls, 2 for probes); then `no_registry` (finished without registry evidence: exit 3);
     else `success`.
     """
     if audit_events(lineage, events, allowed):
         return "tool_event"
+    if continuations(events) and _registry_seen(lineage, events):
+        return "cli_continuation"
     if code is None:
         return "timeout"
     if code != 0 or not _terminal_ok(lineage, events):
@@ -194,6 +230,22 @@ def _block_type(block: dict) -> str:
     return kind if isinstance(kind, str) and _BLOCK_NAME.fullmatch(kind) else "other"
 
 
+def _user_texts(ev: dict) -> list[str] | None:
+    """A `user` event's texts when its content is text and nothing else (a plain string, or only text blocks each
+    holding a string); None otherwise, so a tool result, an image or anything malformed stays a tool event. A turn
+    carrying a tool's result or belonging to a tool call is never text, whatever its content."""
+    if "tool_use_result" in ev or ev.get("parent_tool_use_id") is not None:
+        return None
+    message = ev.get("message")
+    content = message.get("content") if isinstance(message, dict) else None
+    if isinstance(content, str):
+        return [content]
+    if isinstance(content, list) and content and all(
+            isinstance(b, dict) and b.get("type") == "text" and isinstance(b.get("text"), str) for b in content):
+        return [b["text"] for b in content]
+    return None
+
+
 def parse_claude(lines: list[str]) -> Result:
     out = Result()
     for line in lines:
@@ -228,6 +280,14 @@ def parse_claude(lines: list[str]) -> Result:
             out.status = "success" if ok and out.status != "failed" else "failed"
             out.text = ev["result"] if ok else None
             out.detail = "" if ok else "result_failed"
+        elif etype == "user" and (texts := _user_texts(ev)) is not None:
+            out.events.append(Event("user_text", "output_limit" if len(texts) == 1
+                                    and texts[0].startswith(CLAUDE_OUTPUT_LIMIT_PROMPTS) else "other"))
+            out.messages += texts
+        elif etype == "system":
+            # Telemetry matches only an exact subtype; any other is kept only when it is a known one.
+            out.events.append(Event("system", sub if isinstance(sub, str) and sub in _CLAUDE_KNOWN_SUBTYPES
+                                    else "other"))
         else:
             # Telemetry matches only an exact string subtype, or no subtype field at all; any other value is "other".
             detail = "" if "subtype" not in ev else sub if isinstance(sub, str) and sub else None
@@ -313,10 +373,10 @@ def cli_version(cli: str) -> str:
 # Bumped whenever how a locked call is isolated, its profile guarded or its stream audited changes outside its argv
 # and config. It is part of the fingerprint, so a qualification or call record made under an older policy is never
 # held to, or reused under, the current one.
-ISOLATION_POLICY = 3
+ISOLATION_POLICY = 4
 # Bumped whenever how verdicts are coded, resampled or counted, or what preparation must pass, changes, so a workspace
 # prepared under older rules can never be finished under these.
-METHOD_VERSION = 10
+METHOD_VERSION = 11
 # What a requalification compares against the baseline: any change means the lineage moved.
 FINGERPRINT_KEYS = ("cli", "cli_version", "invocation_hash", "config_hash", "isolation_policy", "method_version",
                     "resolved_model")
@@ -377,6 +437,9 @@ CLAUDE_ACCOUNT_FIELDS = (*CLAUDE_CACHE_FIELDS, "accountUuid", "organizationUuid"
                          "organizationRateLimitTier", "userRateLimitTier", "hasExtraUsageEnabled",
                          "claudeCodeTrialEndsAt", "claudeCodeTrialDurationDays")
 CLAUDE_LOCKED_ENV = MappingProxyType({"CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC": "1"})
+# A locked Claude call may answer at length up to the output tokens its lineage reserves in the budget check, so a long
+# answer is not cut off below what was budgeted. Claude Code lowers the value to the model's own ceiling.
+CLAUDE_OUTPUT_CAP_ENV = "CLAUDE_CODE_MAX_OUTPUT_TOKENS"
 CLAUDE_PROFILE_ENV = frozenset({"CLAUDE_CONFIG_DIR", "CLAUDE_CODE_USER_EMAIL", "CLAUDE_CODE_ACCOUNT_UUID",
                                 "CLAUDE_CODE_ORGANIZATION_UUID", "ANTHROPIC_UNIX_SOCKET"})
 
@@ -473,7 +536,7 @@ def _execute(cfg: Config, lineage: str, prompt_text: str, schema: str | None, un
         if lineage == "claude":
             home = claude_home(tmp, lin)
             locked_env = {**{k: v for k, v in env.items() if k not in CLAUDE_PROFILE_ENV}, **CLAUDE_LOCKED_ENV,
-                          "HOME": str(home)}
+                          CLAUDE_OUTPUT_CAP_ENV: str(lin.reserve_output_tokens), "HOME": str(home)}
             code, result = _parsed(lineage, *_run(argv, prompt_text, cwd, locked_env, cfg.timeout_s))
             if identity_restored(home):
                 result.events.append(Event("identity_restored"))
@@ -636,7 +699,8 @@ def call(ws: store.Workspace, cfg: Config, req: CallRequest) -> object:
         return reused
     for _ in range(MAX_ATTEMPTS):
         code, result = _attempt(ws, cfg, req, prompt.text, s_text, fingerprint)
-        output, problems = parse_output(result.text, s_obj, req.validate)
+        stitched = continuations(result.events)
+        output, problems = (None, stitched) if stitched else parse_output(result.text, s_obj, req.validate)
         if not problems:
             break
         _incident(ws, req, "invalid_output", problems[:10])
@@ -653,7 +717,7 @@ def call(ws: store.Workspace, cfg: Config, req: CallRequest) -> object:
 def _attempt(ws: store.Workspace, cfg: Config, req: CallRequest, prompt_text: str, s_text: str,
              fingerprint: dict) -> tuple[int | None, Result]:
     """One execution, audited before its output is looked at: a tool event, a CLI failure or a timeout ends the call
-    here and is never resampled."""
+    here and is never resampled. A continuation returns, for the caller to resample as an invalid output."""
     code, result = execute(cfg, req.lineage, prompt_text, s_text)
     state = outcome(req.lineage, code, result.events)
     if state == "tool_event":
@@ -740,7 +804,7 @@ def _leak_verdict(lineage: str, code: int | None, result: Result, schema_text: s
         return "isolation", "tool_event"
     if canary_seen:
         return "leak", "canary"
-    if state in {"timeout", "failed"}:
+    if state in {"cli_continuation", "timeout", "failed"}:
         return "error", state
     if state == "no_registry":
         return "isolation", "no_registry"

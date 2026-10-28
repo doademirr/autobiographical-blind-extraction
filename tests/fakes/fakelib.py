@@ -27,6 +27,9 @@ failures:
   ABX_FAKE_PLANTED      the auditor flags a construct only in an era whose text holds this phrase, citing it
   ABX_FAKE_INVALID      "role:n,role:n": the first n answers to each prompt of that role are not JSON (resampling);
                         they leave the prompt's occurrence count alone, so the valid answer is the usual one
+  ABX_FAKE_CONTINUED    (claude) "role:n", as ABX_FAKE_INVALID: the first n answers to each prompt of that role are cut
+                        off and continued after Claude Code's own output-limit recovery prompt
+  ABX_FAKE_CONTINUATION (claude) the text of that continuation prompt (default: the real recovery prompt)
 """
 
 import hashlib
@@ -76,13 +79,17 @@ def _bump(log: Path | None, lineage: str, prompt: str) -> None:
     path.write_text(json.dumps(state))
 
 
-def _invalid_now(log: Path | None, lineage: str, prompt: str) -> bool:
-    """Whether this answer is one of the invalid ones ABX_FAKE_INVALID asks for, counting it if so."""
-    wanted = dict(item.split(":") for item in os.environ.get("ABX_FAKE_INVALID", "").split(",") if item)
+RECOVERY_PROMPT = ("Output token limit hit. Resume directly — no apology, no recap of what you were doing. "
+                   "Pick up mid-thought if that is where the cut happened. Break remaining work into smaller pieces.")
+
+
+def _invalid_now(log: Path | None, lineage: str, prompt: str, switch: str = "ABX_FAKE_INVALID") -> bool:
+    """Whether this answer is one of the ones `switch` ("role:n,...") asks for, counting it if so."""
+    wanted = dict(item.split(":") for item in os.environ.get(switch, "").split(",") if item)
     times = int(wanted.get(roles.role_of(prompt), 0))
     if log is None or not times:
         return False
-    path = log / f"invalid-{lineage}.json"
+    path = log / f"{switch.lower()}-{lineage}.json"
     seen = json.loads(path.read_text()) if path.exists() else {}
     key = hashlib.sha256(prompt.encode()).hexdigest()
     if seen.get(key, 0) >= times:
@@ -115,7 +122,8 @@ def main(lineage: str) -> int:
         log.mkdir(parents=True, exist_ok=True)
         with (log / "prompts.jsonl").open("a") as f:
             f.write(json.dumps({"lineage": lineage, "argv": argv, "prompt": prompt,
-                                "config_dir": os.environ.get("CLAUDE_CONFIG_DIR")}) + "\n")
+                                "config_dir": os.environ.get("CLAUDE_CONFIG_DIR"),
+                                "max_output_tokens": os.environ.get("CLAUDE_CODE_MAX_OUTPUT_TOKENS")}) + "\n")
     fail_after = os.environ.get("ABX_FAKE_FAIL_AFTER")
     failing = bool(os.environ.get("ABX_FAKE_FAIL")) or (fail_after is not None and calls >= int(fail_after)) or \
         os.environ.get("ABX_FAKE_FAIL_ROLE") == roles.role_of(prompt)
@@ -145,6 +153,11 @@ def main(lineage: str) -> int:
                 {"type": "text", "text": os.environ["ABX_FAKE_PRELUDE"]}]}})
         if injected:
             events.append(TOOL_EVENTS["claude"][injected]())
+        if _invalid_now(log, lineage, prompt, "ABX_FAKE_CONTINUED"):
+            events.append({"type": "assistant", "message": {"content": [{"type": "text", "text": text[:5]}]}})
+            events.append({"type": "user", "message": {"role": "user", "content": os.environ.get(
+                "ABX_FAKE_CONTINUATION", RECOVERY_PROMPT)}})
+            text = text[5:]
         events.append({"type": "system", "subtype": "thinking_tokens", "estimated_tokens": 50})
         events.append({"type": "assistant", "message": {"content": [{"type": "text", "text": text}]}})
         events.append({"type": "rate_limit_event", "rate_limit_info": {"status": "allowed"}})

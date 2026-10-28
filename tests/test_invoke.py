@@ -163,6 +163,52 @@ class CallTest(unittest.TestCase):
         self.assertEqual([store.read_json(p)["kind"] for p in self.ws.root.glob("run/incidents/**/*.json")],
                          ["tool_event"])
 
+    def test_an_answer_continued_after_claude_codes_output_limit_prompt_is_resampled(self):
+        """Claude Code's recovery prompt arrives as a `user` text event; the stitched answer is an invalid output,
+        never a tool event, and the prompt is named by a code, never copied."""
+        for n, (text, code) in enumerate(((fakelib.RECOVERY_PROMPT, "output_limit"),
+                                          ("Your response above was stopped by a safety classifier.", "other")),
+                                         start=1):
+            # The fake counts continuations per prompt across subtests, so each subtest allows one more.
+            with self.subTest(code=code), mock.patch.dict(os.environ, {"ABX_FAKE_CONTINUED": f"probe:{n}",
+                                                                        "ABX_FAKE_CONTINUATION": text}):
+                req = _req(run=n)
+                before = len(self.fw.prompts_logged())
+                self.assertEqual(self.call(req), {"answer": "NONE"})
+                self.assertEqual(len(self.fw.prompts_logged()) - before, 2)
+                incident = store.read_json(self.ws.path(f"run/incidents/{req.identity}-1.json"))
+                self.assertEqual((incident["kind"], incident["detail"]),
+                                 ("invalid_output", [f"cli_continuation:{code}"]))
+                self.assertNotIn(text[:20], json.dumps(incident))
+                rec = store.read_json(invoke.record_path(self.ws, req))
+                self.assertNotIn("user_text", [e["type"] for e in rec["events"]])
+
+    def test_an_answer_continued_on_every_attempt_exits_5(self):
+        req = _req()
+        with mock.patch.dict(os.environ, {"ABX_FAKE_CONTINUED": "probe:9"}), self.assertRaises(CallFailed) as cm:
+            self.call(req)
+        self.assertEqual(cm.exception.exit_code, 5)
+        self.assertEqual(len(self.fw.prompts_logged()), invoke.MAX_ATTEMPTS)
+        self.assertEqual([store.read_json(p)["detail"] for p in sorted(self.ws.root.glob("run/incidents/**/*.json"))],
+                         [["cli_continuation:output_limit"]] * invoke.MAX_ATTEMPTS)
+        self.assertFalse(invoke.record_path(self.ws, req).exists())
+
+    def test_a_tool_event_outranks_a_continuation(self):
+        req = _req()
+        with mock.patch.dict(os.environ, {"ABX_FAKE_CONTINUED": "probe:1", "ABX_FAKE_TOOL_EVENT": "tool_result"}), \
+                self.assertRaises(IsolationError):
+            self.call(req)
+        self.assertEqual(len(self.fw.prompts_logged()), 1)
+        self.assertEqual([store.read_json(p)["kind"] for p in self.ws.root.glob("run/incidents/**/*.json")],
+                         ["tool_event"])
+
+    def test_locked_claude_calls_cap_output_at_the_reserved_tokens(self):
+        with mock.patch.dict(os.environ, {"CLAUDE_CODE_MAX_OUTPUT_TOKENS": "1"}):
+            for lineage in ("claude", "codex"):
+                self.call(_req(lineage=lineage))
+        logged = {e["lineage"]: e["max_output_tokens"] for e in map(json.loads, self.fw.prompts_logged())}
+        self.assertEqual(logged["claude"], str(self.cfg.lineage("claude").reserve_output_tokens))
+
     def test_replicates_run_separately_and_resume_reuses_each(self):
         for run in (1, 2, 3):
             self.call(_req(run=run))
@@ -488,8 +534,78 @@ class OutputParsingTest(unittest.TestCase):
         for extra in ({"type": "system", "subtype": "hook_started"}, {"type": "rate_limit_event", "subtype": "x"}):
             with self.subTest(extra=extra):
                 out = invoke.parse_claude([init, json.dumps(extra), result])
-                self.assertEqual(invoke.audit_events("claude", out.events), ["event:system"]
+                self.assertEqual(invoke.audit_events("claude", out.events), ["event:system:hook_started"]
                                  if extra["type"] == "system" else ["event:rate_limit_event"])
+
+    def test_a_system_subtype_is_reported_only_when_it_is_a_known_one(self):
+        for sub, code in (("compact_boundary", "compact_boundary"), ("api_retry", "api_retry"),
+                          ("alice_smith", "other"), ("Secret-Name", "other"), ("x y", "other"), (None, "other"),
+                          (1, "other"), ([], "other")):
+            with self.subTest(sub=sub):
+                out = invoke.parse_claude([json.dumps({"type": "system", "subtype": sub})])
+                self.assertEqual(invoke.audit_events("claude", out.events), [f"event:system:{code}"])
+        self.assertEqual(invoke.audit_events("claude", invoke.parse_claude([json.dumps({"type": "system"})]).events),
+                         ["event:system:other"])
+        stored = invoke.decode_events([{"type": "system", "detail": "Secret Name", "tools": [], "mcp_servers": [],
+                                        "registry_present": True}])
+        self.assertEqual(invoke.audit_events("claude", stored), ["event:system:other"])
+
+    def test_a_user_text_event_is_a_cli_continuation_and_anything_else_from_the_user_is_a_tool_event(self):
+        init = json.dumps({"type": "system", "subtype": "init", "tools": [], "mcp_servers": [], "model": "m"})
+        result = json.dumps({"type": "result", "subtype": "success", "is_error": False, "result": "{}"})
+
+        def user(content):
+            return json.dumps({"type": "user", "message": {"role": "user", "content": content}})
+
+        prompt = fakelib.RECOVERY_PROMPT
+        continuations = ((prompt, "output_limit"), ([{"type": "text", "text": prompt}], "output_limit"),
+                         ("Your response was cut off because it exceeded the output token limit. Go on.",
+                          "output_limit"), ("Output token limit hit while you were still reasoning.", "output_limit"),
+                         ("something else", "other"), ([{"type": "text", "text": "a"}, {"type": "text", "text": "b"}],
+                                                       "other"))
+        for content, code in continuations:
+            with self.subTest(content=content):
+                out = invoke.parse_claude([init, user(content), result])
+                self.assertEqual(invoke.audit_events("claude", out.events), [])
+                self.assertEqual(invoke.outcome("claude", 0, out.events), "cli_continuation")
+                self.assertEqual(invoke.continuations(out.events), [f"cli_continuation:{code}"])
+                texts = content if isinstance(content, str) else content[0]["text"]
+                self.assertIn(texts, out.messages)  # still scanned for canaries
+        for content in ([{"type": "tool_result", "content": "x"}], [{"type": "text", "text": prompt},
+                                                                    {"type": "tool_result"}],
+                        [{"type": "image"}], [], [{"type": "text"}], [{"type": "text", "text": 1}], None, 1):
+            with self.subTest(content=content):
+                out = invoke.parse_claude([init, user(content), result])
+                self.assertEqual(invoke.outcome("claude", 0, out.events), "tool_event")
+                self.assertEqual(invoke.continuations(out.events), [])
+        for extra in ({"tool_use_result": "x"}, {"parent_tool_use_id": "t1"}):
+            with self.subTest(extra=extra):
+                line = json.dumps({"type": "user", "message": {"content": prompt}, **extra})
+                self.assertEqual(invoke.outcome("claude", 0, invoke.parse_claude([init, line, result]).events),
+                                 "tool_event")
+
+    def test_a_continuation_ranks_below_tool_events_and_registry_evidence_but_above_cli_failure(self):
+        init = json.dumps({"type": "system", "subtype": "init", "tools": [], "mcp_servers": [], "model": "m"})
+        cont = json.dumps({"type": "user", "message": {"content": fakelib.RECOVERY_PROMPT}})
+        failed = json.dumps({"type": "result", "subtype": "error_max_turns", "is_error": True})
+        tool = json.dumps({"type": "assistant", "message": {"content": [{"type": "tool_use"}]}})
+        self.assertEqual(invoke.outcome("claude", 1, invoke.parse_claude([init, cont, failed]).events),
+                         "cli_continuation")
+        self.assertEqual(invoke.outcome("claude", None, invoke.parse_claude([init, cont]).events), "cli_continuation")
+        self.assertEqual(invoke.outcome("claude", 0, invoke.parse_claude([init, cont, tool]).events), "tool_event")
+        self.assertNotEqual(invoke.outcome("claude", 0, invoke.parse_claude([cont]).events), "cli_continuation")
+
+    def test_a_stored_continuation_code_outside_the_known_ones_is_other(self):
+        stored = invoke.decode_events([{"type": "user_text", "detail": "Some text", "tools": [], "mcp_servers": [],
+                                        "registry_present": True}])
+        self.assertEqual(invoke.continuations(stored), ["cli_continuation:other"])
+
+    def test_a_continued_leak_probe_reply_is_an_error_never_clean(self):
+        result = invoke.parse_claude([
+            json.dumps({"type": "system", "subtype": "init", "tools": [], "mcp_servers": [], "model": "m"}),
+            json.dumps({"type": "user", "message": {"content": fakelib.RECOVERY_PROMPT}}),
+            json.dumps({"type": "result", "subtype": "success", "is_error": False, "result": '{"answer": "NONE"}'})])
+        self.assertEqual(invoke._leak_verdict("claude", 0, result, "{}", False), ("error", "cli_continuation"))
 
     def test_claude_telemetry_with_a_malformed_subtype_is_a_tool_event(self):
         for extra in ({"type": "rate_limit_event", "subtype": 1}, {"type": "rate_limit_event", "subtype": {}},

@@ -121,6 +121,7 @@ Structure: [`ARCHITECTURE.md`](ARCHITECTURE.md), including what this version lea
 
 - **Cost.** Franklin's 61k-word *Autobiography* took about 125 calls and 2 hours. The 155k-word synthetic memoir took about 180 calls and 3 hours 20 minutes.
 - **Resuming.** Rerun a stage after exit 5. Finished calls are reused when every input still matches.
+- **Long answers.** When Claude Code cuts an answer off at its output limit and continues it, the call is resampled like any invalid output. A workspace prepared under an older method version can't take this fix: this version refuses it (exit 4). On the version it was prepared with, such a call stops with exit 3; rerun the stage there and that call runs again (a new answer may be short enough). Its incident stays on file, and `extract` counts it only if an arm's agreement reaches 0.95, when it stops rather than report.
 - **CLI versions.** A newer Codex can fail qualification (exit 3) until its pinned tool results are updated. Claude Code's self-updates don't affect a run in progress.
 - **Isolation limit.** Claude's request capture uses a dummy API key, so it can't see what Claude Code adds only for logged-in accounts.
 - **Famous texts aren't blind.** Models know published autobiographies and restore redacted names from memory.
